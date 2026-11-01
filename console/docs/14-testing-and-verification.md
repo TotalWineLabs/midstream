@@ -472,6 +472,7 @@ them elsewhere (the file's header lists them). They make a bucket and a containe
 | `server/topics/catalog.test.ts` | Topic catalog: one upstream request for 200 concurrent readers, TTL and stale-while-revalidate, refresh spacing, stale and unavailable states, ETag and gzip, and `GET /api/topics` headers and status codes |
 | `src/features/materializations/topicSearch.test.ts` | Topic search ranking, multi-term matching, hidden-topic counts, emphasis ranges, and a 50,000-topic timing bound |
 | `src/features/data/hooks.test.ts` | A rules-of-hooks guard, plus its own detector tests |
+| `src/design.test.ts` | The design language's mechanical rules over every client source file, against a baseline that only goes down (10 §10.14), plus each rule's own cases |
 | `src/features/data/timeRange.test.ts` | Preset resolution in local time, Sunday weeks, labels, and the URL encoding of every range kind |
 | `src/lib/format.test.ts` | Instants rendered in local time across DST, and only zoned timestamps treated as instants |
 | `server/storage/uris.test.ts` | `gs://`, `s3://` and `abfss://` locations taken apart and put back together; local paths kept local; no other form recognised |
@@ -518,6 +519,12 @@ worth nothing, and the failure modes here are silent — a dropped column, a for
 only, a row group pruned that held a matching row. So the tests write real Parquet with DuckDB —
 timed and untimed objects, a forked field, list columns, 25-row row groups so pruning has something
 to skip — and assert run results against it.
+
+**`design.test.ts` checks the design language** the same way: patterns for what Current never uses
+in new code — literal colours, palette classes, pre-Current tokens, motion outside §10.7, all caps,
+a state's colour on a badge, a live dot on a page — with comments blanked first so a comment about a
+rule never breaks it. Older screens' counts are its baseline, per rule and file; a file may not gain
+one, and a fix must lower the baseline (`DESIGN_BASELINE=lower`), so it never creeps back.
 
 **`hooks.test.ts` tests its own detector.** The repository deliberately runs no linter, so this is
 the substitute for `react-hooks/rules-of-hooks`: within a component body, no hook may follow an
