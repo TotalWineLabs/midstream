@@ -6,9 +6,10 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { namedTable } from './selectedTable';
 import { DataTab } from '../data/DataTab';
 import { datasetKey } from '../datasets/DatasetPage';
-import { TableConnectTab, TableHistoryTab } from '../detail/TableTab';
+import { TableConnect } from './TableConnect';
+import { TableHistoryTab } from '../detail/TableTab';
 import { SchemaTab } from '../schema/SchemaTab';
-import { LiveIndicator, PageBody, PageHeader } from '@/components/AppShell';
+import { PageBody, PageHeader } from '@/components/AppShell';
 import { StatusLabel } from '@/components/Status';
 import { Button, EmptyState, Panel, Skeleton } from '@/components/ui/primitives';
 import { ApiError } from '@/lib/api';
@@ -124,7 +125,7 @@ function TableView({ dataset, entry, tab }: { dataset: CpDatasetDetail; entry: C
   const navigate = useNavigate();
   const { can } = useAuth();
   const { id: domainId } = useDomain();
-  const { data: snapshot, status: streamStatus } = useDetailStream(entry.materialization_id);
+  const { data: snapshot } = useDetailStream(entry.materialization_id);
   const { data: fleet } = useFleet(null);
   const detail = snapshot?.detail ?? null;
   const spec = detail ? namedTable(readableTables(detail.materialization), entry.name) : null;
@@ -143,10 +144,7 @@ function TableView({ dataset, entry, tab }: { dataset: CpDatasetDetail; entry: C
         title={<TableTitle dataset={dataset.name} table={entry.name} />}
         meta={
           <>
-            <span className="flex items-center gap-2">
-              {status ? <StatusLabel status={status} animate={false} className="text-[13px]" /> : null}
-              <LiveIndicator status={streamStatus} generatedAt={snapshot?.generatedAt} error={snapshot?.error ?? null} compact />
-            </span>
+            {status ? <StatusLabel status={status} animate={false} className="text-[13px]" /> : null}
             <Facts
               facts={[
                 record?.valid_through ? (
@@ -216,7 +214,7 @@ function TableView({ dataset, entry, tab }: { dataset: CpDatasetDetail; entry: C
       ) : active === 'schema' ? (
         <SchemaTab materializationId={entry.materialization_id} snapshot={snapshot} table={entry.name} />
       ) : active === 'connect' ? (
-        <TableConnectTab snapshot={snapshot} table={spec} />
+        <TableConnect snapshot={snapshot} table={spec} />
       ) : (
         <TableHistoryTab snapshot={snapshot} table={spec} />
       )}

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Code2, PanelLeftClose, PanelLeftOpen, Play, RefreshCw, Square, Table2 } from 'lucide-react';
+import { Code2, Columns3, Play, RefreshCw, Square, Table2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
@@ -29,6 +29,7 @@ import { useRun, useRunPage } from './useRun';
 import { readViewState, writeViewState } from './viewState';
 import { namedTable } from '../tables/selectedTable';
 import { PageBody } from '@/components/AppShell';
+import { StatusGlyph } from '@/components/Status';
 import { DataGrid } from '@/components/DataGrid';
 import { useToast } from '@/components/ui/Toast';
 import { Button, EmptyState, Panel, Select, Skeleton } from '@/components/ui/primitives';
@@ -55,6 +56,8 @@ const SQL_HEIGHT_KEY = 'console.data.sqlHeight';
 const RAIL_MIN_WIDTH = 264;
 const RAIL_MAX_WIDTH = 720;
 const RAIL_WIDTH_KEY = 'console.data.railWidth';
+/** Whether the column list is open: closed until someone opens it, then as they last left it. */
+const RAIL_OPEN_KEY = 'console.data.columnsOpen';
 const RUN_HINT = typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac') ? '⌘↵' : 'Ctrl+↵';
 
 function stored(key: string, min: number, max: number, fallback: number): number {
@@ -65,6 +68,14 @@ function stored(key: string, min: number, max: number, fallback: number): number
     // A browser that blocks storage still gets working panes, just not remembered ones.
   }
   return fallback;
+}
+
+function storedOpen(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
 }
 
 function remember(key: string, value: number): void {
@@ -85,6 +96,16 @@ function viewKey(view: { table: string; sql: string | null; range: string; filte
   return view.sql !== null
     ? JSON.stringify({ kind: 'sql', table: view.table, range: view.range, sql: view.sql.trim() })
     : JSON.stringify({ kind: 'browse', table: view.table, range: view.range, filters: view.filters, order: view.order });
+}
+
+const NONE: ReadonlySet<string> = new Set();
+
+/** A record's identity in its table, its Kafka partition and offset; null for a row without them. */
+function recordKey(row: Record<string, unknown>): string | null {
+  const partition = row._kafka_partition;
+  const offset = row._kafka_offset;
+  if (partition === null || partition === undefined || offset === null || offset === undefined) return null;
+  return `${String(partition)}:${String(offset)}`;
 }
 
 function requestKey(request: RunRequest): string {
@@ -169,8 +190,8 @@ export function DataTab({
   const [pageSize, setPageSize] = useState(initial.pageSize);
   const [visibleOverride, setVisibleOverride] = useState<string[] | null>(initial.visibleColumns);
   const [pinnedColumn, setPinnedColumn] = useState<string | null>(initial.pinnedColumn);
-  // On a phone the column list would leave the rows no room: it starts closed there.
-  const [railOpen, setRailOpen] = useState(() => typeof window === 'undefined' || window.matchMedia('(min-width: 768px)').matches);
+  // The rows get the room: the column list opens on request, and stays as it was last left.
+  const [railOpen, setRailOpen] = useState(() => storedOpen(RAIL_OPEN_KEY));
   const [railWidth, setRailWidth] = useState(() => stored(RAIL_WIDTH_KEY, RAIL_MIN_WIDTH, RAIL_MAX_WIDTH, RAIL_MIN_WIDTH));
   const [sqlHeight, setSqlHeight] = useState(() => stored(SQL_HEIGHT_KEY, SQL_MIN_HEIGHT, SQL_MAX_HEIGHT, 220));
   const [detailIndex, setDetailIndex] = useState<number | null>(null);
@@ -187,8 +208,10 @@ export function DataTab({
   const runRange = useRef<TimeRangeSpec>(initial.range);
 
   const controller = useRun(materializationId);
-  const { run, start, cancel, attach, starting, startError, refresh } = controller;
-  const running = starting || run?.state === 'running';
+  const { run, carried, start, cancel, attach, starting, startError, refresh } = controller;
+  // A run Live started to follow a commit works out of sight: the run it replaced stands in for it,
+  // so neither the ring nor Stop appears for it — only for a question someone asked.
+  const running = starting || (run?.state === 'running' && carried === null);
 
   const summaryQuery = useQuery({
     queryKey: ['data-summary', materializationId, tableName],
@@ -274,6 +297,13 @@ export function DataTab({
 
   useEffect(() => remember(RAIL_WIDTH_KEY, railWidth), [railWidth]);
   useEffect(() => remember(SQL_HEIGHT_KEY, sqlHeight), [sqlHeight]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(RAIL_OPEN_KEY, railOpen ? '1' : '0');
+    } catch {
+      /* not remembering it is not worth failing a render over */
+    }
+  }, [railOpen]);
 
   // Mirror the view into the address bar. Replaced, not pushed: a page turn is not a navigation.
   useEffect(() => {
@@ -318,7 +348,8 @@ export function DataTab({
     return () => clearTimeout(timer);
   }, [sqlMode, sqlDraft, materializationId]);
 
-  const columns = useMemo<QueryColumn[]>(() => run?.columns ?? [], [run?.columns]);
+  // While Live's new run counts, the run it replaced holds the same columns.
+  const columns = useMemo<QueryColumn[]>(() => run?.columns ?? carried?.columns ?? [], [run?.columns, carried?.columns]);
   // The table on screen completes with the columns its last browse returned, which name forks as
   // the grid does; before one, with its schema's fields.
   const browsedTable = run?.request.kind === 'browse' ? run.table : null;
@@ -357,6 +388,8 @@ export function DataTab({
     () => new Set(statementResult ? columns.map((column) => column.name) : (visibleOverride ?? defaultVisibleColumns(columns))),
     [statementResult, columns, visibleOverride],
   );
+  // Browsing: the table's columns the grid leaves out, which the Columns button counts.
+  const hiddenColumns = statementResult ? 0 : columns.filter((column) => !visible.has(column.name)).length;
   const gridColumns = useMemo(() => {
     const shown = ordered.filter((column) => visible.has(column.name));
     const pinnedIndex = shown.findIndex((column) => column.name === pinnedColumn);
@@ -366,12 +399,42 @@ export function DataTab({
     return [pinned, ...shown.slice(0, pinnedIndex), ...shown.slice(pinnedIndex + 1)];
   }, [ordered, visible, pinnedColumn]);
 
-  const pageQuery = useRunPage(run, page * pageSize, pageSize);
+  const pageQuery = useRunPage(run, page * pageSize, pageSize, carried?.id ?? null);
   const rows = useMemo(() => pageQuery.data?.rows ?? [], [pageQuery.data]);
   // Rows on screen may still be the previous page's while the next one lands; they keep their own
   // numbering and are shown muted, so a row is never labelled with a position it does not hold.
   const shownOffset = pageQuery.data?.offset ?? page * pageSize;
-  const stale = pageQuery.isPlaceholderData || shownOffset !== page * pageSize;
+  // Rows standing in while the same page is read again — the live tail grew, or a commit moved the
+  // question to a newer snapshot — are the rows of this page, current to a second ago: they stay as
+  // they are, live tint and waterline too, until the new ones replace them. Dimming them on every
+  // refresh made the grid flicker. Only another page's rows, or another question's, are dimmed.
+  const continuing = pageQuery.data !== undefined && (pageQuery.data.runId === run?.id || pageQuery.data.runId === carried?.id);
+  const stale = shownOffset !== page * pageSize || (pageQuery.isPlaceholderData && !continuing);
+  // The rows that just arrived on this page of this question: keyed by their records, so the grid
+  // can let them settle in and hold the rows someone is reading where they are.
+  const shownKeys = useRef<{ question: string; keys: Set<string> } | null>(null);
+  const [fresh, setFresh] = useState<ReadonlySet<string>>(NONE);
+  useEffect(() => {
+    const data = pageQuery.data;
+    if (!data || stale || !run || run.request.kind !== 'browse') return;
+    const question = `${requestKey(run.request)}@${data.offset}`;
+    const keys = data.rows.map(recordKey).filter((key): key is string => key !== null);
+    const before = shownKeys.current;
+    shownKeys.current = { question, keys: new Set(keys) };
+    if (!before || before.question !== question) return;
+    const arrived = keys.filter((key) => !before.keys.has(key));
+    // A page that is new from top to bottom is a new page, not an arrival.
+    if (arrived.length > 0 && arrived.length < keys.length) setFresh(new Set(arrived));
+  }, [pageQuery.data, stale, run]);
+  useEffect(() => {
+    if (fresh.size === 0) return;
+    const timer = window.setTimeout(() => setFresh(NONE), 1_400);
+    return () => window.clearTimeout(timer);
+  }, [fresh]);
+
+  // What the status line, the grid's states and the pager describe: the run Live replaced, while
+  // its continuation counts, so none of them blinks to "Scanning" and back on every commit.
+  const shownRun = run?.state === 'running' && carried ? carried : run;
   // Browsing: the rows past the last commit, and where commits reach (§10.8). A page being replaced
   // shows neither: its rows may already have moved.
   const liveRows = useMemo(() => {
@@ -568,15 +631,18 @@ export function DataTab({
           {running ? <span className="run-ring" aria-hidden /> : null}
 
           <div className="flex flex-wrap items-center gap-2 border-b border-[var(--color-line)] px-3 py-2">
+            {/* Named, with what it hides: a list nobody has to keep closing, and easy to find. */}
             <Button
               size="sm"
               variant="ghost"
-              className="h-8 shrink-0 px-1.5"
+              className={cn('h-8 shrink-0 gap-1.5 px-2 text-[12px]', railOpen && 'bg-[var(--color-raised)] text-[var(--color-ink)]')}
               onClick={() => setRailOpen((value) => !value)}
-              aria-label={railOpen ? 'Hide columns' : 'Show columns'}
-              title={railOpen ? 'Hide columns' : 'Show columns'}
+              aria-pressed={railOpen}
+              title={railOpen ? 'Close the column list' : 'Choose columns, and see what each holds'}
             >
-              {railOpen ? <PanelLeftClose className="size-4" /> : <PanelLeftOpen className="size-4" />}
+              <Columns3 className="size-3.5" />
+              Columns
+              {hiddenColumns > 0 ? <span className="numeric font-normal text-[var(--color-ink-faint)]">{hiddenColumns} hidden</span> : null}
             </Button>
 
             <TimeRangePicker materializationId={materializationId} table={tableName} value={range} onChange={setRange} summary={summary} />
@@ -606,25 +672,30 @@ export function DataTab({
 
             <span className="ml-auto flex shrink-0 items-center gap-2">
               {liveTail && !sqlMode ? (
+                // The rows stream in: the flowing wave drifts while they do, rests while they wait.
                 <button
                   type="button"
                   aria-pressed={live}
                   onClick={() => setLive((value) => !value)}
-                  title={live ? 'Stop following new records' : 'Follow new records as they arrive'}
+                  title={
+                    live
+                      ? hold === null
+                        ? 'Streaming: new records appear as they arrive. Click to stop.'
+                        : 'Streaming waits — the line below says why. Click to stop.'
+                      : 'Stream new records in as they arrive'
+                  }
                   className={cn(
                     'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[var(--radius-control)] px-2 text-[12px] transition-colors',
-                    live ? 'font-medium text-[var(--color-ink)]' : 'text-[var(--color-ink-muted)] hover:bg-[var(--color-raised)]',
+                    live ? 'font-medium text-[var(--color-current-ink)]' : 'text-[var(--color-ink-muted)] hover:bg-[var(--color-raised)]',
                   )}
                   data-role="live-toggle"
                 >
-                  <span
-                    aria-hidden
-                    className={cn(
-                      'size-2 rounded-full',
-                      live && hold === null ? 'animate-pulse bg-[var(--color-phase-running)]' : live ? 'bg-[var(--color-phase-paused)]' : 'bg-[var(--color-ink-faint)]',
-                    )}
+                  <StatusGlyph
+                    status={{ kind: 'flowing', moving: false }}
+                    animate={live && hold === null}
+                    color={live ? undefined : 'var(--color-ink-faint)'}
                   />
-                  Live
+                  Streaming
                 </button>
               ) : null}
               {sqlMode ? null : (
@@ -665,7 +736,7 @@ export function DataTab({
           </div>
 
           <StatusBar
-            run={run}
+            run={shownRun}
             starting={starting}
             summary={summary}
             dirty={dirty}
@@ -726,9 +797,9 @@ export function DataTab({
                   />
                 ) : null}
                 <GridArea
-                  run={run}
+                  run={shownRun}
                   startError={startError}
-                  loading={pageQuery.isLoading || (run?.state === 'running' && rowsOnPage === 0)}
+                  loading={pageQuery.isLoading || (shownRun?.state === 'running' && rowsOnPage === 0)}
                   pageError={pageQuery.error}
                   columns={gridColumns}
                   rows={rows}
@@ -738,6 +809,8 @@ export function DataTab({
                   pinnedColumn={statementResult ? null : pinnedColumn}
                   live={liveRows}
                   waterline={waterline}
+                  rowKey={statementResult ? undefined : recordKey}
+                  fresh={fresh}
                   range={range}
                   hasFilters={!sqlMode && filters.length > 0}
                   summarySpan={
@@ -754,7 +827,7 @@ export function DataTab({
                 />
               </div>
               <Pager
-                run={run}
+                run={shownRun}
                 page={page}
                 pageSize={pageSize}
                 onPage={(next) => {
@@ -816,6 +889,8 @@ function GridArea({
   pinnedColumn,
   live,
   waterline,
+  rowKey,
+  fresh,
   range,
   hasFilters,
   summarySpan,
@@ -835,6 +910,8 @@ function GridArea({
   pinnedColumn: string | null;
   live: ReadonlySet<number>;
   waterline: { at: number; label: string; title: string } | null;
+  rowKey: ((row: Record<string, unknown>) => string | null) | undefined;
+  fresh: ReadonlySet<string>;
   range: TimeRangeSpec;
   hasFilters: boolean;
   summarySpan: string | null;
@@ -917,6 +994,8 @@ function GridArea({
       onCellClick={onCopy}
       live={live}
       waterline={waterline}
+      rowKey={rowKey}
+      fresh={fresh}
       emptyMessage="No rows on this page"
     />
   );

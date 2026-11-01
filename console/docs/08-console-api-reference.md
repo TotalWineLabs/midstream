@@ -779,7 +779,7 @@ bumped when any arrived). `replaced: true`: a new run in its place — the table
 the run failed or was cancelled, it is a statement, or its tail was off on this side and is on now;
 the old run expires within a minute unless it is read. A run as of an older snapshot, or still
 running, is answered as it is. The caller needs `data.query` on every dataset the run reads, now;
-an expired run is a `404`. The Data tab's Live mode calls it every `liveTailRefreshMs`, and a
+an expired run is a `404`. The Data tab's **Streaming** calls it every `liveTailRefreshMs`, and a
 statement's Auto re-run five seconds after each run.
 
 **Head** — `GET /api/materializations/:id/tables/:table/head?rows=200` (1–10,000; the tail app gives

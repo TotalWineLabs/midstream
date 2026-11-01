@@ -11,6 +11,20 @@ import type { StatementPosition } from '@shared/types';
 const RUN_HINT = navigator.platform.toLowerCase().includes('mac') ? '⌘↵' : 'Ctrl+↵';
 
 /**
+ * The editor's basic setup, made once. The CodeMirror wrapper reconfigures the editor whenever this
+ * object, or `extensions`, is a new one — and a reconfigured editor drops its open completion list,
+ * so an inline object closed the list on every render: the arrow key that should have moved through
+ * it found it gone.
+ */
+const BASIC_SETUP = {
+  lineNumbers: true,
+  foldGutter: false,
+  highlightActiveLine: false,
+  highlightActiveLineGutter: false,
+  autocompletion: true,
+} as const;
+
+/**
  * SQL editor bound to the prepared views of the tables a statement may read.
  *
  * Tables are completed by their full names, `<domain>.<dataset>.<table>`, and their native ones,
@@ -56,6 +70,9 @@ export function QueryEditor({
   error?: { message: string; position?: StatementPosition | null } | null;
 }): ReactNode {
   const viewRef = useRef<EditorView | null>(null);
+  // The names completion offers, as text: the page renders with every live frame, each with new
+  // arrays of the same names, and only new names may rebuild the editor's extensions.
+  const names = JSON.stringify([domain, tableName, tables, otherTables, tableColumns, columns]);
   const extensions = useMemo(() => {
     // Catalog, schema, table: `domain_a.sales.orders`, and `domain_a_iceberg.sales.orders` for the
     // same tables with their native columns, offered by name.
@@ -79,7 +96,8 @@ export function QueryEditor({
       // name a table inside a namespace.
       PostgreSQL.language.data.of({ autocomplete: unqualifiedColumns(columns) }),
     ];
-  }, [domain, tableName, tables, otherTables, tableColumns, columns]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `names` is every one of them, by value.
+  }, [names]);
   const current = tables.find((table) => table.name === tableName);
 
   const dark = document.documentElement.classList.contains('dark');
@@ -122,13 +140,7 @@ export function QueryEditor({
           onCreateEditor={(view) => {
             viewRef.current = view;
           }}
-          basicSetup={{
-            lineNumbers: true,
-            foldGutter: false,
-            highlightActiveLine: false,
-            highlightActiveLineGutter: false,
-            autocompletion: true,
-          }}
+          basicSetup={BASIC_SETUP}
         />
       </div>
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-[var(--color-line)] bg-[var(--color-raised)] px-3 py-2">

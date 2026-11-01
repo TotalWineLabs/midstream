@@ -280,6 +280,20 @@
   border-radius: 4px;
 }
 
+/* A live row arriving in a table's grid: Current a little stronger, settling to the live ground. */
+@keyframes row-arrive {
+  from {
+    background-color: color-mix(in srgb, var(--color-current) 18%, var(--color-surface));
+  }
+  to {
+    background-color: color-mix(in srgb, var(--color-current) 7%, var(--color-surface));
+  }
+}
+
+.row-arrive {
+  animation: row-arrive 1.2s var(--ease-out) 1;
+}
+
 @keyframes console-fade-in {
   from {
     opacity: 0;
@@ -474,6 +488,7 @@
   .slide-in-right,
   .hourglass-turn,
   .value-flash,
+  .row-arrive,
   .mark-draw,
   .mark-flow,
   .ticker-enter,

@@ -392,9 +392,9 @@ reads a different number of rows from, is dropped (`unreadable`).
 A tail file gone from the run's directory (by hand) is dropped with every file after it: the run
 pages its committed rows alone and its tail says `lost`.
 
-### Live mode
+### Streaming
 
-The Data tab's browse view refreshes every `CONSOLE_LIVE_TAIL_REFRESH_MS` (1.5 s) while Live is on,
+The Data tab's browse view refreshes every `CONSOLE_LIVE_TAIL_REFRESH_MS` (1.5 s) while **Streaming** is on,
 the tab is visible, the run has succeeded, the page is the first (newest first) and no row is open
 in the drawer (`src/features/data/live.ts::liveHold`). A relative range ("Last 15 minutes") has an
 open end, so the rows the tail appends are inside it, and is resolved again for the run that replaces

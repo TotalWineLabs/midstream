@@ -9,12 +9,12 @@ Persistent around every page (`components/AppShell.tsx`), in the design language
 
 | Element | Behaviour |
 |---------|-----------|
-| Sidebar (≥ 768 px) | The mark and **Midstream** (to the overview); the domain switcher; **Search or jump to… ⌘K**; **Overview**, **Materializations**, **Datasets**; pinned items; **Settings**, the account and the live indicator at the foot. In a domain the items are that domain's; under **All domains** every domain's. Items a person may not open are left out. Collapses to icons, remembered in `console.sidebar.collapsed` |
+| Sidebar (≥ 768 px) | The mark and **Midstream** (to the overview); the domain switcher; **Search or jump to… ⌘K**; **Overview**, **Materializations**, **Datasets**; pinned items; **Settings** and the account at the foot, and the live indicator there only when the console's link to its control planes is down. In a domain the items are that domain's; under **All domains** every domain's. Items a person may not open are left out. Collapses to icons, remembered in `console.sidebar.collapsed` |
 | Needs-you count | Beside **Materializations**: how many failed or need attention, in Buoy (Flare when one failed). Nothing at all when none do |
 | Pinned | Materializations and datasets a person pinned (the pin on a materialization's page, or ⌘K), each with its state's glyph; kept in the browser (`console.pins`, `lib/pins.ts`); unpinned with the × on hover. No heading when nothing is pinned |
-| Domain switcher | Where the console serves several domains: **All domains**, then each domain with its live dot. Choosing one keeps the section open: the overview, the lists, settings |
+| Domain switcher | Where the console serves several domains: **All domains**, then each domain. A domain's dot shows only when it needs saying — unreachable, reconnecting, not usable. Choosing one keeps the section open: the overview, the lists, settings |
 | Content panel | The page sits in an inset panel on the canvas, beside the sidebar |
-| Phone (< 768 px) | A top bar with the mark, the live dot, search and the account; a bottom bar with **Overview**, **Materializations**, **Datasets** and **Search** |
+| Phone (< 768 px) | A top bar with the mark, search and the account (and the live indicator while the link is down); a bottom bar with **Overview**, **Materializations**, **Datasets** and **Search** |
 | ⌘K, Ctrl+K or / | The command menu (§11.1a) from anywhere; on the search page, focuses its field |
 | Account menu | The person's name and email, the domains they are signed in to (and **sign in to more**), **Appearance** (**System**, **Light**, **Dark**: `console.theme`, applied before first paint), **Your account**, **About this deployment**, **Sign out everywhere**. Signed in nowhere: **Sign in** |
 | Domain banners | Above the page, one per domain that is misconfigured (its control plane says it is another domain) or runs a release this console does not work with, saying which |
@@ -60,14 +60,18 @@ page into that domain's guest's at the next request, and open streams close with
 
 ### `LiveIndicator`
 
+Liveness is said by what moves — the river, numbers rolling, rows streaming in — so the shell shows
+this only when the console's link to its control planes is not live (§10.7). Pages carry no dot of
+their own.
+
 | Condition | Display |
 |-----------|---------|
-| `status === 'live'` and no error | A Current dot that beats once for every frame that arrives, and **Live**; the tooltip says how long ago it updated |
+| `status === 'live'` and no error | Nothing |
 | `status === 'connecting'` | A Buoy dot and **Connecting…**, shimmering |
 | Reconnecting or control-plane error | A Buoy dot and the error, e.g. `control plane at http://… is unreachable` |
 
 `compact` keeps only the dot, with the words in its tooltip: the collapsed sidebar, the phone's top
-bar, a materialization's header.
+bar.
 
 ---
 
@@ -213,7 +217,7 @@ detail cadence while the page is open.
 ### Header
 
 **Materializations** above the title, which is the label (`name`) or the id. On every tab but the
-Overview, whose readout says it, the state as a pill (§10.6) and a compact live dot. Actions on the
+Overview, whose readout says it, the state as a pill (§10.6). Actions on the
 right: **Pin** (to the sidebar), **Edit**, **Resume** or **Stop**, and **⋯** with **Delete…**.
 
 ### Actions
@@ -322,8 +326,8 @@ materialization that writes it feeds every tab (`useDetailStream`), found throug
 
 **Header** — **Datasets / sales** above the title, `sales.orders` with its dataset quieter: the name
 SQL reads it by. Below: its state — its materialization's while it writes the table (§10.6), else
-**Kept** (read-only, no longer written), **Starting** (being created) or **Being dropped** — with the
-live dot; then *complete through 2:41 PM* (every record with a Kafka timestamp before then is in it),
+**Kept** (read-only, no longer written), **Starting** (being created) or **Being dropped**; then
+*complete through 2:41 PM* (every record with a Kafka timestamp before then is in it),
 its rows and size from the control plane's record, and *from Orders*, a link to the materialization.
 **Pin** keeps it in the sidebar, under its SQL name with its materialization's state.
 
@@ -542,12 +546,12 @@ newest of all, first in newest-first order.
 
 | Control | Behaviour |
 |---|---|
-| Column list toggle | Shows or hides the column rail; on a phone it starts hidden |
+| **Columns** | Opens or closes the column rail, saying how many of the table's columns the grid leaves out (*6 hidden*). Closed until someone opens it, then as they last left it (`console.data.columnsOpen`), so the rows get the room |
 | **Time range** | Splunk-style picker (below). Choosing a range does not run anything |
 | **Newest first / Oldest first** | Row order of the structured view |
 | Filters | Chips, and **Filter** to add one: find the field, then choose an operator and a value, with value suggestions from the run on screen |
 | **SQL** | Opens the editor with a statement for the current filters |
-| **Live** | On a running materialization — every one has a live tail — in a console and control plane with it on, in the structured view: on by default. The toggle goes at once when the materialization is stopped, and within two minutes when the deployment's switch is (the tab reads the console's config every minute); turned back on, it returns and Live picks the tail up by itself. While it is on, the tab is seen, the run has succeeded, the first page is on screen (newest first) and no row is open, the run takes in what arrived every `liveTailRefreshMs` (1.5 s); a commit replaces the run with one pinned to the new snapshot. Its dot pulses while it follows and turns amber while it waits; following says nothing more. Off is remembered in the address bar (`live=0`) |
+| **Streaming** | On a running materialization — every one has a live tail — in a console and control plane with it on, in the structured view: on by default. The toggle goes at once when the materialization is stopped, and within two minutes when the deployment's switch is (the tab reads the console's config every minute); turned back on, it returns and streaming picks the tail up by itself. While it is on, the tab is seen, the run has succeeded, the first page is on screen (newest first) and no row is open, the run takes in what arrived every `liveTailRefreshMs` (1.5 s); a commit replaces the run with one pinned to the new snapshot. Its word and the flowing wave are in Current; the wave drifts while it streams and rests while it waits, its tooltip saying the status line has why. Off, both are quiet. Off is remembered in the address bar (`live=0`) |
 | **Run** / **Stop** | The tab's only Run. While a run works it is **Stop**. `⌘↵` / `Ctrl+↵` anywhere on the tab |
 | **More actions** (⋮) | Right of **Run**: **Peek**, **Share** and **Export…** (below) |
 
@@ -597,30 +601,30 @@ catching up*, Export until the run has succeeded, without `data.export`, or with
 **Export…** opens its formats in the same menu, with a way back.
 
 With live tail, every run holds the records past its snapshot. What the tab says of them is in plain
-words — how far behind the view is, never which part of the system is. Nothing while Live simply
-follows: the toggle's pulsing dot says so. How far behind the newest records the view is, or why
-Live stopped, is at the status line's right, in amber — an hourglass beside a count, turning every
-3 s (still when the system asks for reduced motion). It stays while a run Live started at a commit
+words — how far behind the view is, never which part of the system is. Nothing while it simply
+streams: **Streaming**'s drifting wave says so. How far behind the newest records the view is, or why
+streaming stopped, is at the status line's right, in amber — an hourglass beside a count, turning
+every 3 s (still when the system asks for reduced motion). It stays while a run started at a commit
 works. A backlog's count is the
 table's topic lag as the Overview measures it, once a minute, so it moves at the Overview's pace
-whether or not Live refreshes the run; until a measurement is in, the tail's own count. Anything
+whether or not streaming refreshes the run; until a measurement is in, the tail's own count. Anything
 else is a few muted words on the status line.
 
 | Tail | Shows |
 |---|---|
-| Following | Nothing beyond the toggle's pulsing dot |
-| Live off, or a statement | Nothing |
-| Paused while hidden, past page 1, or with a row open | *Live paused while this tab is hidden* (… *past the first page*, … *while a row is open*) |
+| Following | Nothing beyond **Streaming**'s drifting wave |
+| Streaming off, or a statement | Nothing |
+| Paused while hidden, past page 1, or with a row open | *Streaming paused while this tab is hidden* (… *past the first page*, … *while a row is open*) |
 | Short of the head (`truncated`) | *4,000 records behind* — the records not shown — in amber at the status line's right |
 | Backlogged | *2,500,000 records behind* — the topic's measured lag — in amber at the status line's right; **Peek** is enabled |
 | Waiting for a schema change | *2 rows have new fields* — their new fields are under `_unmapped` until the table adds them |
-| Behind the topic | *Live is 7 s behind* |
-| Warming up, not followed yet | *Live is starting*; asked again each refresh |
-| Moving between members | *Live is reconnecting* |
-| Unavailable | *Live is unavailable* in amber at the status line's right, the reason in its tooltip; the run shows the rows saved so far |
+| Behind the topic | *Streaming is 7 s behind* |
+| Warming up, not followed yet | *Streaming is starting*; asked again each refresh |
+| Moving between members | *Streaming is reconnecting* |
+| Unavailable | *Streaming is unavailable* in amber at the status line's right, the reason in its tooltip; the run shows the rows saved so far |
 | The range has ended | *This time range has ended* — and Live asks nothing |
-| Session refused | *Live stopped: sign in again to follow new records*, in amber at the status line's right |
-| Switched off while followed | *Live is off*, the reason in its tooltip, until the toggle goes |
+| Session refused | *Streaming stopped: sign in again to follow new records*, in amber at the status line's right |
+| Switched off while followed | *Streaming is off*, the reason in its tooltip, until the toggle goes |
 
 **Peek** opens a panel over the grid, *Newest incoming records*, with the newest
 200 records on the topic, saved or not, in the table's columns, labelled *not in the table yet*; it
@@ -656,6 +660,15 @@ last commit, which every row on its other side is in; its tooltip says so. Newes
 below the live rows, at the top of the first page when nothing has arrived since; oldest first,
 after the last committed row. The server marks both on every page (`RunPage.live`,
 `RunPage.waterline`), so the line is exact whatever the filters. A statement's result has neither.
+
+**Streaming never flickers.** The rows on screen stay as they are, at full strength, until their
+replacement is read: a refresh that takes in the tail's newest records, and the new run a commit
+starts, both keep showing the page's rows meanwhile — only another page, or another question,
+dims them. The run a commit starts works out of sight: the status line, the pager, the ring and
+**Run** describe the run it replaced until it is counted. Rows that arrive settle in with a
+moment's stronger Current (`row-arrive`, 1.2 s, none under reduced motion). Rows are keyed by
+their record — Kafka partition and offset — so at the top of the grid the new rows come into view,
+and scrolled into it the row being read stays where it is while the new ones arrive above.
 
 Column headers do not sort. Clicking a cell copies it; the row gutter opens the row drawer (below).
 `null` renders as italic `null`.
@@ -697,7 +710,8 @@ policy says now.
 Expanding a column profiles it over the run's rows — distinct count, null share, top values, range —
 under the 8-second stats budget, labelled `partial` when it ran out of time. A top value filters to it.
 
-Drag the divider to widen the rail (264–720 px); the width is remembered per browser.
+Drag the divider to widen the rail (264–720 px); the width is remembered per browser. The rail is
+closed until **Columns** opens it (Toolbar).
 
 ### SQL
 
@@ -991,18 +1005,26 @@ and what changed, before and after. Entries are kept for the audit retention set
 ## 11.10 Table → History and Connect
 
 A table's Iceberg side, on its page (§11.4a): how it got here and how it is kept (**History**:
-figures, snapshots, maintenance), and how to reach it from other engines and how it is laid out
-(**Connect**: the snippets, files by partition, properties) (`features/detail/TableTab.tsx`; data
-from `GET /api/materializations/:id/tables/:table`, 06 §6.5).
+figures, snapshots, maintenance — `features/detail/TableTab.tsx`), and how another engine reads it
+and how it is laid out (**Connect**: the connection, its partitions, its properties —
+`features/tables/TableConnect.tsx`, `PartitionsPanel.tsx`). Data from
+`GET /api/materializations/:id/tables/:table` (06 §6.5).
+
+**Connect**, top to bottom:
+
+| Panel | Shows |
+|---|---|
+| Connect | With `catalog.read` on the table's dataset. One sentence on reading through the REST catalog with an access token (a link to make one); the table's catalog name, `lake.sales.orders`, and the catalog's URI, each with copy; the engine's snippet (**DuckDB**, **PyIceberg**, **Spark**, **Trino**, **By path** — DuckDB's `iceberg_scan` on the location) with **Copy**. How each engine reads the data files follows the location's scheme, from the console's storage profile for it: an `s3` secret or `s3.*` properties with the endpoint, region and path style; an `azure` secret or `adls.*` properties with the account; a GCS HMAC secret, `GCSFileIO` or Google credentials. Every credential is a placeholder. Notes only when they apply: the catalog turned off, no storage profile for the location, the address engines outside the cluster need |
+| Partitions | Where its data is in time: *730 days · Oct 5, 2024 to Oct 4, 2026 · 108 due for compaction*. A column chart on a true time axis — **Size**, **Files** or **Rows** — each partition a column, binned into weeks, months, quarters or years as finely as the width allows, empty stretches left empty; the ones the next compaction takes stronger than the rest, a neutral emphasis, since a state's colour never paints a series (§10.8). The line above the chart reads out the whole table, or the column pointed at: its value, its time, its partitions, files and small files, size, rows and how many are due. Rows without a timestamp, and an unpartitioned table, are counted beside the legend. **List** gives every partition's exact numbers. A note says what counts as small and when compaction takes a partition (`features/tables/partitions.ts`) |
+| Properties | Identifier, format, schema, partition spec, sort order, current snapshot and table UUID; the location and the metadata file, each with copy; **Iceberg properties**, folded, the commit and metadata settings behind **Show all** — without the fork map, `materializer.protection` and `schema.*` for someone who may not see the dataset's schemas |
+
+**History**:
 
 | Panel | Shows |
 |---|---|
 | Figures | **Rows**, with *Complete through* (every record with a Kafka timestamp before then is in the table); **Size**; **Data files**, with how many are small; **Last commit**, with its duration |
 | Snapshots | The newest 200: when committed, the operation (append, a compaction's replace, a **reprotect**'s, …), files and rows added, the offsets reached. The current one's row opens the table's Data tab, for someone who may query its dataset; the Data tab reads the latest data only, so older rows do not |
 | Maintenance | **Compaction**, **Snapshot expiry** and **Orphan cleanup**: each job's last run — when, its outcome, its partitions, `32 files → 1`, bytes, snapshots expired and kept, orphans deleted of those listed, how long it took; a skipped run's note in muted text and a failure's in amber; the job running now. The maintenance app runs them on its own schedule, whether or not the runtime runs, kept tables included. **Run now** (`materializations.maintain`) asks it to run one on this table next; the panel follows the result. Once a reprotect has been asked for, a **Reprotect** row too — *requested*, running, or its last run: files rewritten, values masked, snapshots expired — asked from the Protection tab, not here |
-| Files by partition | Every partition, newest first — `2026-10-23`, `2026-10-23-14` or `2026-10` by the table's partitioning: files, bytes, records and small files, with a mark (*compact*) on a partition the next compaction takes, by the maintenance app's own rule: what is still being written waits for the hot partition delay (06 §6.5); **Files / Bytes** switches the bars. Rows without a timestamp read *no timestamp* |
-| Properties | Identifier, location, metadata file, format version, schema id, partition spec, sort order, current snapshot, table UUID, and the table properties — without the fork map, `materializer.protection` and `schema.*` for someone who may not see the dataset's schemas |
-| Connect | With `catalog.read` on the table's dataset: snippets for **DuckDB**, **PyIceberg**, **Spark**, **Trino** and **By path** (DuckDB's `iceberg_scan` on the location), filled with this deployment's catalog URI and `lake.<dataset>.<table>`, each with **Copy**; a link to make an access token. How each engine reads the data files follows the location's scheme, from the console's storage profile for it: an `s3` secret or `s3.*` properties with the endpoint, region and path style; an `azure` secret or `adls.*` properties with the account; a GCS HMAC secret, `GCSFileIO` or Google credentials. Every credential is a placeholder. Without a profile for the location, a note says the snippet names no endpoint, region or account of its own |
 
 Both tabs read the table itself, so they work while the runtime is stopped. A table that cannot be read
 shows why (*The table could not be read*), and one not created yet says so.
