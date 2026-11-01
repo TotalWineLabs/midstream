@@ -57,7 +57,6 @@ export function OverviewPage(): ReactNode {
         label: displayName(item),
         status,
         rate: item.rowsPerSecond,
-        rows: item.rowsCommitted,
         to: domainPath(item.domain, `/materializations/${encodeURIComponent(item.materialization_id)}`),
       })),
     [entries],

@@ -14,8 +14,6 @@ export interface Strand {
   status: Status;
   /** Rows a second, or null before its workers have reported twice. */
   rate: number | null;
-  /** Rows committed: a commit landing ripples the lake. */
-  rows: number | null;
   /** Where the strand opens. */
   to: string;
 }
@@ -84,7 +82,7 @@ export function River({
   const [visible, setVisible] = useState(true);
 
   const riverStrands = useMemo<RiverStrand[]>(
-    () => strands.map((strand) => ({ key: strand.key, label: strand.label, kind: strand.status.kind, rate: strand.rate, rows: strand.rows })),
+    () => strands.map((strand) => ({ key: strand.key, label: strand.label, kind: strand.status.kind, rate: strand.rate })),
     [strands],
   );
 
@@ -127,7 +125,8 @@ export function River({
 
   return (
     <div className={cn('relative', className)}>
-      <div className="flex items-baseline justify-between gap-3 text-[12px] text-[var(--color-ink-muted)]">
+      {/* Three columns, the middle one centred exactly: over the gate, which is the river's middle. */}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-baseline gap-3 text-[12px] text-[var(--color-ink-muted)]">
         <span className="min-w-0 truncate">{kafka}</span>
         <span className="min-w-0 truncate text-center">{midstream}</span>
         <span className="min-w-0 truncate text-right">{lake}</span>
@@ -149,8 +148,12 @@ export function River({
         }}
       >
         <canvas ref={bed} aria-hidden className="absolute inset-0 h-full w-full" />
-        {/* The bloom: the water again, blurred and screened beneath it, in the dark theme only. */}
-        <canvas ref={glow} aria-hidden className="absolute inset-0 hidden h-full w-full opacity-80 mix-blend-screen blur-[7px] saturate-150 dark:block" />
+        {/* The bloom: the water again, blurred beneath it - light in the dark, a soft tint in the light. */}
+        <canvas
+          ref={glow}
+          aria-hidden
+          className="absolute inset-0 h-full w-full opacity-40 mix-blend-multiply blur-[5px] dark:opacity-80 dark:mix-blend-screen dark:blur-[7px] dark:saturate-150"
+        />
         <canvas ref={water} aria-hidden className="absolute inset-0 h-full w-full" />
         {hovered && hover ? (
           <p

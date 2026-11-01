@@ -247,7 +247,7 @@ shimmer Claude and ChatGPT put on text while they work.
 | **Slide** | A panel came from the side | Properties column, sheets | `--duration-panel` 220 ms | `.slide-in-right` |
 | **Fade up** | Content arrived | New surfaces | 180 ms | `.fade-in` |
 | **Run ring** | A query is filling this panel | The grid a run streams into | 5 s lap | `.run-ring` |
-| **The river** | Each materialization's throughput, as velocity | The Overview | Particles at 22–270 px/s by rate; trails fading with a ~0.1 s half-life | `River` (§10.8) |
+| **The river** | Each materialization's throughput, as velocity | The Overview | Comets at 22–270 px/s by rate (on a river 1,100 px wide, scaled with its width); each trail 0.16 s of its travel | `River` (§10.8) |
 
 Rules:
 
@@ -284,24 +284,35 @@ Rules:
   current pace (*Caught up around 4:30 PM · 62% there*); the chart's dotted projection to zero is to
   come.
 - **The river** leads the Overview: each materialization a channel from Kafka, through the Midstream
-  gate, into the lake (`River.tsx`, `riverEngine.ts`, a particle system on canvases). Every visual
-  property is a fact:
+  gate, into the lake. `riverEngine.ts` moves its particles and draws the bed; `riverWater.ts` draws
+  every particle as a comet on the GPU (WebGL 2): a round head and a trail that tapers and fades,
+  as long as its speed. Where WebGL 2 is unavailable the comets are plain strokes in 2D. Every
+  visual property is a fact:
 
   | What you see | What it is |
   |---|---|
   | A channel's width | Its rows a second, against the fleet's busiest |
-  | Its particles' speed, and the length of their trails | Its rows a second: a slow drift when barely anything flows, a rush at tens of thousands |
+  | Its comets' speed, and the length of their trails | Its rows a second: a slow drift when barely anything flows, a rush at tens of thousands |
   | Faster in the middle of a channel than at its edges | Nothing more than water: a laminar profile, so it reads as a stream |
-  | Grey mist turning Current at the gate, with a spark | Records becoming rows |
-  | Rows pouring into the lake and dissolving; a ring on its surface | Rows committed; each commit ripples |
+  | Grey mist turning Current exactly at the gate's line, brightest just past it, now and then a glint on the line | Records becoming rows |
+  | Rows running on into the lake as they moved, under its surface, slowing and fading into it | Rows reaching the lake's tables |
   | A crowded channel | A backlog being worked through (catching up) |
   | Records piling at the gate, in Flare or Dawn | Failed, or starting: nothing becomes a row yet |
   | Amber after the gate, slower | Needs attention |
   | A still, dashed channel | Stopped |
 
-  It runs only on screen, in a visible tab; under reduced motion it is one still frame. Pointing at a
-  channel names it and its rate; clicking opens it; the same channels are links for a keyboard or a
-  screen reader. In the dark theme a blurred copy of the water glows beneath it.
+  The gate is the river's middle, under *Midstream*. A comet's colour is chosen per pixel, so one
+  crossing the gate is a record up to the line and a row from it. Channels meet the lake at a slope
+  and thin out into it; their rows fade faster than they slow, so the water is brightest where a
+  channel runs in and dissolves outward. Nothing splashes and nothing rings: the lake takes rows in
+  quietly. Sizes and speeds follow the river's width, so a wide screen gets a bolder river, not a
+  finer one.
+
+  It runs only on screen, in a visible tab; under reduced motion it is one still frame, the same
+  comets as if photographed. Pointing at a channel names it and its rate, and dims the others;
+  clicking opens it; the same channels are links for a keyboard or a screen reader. In the dark
+  theme the water adds up to light, each comet has a faint halo and a blurred copy glows beneath
+  it; in the light theme comets lie over one another like ink, with a soft tint beneath.
 
 ## 10.9 Writing
 

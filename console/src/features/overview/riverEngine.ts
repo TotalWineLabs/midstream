@@ -1,18 +1,21 @@
 /**
- * The river's renderer: a particle system on two canvases, kept apart from React so it can run every
+ * The river's renderer: a particle system on canvases, kept apart from React so it can run every
  * frame without rendering anything (docs/10-design-system.md §10.8).
  *
  * Each materialization is a channel from Kafka, through the Midstream gate, into the lake. Its
  * particles are its records: their speed is its throughput — faster in the middle of the channel
  * than at its edges, as in a stream — and each leaves a trail as long as its speed, so velocity is
- * what you see. A record turns from mist to Current as it passes the gate and becomes a row; rows
- * pour into the lake and dissolve, and each commit ripples its surface. A backlog crowds the
- * channel; a failed or starting materialization holds its records at the gate; a stopped one is a
- * still, dashed channel.
+ * what you see. A record turns from mist to its state's colour exactly where it crosses the gate and
+ * becomes a row. Rows run on into the lake as they were moving, under its surface, slowing and
+ * spreading as they settle, and fade into it. A backlog crowds the channel; a failed or starting
+ * materialization holds its records at the gate; a stopped one is a still, dashed channel.
  *
- * The bed canvas (channels, gate, lake, ripples) is drawn fresh each frame; the water canvas keeps
- * what it drew and fades it, which is what makes the trails.
+ * The bed canvas (channels, gate, lake) is drawn in 2D; the water — every particle a comet, its
+ * trail as long as its speed — on the GPU (`riverWater.ts`), or in 2D where WebGL 2 is unavailable.
+ * Both are drawn fresh each frame. Sizes and speeds follow the river's width, so a wide river is a
+ * bolder one rather than a finer one.
  */
+import { COMET_FLOATS, RiverWater } from './riverWater';
 import type { StatusKind } from '@/lib/status';
 
 export interface RiverStrand {
@@ -21,8 +24,6 @@ export interface RiverStrand {
   kind: StatusKind;
   /** Rows a second; null before its workers have reported twice. */
   rate: number | null;
-  /** Rows committed: when it grows, a commit has landed in the lake. */
-  rows: number | null;
 }
 
 type Rgb = [number, number, number];
@@ -50,12 +51,12 @@ interface Track {
   length: number;
   gateAt: number;
   width: number;
+  /** The curves it was laid along: a channel laid the same way again keeps everything. */
+  shape: string;
   /** Speed at the channel's centre, px/s, easing toward `targetSpeed` as the rate changes. */
   speed: number;
   targetSpeed: number;
   particles: Particle[];
-  /** Seconds to the next ambient ripple where it meets the lake. */
-  rippleIn: number;
 }
 
 interface Particle {
@@ -70,38 +71,45 @@ interface Particle {
   /** Where it was drawn last frame, to draw from; NaN when it has just appeared. */
   px: number;
   py: number;
-  /** Seconds in the lake, or −1 while in the channel. */
+  /** Seconds since it ran into the lake, or −1 while in its channel. */
   lake: number;
-  lx: number;
-  ly: number;
-  lvx: number;
-}
-
-interface Ripple {
+  /** Seconds it lasts in the lake before it has faded into it. */
+  life: number;
+  /** In the lake: where it is and how it moves, carried on from the channel. */
   x: number;
   y: number;
-  t: number;
-  strength: number;
+  vx: number;
+  vy: number;
 }
 
-interface Spark {
-  x: number;
+interface Glint {
+  key: string;
   y: number;
   t: number;
+  rgb: Rgb;
 }
 
 const STEP = 2;
-const RIPPLE_LIFE = 1.6;
-const SPARK_LIFE = 0.4;
-const LAKE_LIFE = 1.1;
-const MAX_PARTICLES = 2400;
+const GLINT_LIFE = 0.35;
+/** Glints showing at once, at most: a gate that glints now and then, not one lit up. */
+const GLINTS = 4;
+/** Seconds a row lasts in the lake, on average: by then it has faded into it. */
+const LAKE_LIFE = 1.6;
 /**
- * How fast trails fade, per second: a half-life of about a tenth of a second in the dark, where they
- * glow, and shorter in the light, where a long trail reads as steps.
+ * How fast a row fades into the lake: its time constant, short enough that rows fade faster than
+ * they slow, so the water is brightest where the channel runs in and dissolves outward from there.
  */
-const TRAIL_FADE = { dark: 7, light: 13 };
-/** Alpha levels particles are drawn at: one path per level and colour, rather than one per particle. */
-const LEVELS = 6;
+const LAKE_FADE = 0.45;
+/** How fast rows slow in the lake, per second: along it, and down into it. */
+const LAKE_DRAG = { along: 2, down: 4 };
+const MAX_PARTICLES = 3200;
+/** How steeply a channel meets the lake: enough that its rows run on under the surface. */
+const ENTRY_SLOPE = 0.45;
+/** A comet's trail: the distance it covers in this many seconds, up to `TRAIL_LONGEST` px. */
+const TRAIL_SECONDS = { dark: 0.16, light: 0.16 };
+const TRAIL_LONGEST = 64;
+/** Alpha levels the 2D water is drawn at: one path per level and colour, rather than one per comet. */
+const LEVELS = 8;
 const ORDER: StatusKind[] = ['failed', 'attention', 'starting', 'catching-up', 'flowing', 'stopped'];
 
 function cubic(p0: number, p1: number, p2: number, p3: number, t: number): number {
@@ -113,41 +121,40 @@ function rgba([r, g, b]: Rgb, a: number): string {
   return `rgba(${r},${g},${b},${Math.max(0, Math.min(1, a)).toFixed(3)})`;
 }
 
-function mix(a: Rgb, b: Rgb, t: number): Rgb {
-  return [Math.round(a[0] + (b[0] - a[0]) * t), Math.round(a[1] + (b[1] - a[1]) * t), Math.round(a[2] + (b[2] - a[2]) * t)];
-}
-
-/** Centre speed for a rate: a slow drift when barely anything flows, a rush at tens of thousands a second. */
+/** Centre speed for a rate, at a river 1100 px wide: a slow drift when barely anything flows, a rush at tens of thousands a second. */
 export function speedFor(rate: number | null): number {
   if (rate === null) return 14;
   return 22 + 52 * Math.log10(1 + Math.max(0, rate));
 }
 
-/** Particles a channel carries: enough to fill it, more where a backlog crowds it. */
-function particlesFor(strand: RiverStrand, width: number, length: number): number {
-  if (strand.kind === 'stopped') return 0;
-  return Math.round(Math.min(300, Math.max(24, (width * length) / 70)) * (strand.kind === 'catching-up' ? 1.8 : 1));
+/** How much of a row is left showing in the lake: fading from the moment it runs in, gone by the end of its life. */
+function lakeFade(particle: Particle): number {
+  const left = 1 - particle.lake / particle.life;
+  return Math.exp(-particle.lake / LAKE_FADE) * Math.min(1, left * 4);
 }
 
 export class RiverEngine {
-  /** The riverbed, the gate, the lake and its ripples: drawn fresh each frame. */
+  /** The riverbed, the gate and the lake: drawn fresh each frame. */
   private readonly bed: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
-  /** The water: particles drawn over what they drew before, faded, so each leaves a trail. */
+  /** The water: on the GPU, or in 2D where WebGL 2 is unavailable. */
   private readonly water: HTMLCanvasElement;
-  private readonly wctx: CanvasRenderingContext2D;
+  private readonly gpu: RiverWater | null;
+  private readonly wctx: CanvasRenderingContext2D | null;
+  /** Every comet this frame, `COMET_FLOATS` to each. */
+  private comets = new Float32Array(0);
   /** A copy of the water, blurred by CSS under it: the bloom where the flow is dense. */
   private readonly glow: HTMLCanvasElement | null;
   private readonly gctx: CanvasRenderingContext2D | null;
   private width = 0;
   private height = 0;
   private dpr = 1;
+  /** Sizes and speeds against a river 1100 px wide. */
+  private scale = 1;
   private palette: RiverPalette;
   private strands: RiverStrand[] = [];
   private tracks: Track[] = [];
-  private ripples: Ripple[] = [];
-  private sparks: Spark[] = [];
-  private rows = new Map<string, number>();
+  private glints: Glint[] = [];
   private hover: string | null = null;
   private frame = 0;
   private last = 0;
@@ -158,23 +165,24 @@ export class RiverEngine {
   private gateBottom = 0;
   private lakeY = 0;
   private lakeLeft = 0;
+  /** How deep under the surface rows settle, at most. */
+  private plumeDepth = 0;
 
   constructor(bed: HTMLCanvasElement, water: HTMLCanvasElement, glow: HTMLCanvasElement | null, palette: RiverPalette) {
     this.bed = bed;
     this.water = water;
     this.glow = glow;
     const ctx = bed.getContext('2d');
-    const wctx = water.getContext('2d');
-    if (!ctx || !wctx) throw new Error('2d canvas unavailable');
+    if (!ctx) throw new Error('2d canvas unavailable');
     this.ctx = ctx;
-    this.wctx = wctx;
+    this.gpu = RiverWater.create(water);
+    this.wctx = this.gpu ? null : water.getContext('2d');
     this.gctx = glow?.getContext('2d') ?? null;
     this.palette = palette;
   }
 
   setPalette(palette: RiverPalette): void {
     this.palette = palette;
-    this.clearWater();
     if (!this.running) this.paint();
   }
 
@@ -196,14 +204,6 @@ export class RiverEngine {
   }
 
   setStrands(strands: RiverStrand[]): void {
-    // A commit landing: rows committed grew since the last frame.
-    for (const strand of strands) {
-      const before = this.rows.get(strand.key);
-      if (strand.rows !== null) {
-        if (before !== undefined && strand.rows > before) this.commitRipple(strand.key, strand.rows - before);
-        this.rows.set(strand.key, strand.rows);
-      }
-    }
     this.strands = strands;
     this.layout();
     if (!this.running) this.paint();
@@ -237,7 +237,6 @@ export class RiverEngine {
     if (this.running) return;
     this.running = true;
     this.last = performance.now();
-    this.clearWater();
     const tick = (now: number): void => {
       if (!this.running) return;
       // A tab coming back from the background resumes, rather than jumping a minute's travel.
@@ -245,7 +244,7 @@ export class RiverEngine {
       this.last = now;
       this.update(dt);
       this.drawBed();
-      this.drawWater(dt);
+      this.drawWater();
       this.bloom();
       this.frame = requestAnimationFrame(tick);
     };
@@ -261,13 +260,13 @@ export class RiverEngine {
   destroy(): void {
     this.running = false;
     cancelAnimationFrame(this.frame);
+    this.gpu?.destroy();
   }
 
-  /** One still frame: for reduced motion, an offscreen river, or a change while stopped. */
+  /** One still frame, as if photographed: for reduced motion, an offscreen river, or a change while stopped. */
   private paint(): void {
     this.drawBed();
-    this.clearWater();
-    this.drawStill();
+    this.drawWater();
     this.bloom();
   }
 
@@ -275,7 +274,6 @@ export class RiverEngine {
     if (!this.glow || !this.gctx) return;
     this.gctx.setTransform(1, 0, 0, 1, 0, 0);
     this.gctx.clearRect(0, 0, this.glow.width, this.glow.height);
-    if (!this.palette.dark) return;
     this.gctx.drawImage(this.water, 0, 0, this.glow.width, this.glow.height);
   }
 
@@ -283,18 +281,22 @@ export class RiverEngine {
     const W = this.width;
     const H = this.height;
     if (W <= 0 || H <= 0) return;
+    const s = Math.min(1.4, Math.max(0.8, W / 1100));
+    this.scale = s;
     const sorted = [...this.strands].sort(
       (left, right) => ORDER.indexOf(left.kind) - ORDER.indexOf(right.kind) || (right.rate ?? 0) - (left.rate ?? 0),
     );
     const peak = Math.max(1, ...sorted.map((strand) => Math.log10(1 + Math.max(0, strand.rate ?? 0))));
     const widths = sorted.map((strand) =>
-      strand.kind === 'stopped' ? 2 : 3 + 10 * Math.sqrt(Math.log10(1 + Math.max(0, strand.rate ?? 0)) / peak),
+      strand.kind === 'stopped' ? 2 * s : (3 + 10 * Math.sqrt(Math.log10(1 + Math.max(0, strand.rate ?? 0)) / peak)) * s,
     );
     const total = widths.reduce((sum, width) => sum + width, 0);
 
-    this.gateX = W * 0.42;
-    this.lakeY = H * 0.76;
-    this.lakeLeft = W * 0.58;
+    // The gate is the river's middle: records to its left, rows to its right.
+    this.gateX = W * 0.5;
+    this.lakeY = H * 0.74;
+    this.lakeLeft = W * 0.6;
+    this.plumeDepth = Math.max(8, Math.min(H - this.lakeY - 10, 32 * s));
     const spread = (centre: number, gap: number): number[] => {
       let cursor = centre - (total + gap * Math.max(0, widths.length - 1)) / 2;
       return widths.map((width) => {
@@ -303,13 +305,13 @@ export class RiverEngine {
         return middle;
       });
     };
-    const roomy = Math.min(26, Math.max(5, (H * 0.8 - total) / Math.max(1, widths.length - 1)));
+    const roomy = Math.min(26 * s, Math.max(5, (H * 0.8 - total) / Math.max(1, widths.length - 1)));
     const source = spread(H * 0.48, roomy);
-    const gate = spread(H * 0.42, 2);
-    this.gateTop = (gate[0] ?? H * 0.42) - (widths[0] ?? 0) / 2;
-    this.gateBottom = (gate.at(-1) ?? H * 0.42) + (widths.at(-1) ?? 0) / 2;
-    // A delta: the channel highest at the gate lands farthest out, so none crosses another.
-    const ends = sorted.map((_, index) => (sorted.length === 1 ? W * 0.86 : W * (0.97 - (0.27 * index) / (sorted.length - 1))));
+    const gate = spread(H * 0.4, 2);
+    this.gateTop = (gate[0] ?? H * 0.4) - (widths[0] ?? 0) / 2;
+    this.gateBottom = (gate.at(-1) ?? H * 0.4) + (widths.at(-1) ?? 0) / 2;
+    // A delta: the channel highest at the gate meets the lake farthest out, so none crosses another.
+    const ends = sorted.map((_, index) => (sorted.length === 1 ? W * 0.74 : W * (0.86 - (0.22 * index) / (sorted.length - 1))));
 
     const previous = new Map(this.tracks.map((track) => [track.key, track]));
     const tracks = sorted.map((strand, index) => {
@@ -317,22 +319,41 @@ export class RiverEngine {
       const ys = source[index] as number;
       const yg = gate[index] as number;
       const xe = ends[index] as number;
+      const reach = xe - this.gateX;
       const segments: Array<[number, number, number, number, number, number, number, number]> = [
-        [-14, ys, W * 0.16, ys, W * 0.26, yg, this.gateX, yg],
-        [this.gateX, yg, this.gateX + (xe - this.gateX) * 0.55, yg, xe - (xe - this.gateX) * 0.2, this.lakeY, xe, this.lakeY],
+        [-14, ys, W * 0.2, ys, W * 0.32, yg, this.gateX, yg],
+        // Leaving the gate level, then down into the lake at a slope, so its rows run on under the surface.
+        [this.gateX, yg, this.gateX + reach * 0.5, yg, xe - reach * 0.3, this.lakeY - reach * 0.3 * ENTRY_SLOPE, xe, this.lakeY],
       ];
       return this.track(strand, width, segments, previous.get(strand.key));
     });
 
     // Every channel keeps its share when the fleet is large.
-    const budget = tracks.reduce((sum, track) => sum + particlesFor(track.strand, track.width, track.length), 0);
-    const scale = budget > MAX_PARTICLES ? MAX_PARTICLES / budget : 1;
-    for (const track of tracks) {
-      const wanted = Math.round(particlesFor(track.strand, track.width, track.length) * scale);
-      while (track.particles.length < wanted) track.particles.push(this.spawn(Math.random()));
-      if (track.particles.length > wanted) track.particles.length = wanted;
-    }
+    const wanted = tracks.map((track) => this.particlesFor(track));
+    const budget = wanted.reduce((sum, count) => sum + count, 0);
+    const share = budget > MAX_PARTICLES ? MAX_PARTICLES / budget : 1;
+    tracks.forEach((track, index) => {
+      const count = Math.round((wanted[index] as number) * share);
+      while (track.particles.length < count) track.particles.push(this.spawn(Math.random()));
+      if (track.particles.length > count) track.particles.length = count;
+    });
     this.tracks = tracks;
+    // A channel new to the river arrives already flowing, its rows already in the lake.
+    for (const track of tracks) {
+      if (previous.has(track.key)) continue;
+      for (let step = 0; step < 100; step += 1) this.advance(track, 0.05, false);
+    }
+  }
+
+  /** Particles a channel carries: enough to fill it, more where a backlog crowds it, and its rows' time in the lake. */
+  private particlesFor(track: Track): number {
+    const kind = track.strand.kind;
+    if (kind === 'stopped') return 0;
+    // Counted at the river's own scale: a wider river is the same picture, larger.
+    const area = (track.width * track.length) / (this.scale * this.scale);
+    const fill = Math.min(300, Math.max(24, area / 70)) * (kind === 'catching-up' ? 1.8 : 1);
+    const held = kind === 'failed' || kind === 'starting';
+    return Math.round(fill * (held ? 1 : 1 + (LAKE_LIFE * track.targetSpeed) / track.length));
   }
 
   private track(
@@ -341,6 +362,11 @@ export class RiverEngine {
     segments: Array<[number, number, number, number, number, number, number, number]>,
     old: Track | undefined,
   ): Track {
+    const shape = segments.map((segment) => segment.map((value) => value.toFixed(1)).join(',')).join(';');
+    const targetSpeed = speedFor(strand.rate) * this.scale;
+    if (old && old.shape === shape && old.width === width) {
+      return { ...old, strand, targetSpeed };
+    }
     // Sample densely, then resample by arc length so a particle's position is one array index.
     const raw: Array<[number, number]> = [];
     let gateIndex = 0;
@@ -378,10 +404,11 @@ export class RiverEngine {
       txs[index] = (bx - ax) / norm;
       tys[index] = (by - ay) / norm;
     }
-    const targetSpeed = speedFor(strand.rate);
-    // A relaid channel keeps its particles where they were along it: nothing jumps.
+    // A relaid channel keeps its particles where they were along it, drawn afresh from there so
+    // none streaks across from where the old channel ran. Rows in the lake run on as they were.
     const particles = old ? old.particles : [];
     for (const particle of particles) {
+      if (particle.lake >= 0) continue;
       particle.px = Number.NaN;
       particle.py = Number.NaN;
     }
@@ -395,10 +422,10 @@ export class RiverEngine {
       length,
       gateAt: cumulative[gateIndex] as number,
       width,
+      shape,
       speed: old ? old.speed : targetSpeed,
       targetSpeed,
       particles,
-      rippleIn: old ? old.rippleIn : Math.random() * 2,
     };
   }
 
@@ -409,22 +436,17 @@ export class RiverEngine {
       u,
       // Laminar: the middle of the channel runs fastest.
       v: (1 - 0.6 * u * u) * (0.85 + Math.random() * 0.3),
-      alpha: 0.3 + Math.random() * 0.7,
+      alpha: 0.35 + Math.random() * 0.65,
       phase: Math.random() * Math.PI * 2,
       px: Number.NaN,
       py: Number.NaN,
       lake: -1,
-      lx: 0,
-      ly: 0,
-      lvx: 0,
+      life: LAKE_LIFE,
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
     };
-  }
-
-  private commitRipple(key: string, added: number): void {
-    const track = this.tracks.find((candidate) => candidate.key === key);
-    if (!track) return;
-    const end = track.xs.length - 1;
-    this.ripples.push({ x: track.xs[end] as number, y: this.lakeY, t: 0, strength: Math.min(1.8, 0.8 + Math.log10(1 + added) / 3) });
   }
 
   /** Where a particle is now, across its channel and wandering a little. */
@@ -440,56 +462,67 @@ export class RiverEngine {
 
   private update(dt: number): void {
     this.time += dt;
-    for (const track of this.tracks) {
-      track.speed += (track.targetSpeed - track.speed) * Math.min(1, dt * 1.2);
-      const kind = track.strand.kind;
-      const holds = kind === 'failed' || kind === 'starting';
-      const gateF = track.gateAt / track.length;
-      for (const particle of track.particles) {
-        if (particle.lake >= 0) {
-          particle.lake += dt;
-          particle.lx += particle.lvx * dt;
-          particle.lvx *= Math.exp(-2.2 * dt);
-          particle.ly += 5 * dt;
-          if (particle.lake > LAKE_LIFE) Object.assign(particle, this.spawn(-Math.random() * 0.05));
+    for (const track of this.tracks) this.advance(track, dt, true);
+    for (const glint of this.glints) glint.t += dt;
+    this.glints = this.glints.filter((glint) => glint.t < GLINT_LIFE);
+  }
+
+  /** One step of a channel's water; `glints` false while it is only being filled. */
+  private advance(track: Track, dt: number, glints: boolean): void {
+    track.speed += (track.targetSpeed - track.speed) * Math.min(1, dt * 1.2);
+    const kind = track.strand.kind;
+    const holds = kind === 'failed' || kind === 'starting';
+    const gateF = track.gateAt / track.length;
+    // The lake's own slow drift, which rows come to rest in.
+    const drift = 5 * this.scale;
+    const along = Math.exp(-LAKE_DRAG.along * dt);
+    const down = Math.exp(-LAKE_DRAG.down * dt);
+    for (const particle of track.particles) {
+      if (particle.lake >= 0) {
+        particle.lake += dt;
+        if (particle.lake > particle.life) {
+          Object.assign(particle, this.spawn(-Math.random() * 0.05));
           continue;
         }
-        const downstream = particle.f >= gateF;
-        const pace = kind === 'attention' && downstream ? 0.45 : 1;
-        const before = particle.f;
-        particle.f += ((track.speed * particle.v * pace) / track.length) * dt;
-        if (holds && particle.f >= gateF - 0.003) {
-          // Held at the gate: records pile up where they cannot become rows.
-          particle.f = gateF - 0.003 - Math.random() * Math.random() * 0.05;
-          particle.px = Number.NaN;
-          continue;
-        }
-        if (before < gateF && particle.f >= gateF && Math.random() < 0.06) {
-          const [x, y] = this.place(track, particle);
-          this.sparks.push({ x, y, t: 0 });
-        }
-        if (particle.f >= 1) {
-          const end = track.xs.length - 1;
-          particle.lake = 0;
-          particle.lx = track.xs[end] as number;
-          particle.ly = this.lakeY + Math.random() * 1.5;
-          particle.lvx = (track.txs[end] as number) * track.speed * particle.v * 0.8 + (Math.random() - 0.5) * 26;
-        }
+        // Slowing as the lake takes it, and drawn to its depth: a dive that levels out, never a bounce.
+        const depth = this.lakeY + this.plumeDepth * (0.15 + 0.425 * (1 + particle.u));
+        particle.vx = drift + (particle.vx - drift) * along;
+        particle.vy = particle.vy * down + (depth - particle.y) * 3 * dt;
+        particle.x += particle.vx * dt;
+        particle.y += particle.vy * dt;
+        continue;
       }
-      // Rows arriving keep the surface where it meets the lake gently moving.
-      if (kind === 'flowing' || kind === 'catching-up') {
-        track.rippleIn -= dt;
-        if (track.rippleIn <= 0) {
-          const end = track.xs.length - 1;
-          this.ripples.push({ x: track.xs[end] as number, y: this.lakeY, t: 0, strength: 0.35 });
-          track.rippleIn = Math.max(0.6, 3.4 - Math.log10(1 + Math.max(0, track.strand.rate ?? 0)) * 0.6) * (0.7 + Math.random() * 0.6);
-        }
+      const downstream = particle.f >= gateF;
+      const pace = kind === 'attention' && downstream ? 0.45 : 1;
+      const before = particle.f;
+      particle.f += ((track.speed * particle.v * pace) / track.length) * dt;
+      if (holds && particle.f >= gateF - 0.003) {
+        // Held at the gate: records pile up where they cannot become rows.
+        particle.f = gateF - 0.003 - Math.random() * Math.random() * 0.05;
+        particle.px = Number.NaN;
+        continue;
       }
+      if (glints && before < gateF && particle.f >= gateF && this.glints.length < GLINTS && Math.random() < 0.06) {
+        this.glints.push({ key: track.key, y: this.place(track, particle)[1], t: 0, rgb: this.colorOf(kind) });
+      }
+      if (particle.f >= 1) this.enterLake(track, particle, pace);
     }
-    for (const ripple of this.ripples) ripple.t += dt;
-    this.ripples = this.ripples.filter((ripple) => ripple.t < RIPPLE_LIFE);
-    for (const spark of this.sparks) spark.t += dt;
-    this.sparks = this.sparks.filter((spark) => spark.t < SPARK_LIFE);
+  }
+
+  /** A row leaving its channel: on into the lake from where it was, as fast and in the same direction. */
+  private enterLake(track: Track, particle: Particle, pace: number): void {
+    const end = track.xs.length - 1;
+    const tx = track.txs[end] as number;
+    const ty = track.tys[end] as number;
+    const over = (particle.f - 1) * track.length;
+    const [x, y] = this.place(track, particle);
+    const speed = track.speed * particle.v * pace;
+    particle.lake = 0;
+    particle.life = LAKE_LIFE * (0.7 + Math.random() * 0.6);
+    particle.x = x + tx * over;
+    particle.y = y + ty * over;
+    particle.vx = tx * speed;
+    particle.vy = ty * speed;
   }
 
   private colorOf(kind: StatusKind): Rgb {
@@ -518,49 +551,71 @@ export class RiverEngine {
     const H = this.height;
     if (W <= 0 || H <= 0) return;
     const { dark } = this.palette;
+    const s = this.scale;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
     this.drawLake();
 
-    // Riverbeds: each channel a faint band with soft edges, so its water has somewhere to run.
-    ctx.lineCap = 'round';
+    // Riverbeds: each channel a faint band, so its water has somewhere to run. Butt ends, so the
+    // colour changes at the gate and nowhere before it.
+    ctx.lineCap = 'butt';
     ctx.lineJoin = 'round';
     for (const track of this.tracks) {
       const dim = this.dimOf(track.key);
       const stopped = track.strand.kind === 'stopped';
       const color = stopped ? this.palette.slate : this.colorOf(track.strand.kind);
       const gateIndex = Math.round(track.gateAt / STEP);
+      const end = track.xs.length - 1;
       const trace = (from: number, to: number): void => {
         ctx.beginPath();
         for (let index = from; index <= to; index += 2) {
-          const x = track.xs[Math.min(index, track.xs.length - 1)] as number;
-          const y = track.ys[Math.min(index, track.xs.length - 1)] as number;
-          if (index === from) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
+          const at = Math.min(index, end);
+          if (index === from) ctx.moveTo(track.xs[at] as number, track.ys[at] as number);
+          else ctx.lineTo(track.xs[at] as number, track.ys[at] as number);
         }
+        ctx.lineTo(track.xs[to] as number, track.ys[to] as number);
+      };
+      // The last stretch thins out as it meets the lake: the channel runs into it rather than stopping at it.
+      const ex = track.xs[end] as number;
+      const ey = track.ys[end] as number;
+      const fadeFrom = 30 * s;
+      const intoLake = (rgb: Rgb, alpha: number): CanvasGradient => {
+        const gradient = ctx.createLinearGradient(
+          ex - (track.txs[end] as number) * fadeFrom,
+          ey - (track.tys[end] as number) * fadeFrom,
+          ex,
+          ey,
+        );
+        gradient.addColorStop(0, rgba(rgb, alpha));
+        gradient.addColorStop(1, rgba(rgb, 0));
+        return gradient;
       };
       if (stopped) {
-        trace(0, track.xs.length - 1);
-        ctx.setLineDash([3, 5]);
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = rgba(color, 0.65 * Math.min(1, dim));
+        trace(0, end);
+        ctx.setLineDash([3 * s, 5 * s]);
+        ctx.lineWidth = 1.5 * s;
+        ctx.strokeStyle = intoLake(color, 0.65 * Math.min(1, dim));
         ctx.stroke();
         ctx.setLineDash([]);
         continue;
       }
       // Records run in a neutral bed to the gate; rows in their state's colour after it.
-      for (const [from, to, rgb] of [
-        [0, gateIndex, this.palette.raw],
-        [gateIndex, track.xs.length - 1, color],
-      ] as Array<[number, number, Rgb]>) {
-        trace(from, to);
-        ctx.lineWidth = track.width + 6;
-        ctx.strokeStyle = rgba(rgb, (dark ? 0.035 : 0.03) * dim);
-        ctx.stroke();
-        ctx.lineWidth = track.width;
-        ctx.strokeStyle = rgba(rgb, (dark ? 0.06 : 0.05) * dim);
-        ctx.stroke();
-      }
+      const edge = dark ? 0.035 : 0.045;
+      const core = dark ? 0.06 : 0.075;
+      trace(0, gateIndex);
+      ctx.lineWidth = track.width + 6 * s;
+      ctx.strokeStyle = rgba(this.palette.raw, edge * dim);
+      ctx.stroke();
+      ctx.lineWidth = track.width;
+      ctx.strokeStyle = rgba(this.palette.raw, core * dim);
+      ctx.stroke();
+      trace(gateIndex, end);
+      ctx.lineWidth = track.width + 6 * s;
+      ctx.strokeStyle = intoLake(color, edge * dim);
+      ctx.stroke();
+      ctx.lineWidth = track.width;
+      ctx.strokeStyle = intoLake(color, core * dim);
+      ctx.stroke();
     }
 
     this.drawGate();
@@ -568,134 +623,136 @@ export class RiverEngine {
     // Where each channel springs from: its records' source in Kafka.
     for (const track of this.tracks) {
       const index = Math.min(track.xs.length - 1, Math.round(14 / STEP));
-      const x = track.xs[index] as number;
-      const y = track.ys[index] as number;
       const dim = this.dimOf(track.key);
-      ctx.fillStyle = rgba(this.palette.raw, (dark ? 0.55 : 0.45) * Math.min(1, dim));
+      ctx.fillStyle = rgba(this.palette.raw, (dark ? 0.55 : 0.6) * Math.min(1, dim));
       ctx.beginPath();
-      ctx.arc(x, y, Math.max(1.6, Math.min(3.2, track.width / 4)), 0, Math.PI * 2);
+      ctx.arc(track.xs[index] as number, track.ys[index] as number, Math.max(1.6, Math.min(3.4 * s, track.width / 4)), 0, Math.PI * 2);
       ctx.fill();
     }
-
-    // Commits landing: rings on the lake, flattened as a surface seen from the shore is.
-    for (const ripple of this.ripples) {
-      const life = ripple.t / RIPPLE_LIFE;
-      const ease = 1 - (1 - life) * (1 - life);
-      const radius = 2 + 34 * ease * ripple.strength;
-      ctx.strokeStyle = rgba(this.palette.current, (1 - life) * (dark ? 0.6 : 0.5) * Math.min(1, ripple.strength));
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.ellipse(ripple.x, ripple.y + 1, radius, radius * 0.24, 0, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
-    // A record becoming a row: a small light where it passes the gate.
-    ctx.globalCompositeOperation = dark ? 'lighter' : 'source-over';
-    for (const spark of this.sparks) {
-      const life = 1 - spark.t / SPARK_LIFE;
-      const glow = ctx.createRadialGradient(spark.x, spark.y, 0, spark.x, spark.y, 2 + 6 * (1 - life));
-      glow.addColorStop(0, rgba(this.palette.current, 0.85 * life));
-      glow.addColorStop(1, rgba(this.palette.current, 0));
-      ctx.fillStyle = glow;
-      ctx.fillRect(spark.x - 9, spark.y - 9, 18, 18);
-    }
-    ctx.globalCompositeOperation = 'source-over';
   }
 
-  private clearWater(): void {
-    this.wctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    this.wctx.clearRect(0, 0, this.width, this.height);
-  }
-
-  /** Each particle's move since the last frame, drawn over the water as it fades. */
-  private drawWater(dt: number): void {
-    const ctx = this.wctx;
-    const { dark, raw } = this.palette;
-    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    // Fade what is there: the trails.
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.fillStyle = `rgba(0,0,0,${(1 - Math.exp(-(dark ? TRAIL_FADE.dark : TRAIL_FADE.light) * dt)).toFixed(3)})`;
-    ctx.fillRect(0, 0, this.width, this.height);
-    ctx.globalCompositeOperation = dark ? 'lighter' : 'source-over';
-    ctx.lineCap = 'butt';
-
+  /** Every particle as a comet: where its head is, which way it moves, and a trail as long as its speed. */
+  private buildComets(): number {
+    const { dark } = this.palette;
+    const s = this.scale;
+    const width = (dark ? 1.6 : 2) * s;
+    const seconds = dark ? TRAIL_SECONDS.dark : TRAIL_SECONDS.light;
+    const longest = TRAIL_LONGEST * s;
+    const total = this.tracks.reduce((sum, track) => sum + track.particles.length, 0);
+    if (this.comets.length < total * COMET_FLOATS) this.comets = new Float32Array(Math.ceil(total * 1.25) * COMET_FLOATS);
+    const data = this.comets;
+    let at = 0;
     for (const track of this.tracks) {
-      if (track.particles.length === 0) continue;
       const dim = this.dimOf(track.key);
-      const down = this.colorOf(track.strand.kind);
-      const held = track.strand.kind === 'failed' || track.strand.kind === 'starting';
+      const kind = track.strand.kind;
+      const held = kind === 'failed' || kind === 'starting';
+      const [r, g, b] = this.colorOf(kind);
       const gateF = track.gateAt / track.length;
-      const blend = 22 / track.length;
-      const strokes: Path2D[][] = [0, 1, 2].map(() => Array.from({ length: LEVELS }, () => new Path2D()));
-      const lakeDots: Path2D[] = Array.from({ length: LEVELS }, () => new Path2D());
       for (const particle of track.particles) {
-        const twinkle = 0.8 + 0.2 * Math.sin(this.time * 2.4 + particle.phase);
+        let x: number;
+        let y: number;
+        let dx: number;
+        let dy: number;
+        let speed: number;
+        let fade: number;
         if (particle.lake >= 0) {
-          const fade = 1 - particle.lake / LAKE_LIFE;
-          const level = Math.min(LEVELS - 1, Math.floor(particle.alpha * fade * twinkle * LEVELS));
-          if (level > 0) (lakeDots[level] as Path2D).rect(particle.lx - 0.7, particle.ly - 0.7, 1.4, 1.4);
-          continue;
+          x = particle.x;
+          y = particle.y;
+          speed = Math.hypot(particle.vx, particle.vy);
+          dx = speed > 0 ? particle.vx / speed : 1;
+          dy = speed > 0 ? particle.vy / speed : 0;
+          fade = lakeFade(particle);
+        } else {
+          [x, y] = this.place(track, particle);
+          const index = Math.min(track.xs.length - 1, Math.floor((Math.max(0, Math.min(1, particle.f)) * track.length) / STEP));
+          dx = track.txs[index] as number;
+          dy = track.tys[index] as number;
+          // Held records shimmer in place: a point, not a streak.
+          speed = held ? 0 : track.speed * particle.v * (kind === 'attention' && particle.f >= gateF ? 0.45 : 1);
+          // Records fade in where they come out of Kafka.
+          fade = Math.min(1, Math.max(0, particle.f) / 0.05);
         }
-        const [x, y] = this.place(track, particle);
-        const f = particle.f;
-        const color = f < gateF - blend ? 0 : f > gateF + blend ? 2 : 1;
-        // Records fade in where they come out of Kafka.
-        const enter = Math.min(1, Math.max(0, f) / 0.05);
-        const level = Math.min(LEVELS - 1, Math.floor(particle.alpha * twinkle * enter * LEVELS));
-        if (level > 0) {
-          const path = (strokes[color] as Path2D[])[level] as Path2D;
-          // From where it was: held records shimmer in place rather than streak.
-          if (Number.isNaN(particle.px) || held) {
-            path.moveTo(x - 0.6, y);
-            path.lineTo(x + 0.6, y);
-          } else {
-            path.moveTo(particle.px, particle.py);
-            path.lineTo(x, y);
-          }
-        }
-        particle.px = x;
-        particle.py = y;
-      }
-      ctx.lineWidth = dark ? 1.4 : 1.25;
-      const colors: Rgb[] = [raw, mix(raw, down, 0.5), down];
-      colors.forEach((rgb, which) => {
-        const strength = dark ? (which === 0 ? 0.55 : 0.95) : which === 0 ? 0.45 : 0.85;
-        for (let level = 1; level < LEVELS; level += 1) {
-          ctx.strokeStyle = rgba(rgb, (level / (LEVELS - 1)) * strength * dim);
-          ctx.stroke((strokes[which] as Path2D[])[level] as Path2D);
-        }
-      });
-      for (let level = 1; level < LEVELS; level += 1) {
-        ctx.fillStyle = rgba(down, (level / (LEVELS - 1)) * 0.75 * dim);
-        ctx.fill(lakeDots[level] as Path2D);
+        const alpha = particle.alpha * (0.92 + 0.08 * Math.sin(this.time * 2.4 + particle.phase)) * fade * dim;
+        if (alpha < 0.02) continue;
+        data[at] = x;
+        data[at + 1] = y;
+        data[at + 2] = dx;
+        data[at + 3] = dy;
+        data[at + 4] = Math.min(longest, speed * seconds);
+        data[at + 5] = width;
+        data[at + 6] = alpha;
+        data[at + 7] = r / 255;
+        data[at + 8] = g / 255;
+        data[at + 9] = b / 255;
+        at += COMET_FLOATS;
       }
     }
-    ctx.globalCompositeOperation = 'source-over';
+    return at / COMET_FLOATS;
   }
 
-  /** The water as one still moment: short streaks, as if photographed. */
-  private drawStill(): void {
-    const ctx = this.wctx;
+  private drawWater(): void {
+    const count = this.buildComets();
     const { dark, raw } = this.palette;
+    const s = this.scale;
+    const strengths = dark ? { raw: 0.6, row: 0.95 } : { raw: 0.7, row: 1 };
+    if (this.gpu) {
+      this.gpu.draw(this.comets, count, {
+        width: this.width,
+        height: this.height,
+        dpr: this.dpr,
+        dark,
+        gateX: this.gateX,
+        raw: [raw[0] / 255, raw[1] / 255, raw[2] / 255],
+        rawStrength: strengths.raw,
+        rowStrength: strengths.row,
+        // A row just made is brightest — whiter in the dark, deeper in the light — for a moment past the gate.
+        fresh: dark ? [1, 1, 1] : [0, 0, 0],
+        freshAmount: dark ? 0.45 : 0.18,
+        freshReach: 16 * s,
+        halo: dark ? { spread: 4, gain: 0.14 } : { spread: 4, gain: 0.12 },
+      });
+      return;
+    }
+    const ctx = this.wctx;
+    if (!ctx) return;
+    // Without WebGL: each comet a plain stroke, split at the gate.
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.clearRect(0, 0, this.width, this.height);
     ctx.globalCompositeOperation = dark ? 'lighter' : 'source-over';
     ctx.lineCap = 'round';
-    ctx.lineWidth = dark ? 1.4 : 1.6;
-    for (const track of this.tracks) {
-      const dim = this.dimOf(track.key);
-      const down = this.colorOf(track.strand.kind);
-      const gateF = track.gateAt / track.length;
-      for (const particle of track.particles) {
-        if (particle.lake >= 0) continue;
-        const [x, y] = this.place(track, particle);
-        const index = Math.min(track.xs.length - 1, Math.floor((Math.max(0, Math.min(1, particle.f)) * track.length) / STEP));
-        const tail = Math.max(1, Math.min(16, track.speed * particle.v * 0.08));
-        ctx.strokeStyle = rgba(particle.f < gateF ? raw : down, particle.alpha * (particle.f < gateF ? 0.5 : 0.85) * dim);
-        ctx.beginPath();
-        ctx.moveTo(x - (track.txs[index] as number) * tail, y - (track.tys[index] as number) * tail);
-        ctx.lineTo(x, y);
-        ctx.stroke();
+    ctx.lineWidth = (dark ? 1.6 : 2) * s;
+    const paths = new Map<string, Path2D>();
+    const add = (style: string, ax: number, ay: number, bx: number, by: number): void => {
+      let path = paths.get(style);
+      if (!path) paths.set(style, (path = new Path2D()));
+      path.moveTo(ax, ay);
+      path.lineTo(bx, by);
+    };
+    const data = this.comets;
+    const gate = this.gateX;
+    for (let at = 0; at < count * COMET_FLOATS; at += COMET_FLOATS) {
+      const x = data[at] as number;
+      const y = data[at + 1] as number;
+      const length = data[at + 4] as number;
+      const tx = x - (data[at + 2] as number) * length;
+      const ty = y - (data[at + 3] as number) * length;
+      const level = Math.max(1, Math.round((data[at + 6] as number) * LEVELS)) / LEVELS;
+      const row = rgba(
+        [Math.round((data[at + 7] as number) * 255), Math.round((data[at + 8] as number) * 255), Math.round((data[at + 9] as number) * 255)],
+        level * strengths.row,
+      );
+      const record = rgba(raw, level * strengths.raw);
+      if (tx < gate && x >= gate) {
+        const crossing = ty + ((y - ty) * (gate - tx)) / (x - tx);
+        add(record, tx, ty, gate, crossing);
+        add(row, gate, crossing, x, y);
+      } else {
+        add(x < gate ? record : row, tx, ty, x + 0.01, y);
       }
+    }
+    for (const [style, path] of paths) {
+      ctx.strokeStyle = style;
+      ctx.stroke(path);
     }
     ctx.globalCompositeOperation = 'source-over';
   }
@@ -708,7 +765,7 @@ export class RiverEngine {
     const left = this.lakeLeft;
     // The water: Current, deepening away from its surface, its near shore curving in.
     const depth = ctx.createLinearGradient(0, this.lakeY, 0, H);
-    depth.addColorStop(0, rgba(current, dark ? 0.15 : 0.12));
+    depth.addColorStop(0, rgba(current, dark ? 0.15 : 0.16));
     depth.addColorStop(1, rgba(current, 0));
     ctx.fillStyle = depth;
     ctx.beginPath();
@@ -725,7 +782,7 @@ export class RiverEngine {
       const from = left + (W - left) * (0.3 + 0.08 * line) + Math.sin(this.time * 0.25 + line) * 14;
       const sheen = ctx.createLinearGradient(from, 0, W, 0);
       sheen.addColorStop(0, rgba(current, 0));
-      sheen.addColorStop(0.5, rgba(current, (dark ? 0.12 : 0.1) * shimmer * (1 - line / 4)));
+      sheen.addColorStop(0.5, rgba(current, (dark ? 0.12 : 0.14) * shimmer * (1 - line / 4)));
       sheen.addColorStop(1, rgba(current, 0));
       ctx.strokeStyle = sheen;
       ctx.lineWidth = 1;
@@ -737,10 +794,10 @@ export class RiverEngine {
     // The waterline: where rows settle, and every engine can read them.
     const line = ctx.createLinearGradient(left, 0, W, 0);
     line.addColorStop(0, rgba(current, 0));
-    line.addColorStop(0.28, rgba(current, dark ? 0.8 : 0.7));
-    line.addColorStop(1, rgba(current, dark ? 0.45 : 0.4));
+    line.addColorStop(0.28, rgba(current, dark ? 0.8 : 0.85));
+    line.addColorStop(1, rgba(current, dark ? 0.45 : 0.5));
     ctx.strokeStyle = line;
-    ctx.lineWidth = 1.25;
+    ctx.lineWidth = 1.25 * this.scale;
     ctx.beginPath();
     ctx.moveTo(left, this.lakeY);
     ctx.lineTo(W, this.lakeY);
@@ -750,8 +807,9 @@ export class RiverEngine {
   private drawGate(): void {
     const ctx = this.ctx;
     const { dark, ink, current } = this.palette;
-    const top = Math.max(4, this.gateTop - 20);
-    const bottom = Math.min(this.height - 4, this.gateBottom + 20);
+    const s = this.scale;
+    const top = Math.max(4, this.gateTop - 20 * s);
+    const bottom = Math.min(this.height - 4, this.gateBottom + 20 * s);
     if (dark) {
       const middle = (top + bottom) / 2;
       const radius = Math.max(36, (bottom - top) * 0.9);
@@ -763,7 +821,7 @@ export class RiverEngine {
     }
     const glow = ctx.createLinearGradient(0, top, 0, bottom);
     glow.addColorStop(0, rgba(ink, 0));
-    glow.addColorStop(0.5, rgba(dark ? current : ink, dark ? 0.6 : 0.3));
+    glow.addColorStop(0.5, rgba(dark ? current : ink, dark ? 0.6 : 0.35));
     glow.addColorStop(1, rgba(ink, 0));
     ctx.strokeStyle = glow;
     ctx.lineWidth = 1.5;
@@ -771,5 +829,22 @@ export class RiverEngine {
     ctx.moveTo(this.gateX, top);
     ctx.lineTo(this.gateX, bottom);
     ctx.stroke();
+    // A record becoming a row: the gate glints where it passed.
+    ctx.globalCompositeOperation = dark ? 'lighter' : 'source-over';
+    ctx.lineWidth = 2 * s;
+    for (const glint of this.glints) {
+      const life = 1 - glint.t / GLINT_LIFE;
+      const reach = 7 * s;
+      const flash = ctx.createLinearGradient(0, glint.y - reach, 0, glint.y + reach);
+      flash.addColorStop(0, rgba(glint.rgb, 0));
+      flash.addColorStop(0.5, rgba(glint.rgb, (dark ? 0.9 : 0.8) * life * Math.min(1, this.dimOf(glint.key))));
+      flash.addColorStop(1, rgba(glint.rgb, 0));
+      ctx.strokeStyle = flash;
+      ctx.beginPath();
+      ctx.moveTo(this.gateX, glint.y - reach);
+      ctx.lineTo(this.gateX, glint.y + reach);
+      ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
   }
 }

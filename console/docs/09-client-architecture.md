@@ -265,6 +265,8 @@ blocking storage still gets working panes, just not remembered ones.
 features/
   overview/OverviewPage.tsx                 Is everything flowing? The readout, the river, what needs you, the rows
   overview/River.tsx                        The fleet as strands from Kafka through Midstream to the lake
+  overview/riverEngine.ts                   The river's particles, how they move, and its bed (2D canvas)
+  overview/riverWater.ts                    The river's water: every particle a comet, drawn with WebGL 2
   materializations/
     MaterializationsPage.tsx                Grouped by state, the ones that need you first; search; recently deleted
     CreateMaterializationPage.tsx           Create: the topics, name, protection and options beside the plan
