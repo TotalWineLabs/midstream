@@ -150,7 +150,7 @@ export function HistorySection({ domain }: { domain: string | null }): ReactNode
         </Panel>
       )}
       {history.data && history.data.errors.length > 0 ? (
-        <p className="text-[12px] text-[var(--color-phase-paused)]">Some history could not be read: {history.data.errors.join('; ')}</p>
+        <p className="text-[12px] text-[var(--color-buoy-ink)]">Some history could not be read: {history.data.errors.join('; ')}</p>
       ) : null}
     </div>
   );

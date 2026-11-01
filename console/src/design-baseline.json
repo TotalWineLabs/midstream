@@ -12,8 +12,7 @@
     "components/ui/Toast.tsx": 2,
     "features/data/RowDrawer.tsx": 2,
     "features/datasets/DatasetPicker.tsx": 2,
-    "features/materializations/TopicPicker.tsx": 2,
-    "features/settings/SettingRow.tsx": 1
+    "features/materializations/TopicPicker.tsx": 2
   },
   "legacy-token": {
     "components/DataGrid.tsx": 1,
@@ -58,11 +57,6 @@
     "features/schema/SchemaFieldTable.tsx": 4,
     "features/schema/SchemaTab.tsx": 4,
     "features/schema/SchemaTimelineView.tsx": 4,
-    "features/settings/DomainsSection.tsx": 5,
-    "features/settings/HistorySection.tsx": 1,
-    "features/settings/RuntimeRollout.tsx": 1,
-    "features/settings/SettingRow.tsx": 7,
-    "features/settings/SettingsPage.tsx": 4,
     "lib/domains.tsx": 1
   },
   "motion-outside-vocabulary": {
@@ -88,8 +82,6 @@
     "features/protection/ProtectionSummary.tsx": 1,
     "features/protection/ReprotectPanel.tsx": 6,
     "features/schema/SchemaFieldTable.tsx": 1,
-    "features/settings/RuntimeRollout.tsx": 5,
-    "features/settings/SettingRow.tsx": 1,
     "features/tables/TableConnect.tsx": 1
   },
   "live-dot-on-a-page": {}

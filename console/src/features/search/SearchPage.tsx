@@ -42,7 +42,10 @@ export function SearchPage(): ReactNode {
   }, [query, setParams]);
 
   useEffect(() => {
-    const focus = (): void => input.current?.focus();
+    const focus = (event: Event): void => {
+      event.preventDefault();
+      input.current?.focus();
+    };
     window.addEventListener(FOCUS_SEARCH_EVENT, focus);
     return () => window.removeEventListener(FOCUS_SEARCH_EVENT, focus);
   }, []);

@@ -229,78 +229,103 @@ person without it does not see the button.
 |--------|-----------|-----------|
 | Resume | the desired phase is `stopped` (also while it is still stopping) | Acts at once: *Payments is resuming*; scales back to the replica count |
 | Stop | the desired phase is `running` and the materialization has a runtime | Acts at once, no dialog: *Payments is stopping. Nothing is lost: its tables stay readable, and Resume picks up where it left off.*, with **Undo**, which resumes it |
-| Edit | it has a runtime and is not being deleted | Opens the edit dialog (below) |
-| Delete | `observed_phase ∉ { deleting, deleted }` | In **⋯**: opens a confirmation dialog naming every table it removes |
+| Edit | it has a runtime and is not being deleted | Opens the edit page (below) |
+| Delete | `observed_phase ∉ { deleting, deleted }` | In **⋯**: opens the delete plan, naming every table it removes (below) |
 
 A stop loses nothing and duplicates nothing: rows still being batched are read again on resume, since
 the committed offsets only cover rows in the table (handbook [10 §10.7](../../docs/handbook/10-runtime-internals.md)).
 While stopping the state reads **Stopping**; once the KasprApp has no members, **Stopped**.
 
-### Edit dialog
+### Edit page
 
-Changes what can change after creation: the **Name**, the **Source topics**, the **Replicas** and
-**Autoscale** (`features/detail/EditMaterializationDialog.tsx`; the plan in `topicChange.ts`).
+`/materializations/<id>/edit` (`features/materializations/EditMaterializationPage.tsx`; the plan of a
+change of topics in `topicChange.ts`) changes what can change after creation: the **Name**, the
+**Topics**, the **Workers**, **Add workers when far behind** and **Data protection**. Like the create
+page, it is a composer beside its plan (10 §10.10): the fields on the left, and on the right — below
+them on a phone — what saving would do, kept current as anything changes. A materialization that
+cannot be edited (no runtime, or being deleted) sends the page back to its own.
+
+**Which topics does it read?** is the create page's topic picker, filled with the topics read now.
+Each chosen topic shows the table it writes: its own, `sales.orders`, fixed, for a topic already read;
+the kept table, *kept table, written again*, for a kept table's topic; and for any other a new row, a
+dataset and a name, as on create, the name apart from every name the materialization has — kept
+tables' and dropped ones' included. Topics already read keep their order, so reordering alone restarts
+nothing (`keepOrder`). A topic the change starts reading that Kafka does not list is refused as on
+create: on its row, or under the topics for a kept table's topic, which has no row of its own. While an
+earlier change's new tables are still being claimed, the composer says so — *Adding
+sales.order_refunds: their names are being claimed* — and the topics cannot change until it is done.
+
+| When the topics change | The page |
+|---|---|
+| A topic is removed | Under the topics, for each removed topic's table, a choice: **Keep read-only** or **Drop with its data**. Saving waits until each has one |
+| The materialization has kept tables whose topics stay removed | **Kept tables**: a checkbox each, *Drop finance.payments and its data · topic payments* |
+| A table it would add, write again, keep or drop is in a dataset the person cannot write | Its row carries a lock, and beside **Save** the plan names the tables and their datasets: *ask one of its owners for write access* |
 
 **Name** is the label, as on create; changing it alone touches nothing else, and needs no access to
 any dataset.
 
-**Source topics** is the create dialog's topic picker, filled with the topics read now. Each chosen
-topic shows the table it writes: its own, `sales.orders`, fixed, for a topic already read; the kept
-table, *kept table, written again*, for a kept table's topic; and for any other a new row, a dataset
-and a name, as on create, the name apart from every name the materialization has — kept tables' and
-dropped ones' included. Topics already read keep their order, so reordering alone restarts nothing
-(`keepOrder`). A topic the change starts reading that Kafka does not list is refused as on create:
-on its row, or under the topics for a kept table's topic, which has no row of its own. While an earlier change's new tables are still being claimed, the dialog says so —
-*Adding sales.order_refunds: their names are being claimed* — and the topics cannot change until it is
-done.
-
-| When the topics change | The dialog |
-|---|---|
-| A topic is removed | **The removed topic's table**: for each, *Keep read-only* or *Drop with its data*, under a note that dropping cannot be undone. **Save** waits until each has a choice |
-| The materialization has kept tables whose topics stay removed | **Kept tables**: a checkbox each, *Drop finance.payments and its data · topic payments* |
-| Topics are added, kept tables written again, or tables removed | A note: which datasets it changes tables in; that new tables' names are claimed first, then their topics sampled and their tables created; then that the runtime stops until its consumer group has emptied and starts again with the new set, each table where it left off — or, stopped, that it reads them once resumed |
-| A table it would add, write again, keep or drop is in a dataset the person cannot write | Its choices are locked, and a note in red names the tables and their datasets: *ask one of its owners for write access*. **Save** stays disabled |
-
-**Replicas** starts at the current count, and must be a whole number from 1 to the control plane's
-maximum. The hint gives the current count and the chosen topics' partitions, and warns when members
-would outnumber what the topics can keep busy — topics with as many partitions share members, so 32,
+**Workers** starts at the current count, and must be a whole number from 1 to the control plane's
+maximum. The hint gives the current count and the chosen topics' partitions, and warns when workers
+would outnumber what the topics can keep busy — topics with as many partitions share workers, so 32,
 32 and 8 partitions keep at most 40 busy ("2 would have none to read"); on a stopped materialization
 it says the count applies on resume.
 
-**Data protection** is the create dialog's block, starting from the policy in force (*· current*;
-**Keep the current protection** returns to it). Changed, it says what changes — *Phone numbers:
-hashed → partial* — and that it applies to records written from now on, within seconds, without a
-restart, while rows already written keep their values. It needs *Choose data protection* on every
-dataset the materialization writes into, those of topics the edit adds or writes again included;
-otherwise the block is locked, naming them, and a changed choice blocks **Save**. A protection-only
-edit restarts nothing and leaves the materialization **Running**. With a changed policy, someone who
-may also run table maintenance sees **Also mask rows already written** (off), and under it **Purge the
-plain text now** (on): the edit's `protection.reprotect`, rewriting the files written before once each
-table records the change (§11.10a); the toast then says *for records written from now on and then for
-the rows already written*.
+**Add workers when far behind** is the autoscale checkbox, as on create; changing it alone is a valid
+change, and leaves the runtime as it is unless it takes workers away. Its hint says what it does now:
+*Running 12 workers while it catches up. Turned off, it goes back to 4 at once.* while scaled up, or
+that it is off for every materialization when the deployment turned it off.
 
-**Autoscale** is a checkbox, as on create; changing it alone is a valid change, and leaves the
-runtime as it is unless it takes members away. Its hint says what it does now: *Running 12 members
-while it catches up. Turned off, it goes back to 4 at once.* while scaled up, or that autoscaling is
-off for every materialization when the deployment turned it off. The toast says *autoscaling on* or
-*off*. Below, read-only: the id, storage per replica and the destination — fixed when the
+**Data protection** is the create page's block, starting from the policy in force (*· current*;
+**Keep the current protection** returns to it). It needs *Choose data protection* on every dataset the
+materialization writes into, those of topics the edit adds or writes again included; otherwise the
+block is locked, naming them. A protection-only edit restarts nothing and leaves the materialization
+**Running**. With a changed policy, someone who may also run table maintenance sees **Also mask rows
+already written** (off), and under it **Purge the plain text now** (on): the edit's
+`protection.reprotect`, rewriting the files written before once each table records the change
+(§11.10a). Below, read-only: the id, storage per worker and the destination — fixed when the
 materialization was created.
 
-**Save** is enabled once something changes. A change adding tables waits for their names to be
-claimed, as a create does. The toast says what the control plane planned — *Shop: adding
-sales.refunds; keeping finance.payments read-only. Watch the phase for convergence.* — and a refusal
-shows under the field it names, a name taken on its row. Dropping only kept tables restarts nothing; any other change of
-topics shows the materialization **Deploying** with "Changing the runtime's topics" for about five
-minutes (handbook [07 §7.9a](../../docs/handbook/07-control-plane-workflows.md)).
+**The plan** lists, by the names SQL reads:
 
-The delete dialog names the consequence before it happens (10 §10.10): *Delete Payments? This
-permanently deletes its 2 tables and their data. Queries on them stop working. The source topics are
-not touched.* Then every table it removes, `sales.orders`, kept ones and ones being dropped included,
-each with its rows; a note that where the control plane keeps deleted tables' files they stay in
-storage, out of every dataset, and that their names are free again. The runtime, its Kafka topics
-and its consumer group go too. Deleting needs write access to every one of those datasets; without it
-a table carries a lock, the dialog names the datasets — *ask their owners* — and **Delete** is
-disabled.
+| Group | What it holds |
+|---|---|
+| Adds a table / Adds N tables | Each new table, `sales.refunds`, with its topic |
+| Writes again | Kept tables whose topics are read again |
+| Keeps, read-only | Removed topics' tables kept |
+| Drops, with their data — this cannot be undone | Removed topics' tables dropped, and kept tables checked, each with its rows and size |
+| Changes | Name, Workers and More when behind, each from the current value, struck through, to the new |
+| Masks | What the protection change does to each kind: *Phone numbers: hashed → partial*, applied to records written from now on, rows already written keeping their values unless masked again |
+
+Then what it costs, as it will happen: new tables' names claimed first, then their topics sampled and
+their tables created; with a change of topics, its workers stopping until their consumer group has
+emptied — about two minutes — then starting with the new topics, each table where it left off; a new
+count of workers re-applied; protection within seconds, without a restart; or, stopped, that it runs
+with the changes once resumed. Until something changes the plan says *Change something, and what it
+does shows here.*
+
+**Save changes** — **Save, dropping 2 tables** when the plan drops any, as a danger button — is
+enabled once something changes and nothing blocks it; the first thing that does is said beside it, in
+the plan: a topic still to choose, a removed table still to decide, a new table still to name, an
+earlier change of topics still applying, a dataset the person cannot write, workers out of range, or
+protection the person may not choose. **Cancel** returns to the materialization. A change adding tables
+waits for their names to be claimed, as a create does. The toast says what the control plane planned —
+*Shop: adding sales.refunds; keeping finance.payments read-only.* — and the page returns to the
+materialization; a refusal shows under the field it names, a name taken on its row. Dropping only kept
+tables restarts nothing; any other change of topics shows the materialization **Updating** —
+*Changing its topics* — for about two minutes (handbook
+[07 §7.9a](../../docs/handbook/07-control-plane-workflows.md)).
+
+### Delete plan
+
+**Delete…** opens a dialog that is a plan (10 §10.10): *Delete Payments?*, then **Deletes its 2
+tables, with their data — this cannot be undone**, every table it removes by its SQL name, kept ones
+and ones being dropped included, each with its rows and size; **Stays**: its topics, which Kafka keeps;
+and a note that its workers stop, then its tables leave their datasets — queries on them stop working
+and their names are free again — and that where the control plane keeps deleted tables' files they
+stay in storage. The runtime, its Kafka topics and its consumer group go too. Deleting needs write
+access to every one of those datasets; without it a table carries a lock, the plan names the datasets —
+*ask their owners* — and the button stays disabled. The button says what it does: **Delete it and 2
+tables**, in danger red.
 
 If the control plane is unreachable and no detail has ever been fetched, the page renders a
 "Cannot reach the control plane" panel with the error instead of an empty shell.
@@ -800,8 +825,10 @@ without a redeploy. `features/settings/`. Two pages share one layout (handbook 1
 
 ### Layout
 
-A section list on the left (a picker under 768 px) in groups. Each section shows only to people with
-its permission — on the console's page, in the settings home; on a domain's, in that domain:
+**Search settings** heads the section list (above the picker under 768 px); `/` focuses it from
+anywhere on the page, ⌘K staying the command menu's (*Search*, below). Below it, the sections, in
+groups. Each section shows only to people with its permission — on the console's page, in the settings
+home; on a domain's, in that domain:
 
 | Page | Group | Sections | Needs |
 |------|-------|----------|-------|
@@ -843,24 +870,40 @@ cached — and gives each a row, **Storage profile <name>**: its scope, endpoint
 style, what it reads with, and the variables its credentials come from, never a value
 ([03 §3.6a](./03-configuration-reference.md)).
 
-A section with unsaved edits carries a dot (a `•` in the picker). Settings marked advanced sit in a
-collapsed **Advanced** panel, which opens by itself when one of them has an edit.
+A section with unsaved edits carries a dot in ink (a `•` in the picker). Settings marked advanced sit
+in a collapsed **Advanced** panel, which opens by itself when one of them has an edit.
+
+### Search
+
+Typing in **Search settings** shows, in place of the section, what matches every word typed (`search.ts`,
+`SettingsSearch.tsx`): *8 settings match “retention”*. First the sections whose name matches —
+*Deletion & retention*, *Compaction & retention* — and those without settings whose name or summary
+does (Users, Groups, the audit log), each a way in. Then each matching setting under its section's name,
+a link to the section: a setting matches on its name, description, key (`snapshot_retention_hours`
+reads as words too) or environment variable, and one whose name holds the words comes first in its
+section. Advanced settings are found like any other. A result is the setting itself, changed in place:
+its edit is the same draft the section holds, counted in the same save bar. Last, the settings only the
+deployment sets that match, under **Deployment**, read-only. Nothing matching: *Nothing matches
+“zzqx”*, what search reads, and **Clear search**.
+
+Escape clears the search and, once empty, leaves the box; choosing a section, from the list or a
+result, ends it.
 
 ### A setting
 
 | Part | Shows |
 |------|-------|
-| Label | With **Destructive** when changing it can remove data, and **Unsaved** while it has an edit |
+| Label | With *Can remove data* and a warning sign when changing it can, and *Unsaved* while it has an edit. An edited row is also marked the way a document marks a change: a raised ground and an ink bar in its margin |
 | Description | What it controls and, where useful, when to change it. Only where the label is not enough |
-| Provenance | *Default*, *Set by the deployment `ENV_VAR`*, or *Changed by jane · 5 minutes ago · deployment value 16 replicas* |
-| Effect | What a change applies to, when that is not "at once": *Applies to new materializations* |
+| Provenance | Nothing while it holds its default. *Set by the deployment* (the environment variable in its tooltip), or *Changed by jane · 5 minutes ago · deployment value 16 workers* |
+| Effect | While it has an edit, what the change applies to, when that is not "at once": *Applies to new materializations* |
 | Control | A number field with its unit, a switch, a text field, a select for an `enum` setting such as **Default partitioning** (its `options`), or a row of choices per option for a `choice_map` such as **Protected by default**. Large numbers keep thousands separators, and a readable equivalent shows under the field (`= 15 min`, `= 8 MiB`) |
 | Reset / Undo | **Reset** returns an override to the deployment value or default (named in its tooltip). **Undo** drops an unsaved edit |
 
 ### Saving
 
-Edits are drafts until saved. A bar at the foot counts them and names their sections, and offers
-**Discard** and **Save changes**. Save stays disabled while an edit is invalid: the field says why
+Edits are drafts until saved. A bar at the foot — on a phone, above the navigation — counts them and,
+on a wider screen, names their sections, and offers **Discard** and **Save changes**. Save stays disabled while an edit is invalid: the field says why
 (`At least 1`, `A destination such as gs://bucket/prefix, s3://bucket/prefix or
 abfss://container@account.dfs.core.windows.net/prefix`). One save covers every section and scope.
 
@@ -878,12 +921,13 @@ Leaving the page with unsaved edits asks first.
 
 Above the runtime settings — on Runtimes, Commits, Schema evolution and Compaction & retention,
 every section that holds some — **Delivery to runtimes** shows how far the current runtime-settings
-revision has reached. A badge counts the running materializations that run it: blue while one is
-still applying, green when all do, amber when delivery has settled but some cannot take it yet.
-Below the badge, each materialization that is not current is listed with its state: **Applying**
-(with the revision it is on, or none while it runs settings from before this installation),
-**Not reporting**, **Next deploy** (its runtime predates live settings), or **Stopped**. While one
-is applying, the page re-reads every 5 s.
+revision has reached. Beside its title, how many running materializations run it — *3 of 3 running
+current*: quiet, with a check, when all do; with Starting's turning glyph while one is still applying;
+as needing attention when delivery has settled but some cannot take it yet (§10.6). Below, each
+materialization that is not current, with its state: **Applying** (with the revision it is on, or none
+while it runs settings from before this installation), **Not reporting**, **Stopped**, or, in words, *On
+its next deploy* (its runtime predates live settings). While one is applying, the page re-reads every
+5 s.
 
 Before any runtime setting is changed (revision 0) the panel only says so — unless a runtime still
 runs settings an earlier installation left on the delivery topic: it is then listed as
@@ -944,7 +988,7 @@ A user's page (`users.view_details`):
 | Profile | Name and email; editable with `users.manage` |
 | Groups | The groups they were added to, editable (only groups you may grant); All Users and Guest are implicit |
 | Access | Every permission they hold, by category, each with the groups and roles it comes from |
-| Dataset access | Their roles on single datasets, their own and their groups' (*through Finance team*), each dataset a link to its Access tab |
+| Dataset access | Their roles on single datasets, their own and their groups' (*through Finance team*), each dataset a link to its page, with Share open |
 | Activity | Added, last signed in, last active, failed sign-ins |
 | Sessions | Their sessions; **Sign out** on one |
 
@@ -1049,21 +1093,43 @@ A dataset is a named group of tables, and their namespace: SQL reads each table 
 `datasets.view` (`features/datasets/`).
 
 **The list** — every dataset, *including those locked to the person*: names and tables are no secret,
-schemas and data are. Search by name, description or table. Each row: the name (a lock when locked),
-its description, its tables (how many, the first four, every one in the tooltip), its owners, and the
-person's access in a word — **owner**, **writer**, **reader** or **locked** (*Its schemas and data
-need a role on sales: ask one of its owners*). **New dataset** (`datasets.create`): a name — the
+schemas and data are. Search by name, description or table. Each row: the name, as SQL reads it; its
+description, when it has one; its tables (how many and the first three, every one in the tooltip); its
+owners, or *No owner*; and under **Your access** the person's access in a word — **Owner** and
+**Writer** in ink, **Reader** quieter, **Locked** quietest, with a lock (*Its schemas and data need a
+role on sales: ask one of its owners*). **New dataset** (`datasets.create`): a name — the
 dataset rules, checked as typed, fixed once created — and a description; the creator owns it and All
 Users may read it.
 
-**A dataset's page** — its name, description, the person's access and its owners; **Edit** (the
-description) and **Delete** for its owners (`dataset.manage`). Deleting is refused while it holds a
-table — the dialog says so and only closes; once empty, its grants go with it and its name is free.
+**A dataset's page** answers *what is in it, and who can use it?* The header: its name, its
+description under it, the person's access in a word and its owners (*Owned by Ana Ruiz*). Its owners
+(`dataset.manage`) see **Share** and **⋯** with **Edit description…** and **Delete dataset…**.
 
-| Tab | Shows |
-|---|---|
-| Tables | Every table in it, `sales.orders` above its topic: the materialization writing it (its label and id), its state — **being created**, **written**, **kept · read-only**, **being dropped** — and its last commit. A table links to its page (§11.4a) for someone who may read the dataset. Locked to the person: a note that they see the names, not the schemas or data |
-| Access | Its owners only. **Who may use it**: each person and group with a role on it, their roles as badges, **Change** (roles as checkboxes) and **Remove**; below, **Add a person or group…** with the roles to grant. Reader sees schemas, queries, exports and reads through the catalog; Writer also adds and drops tables; Owner also manages the dataset and its access. An owner grants only roles they hold on it themselves, and cannot take away a role they could not grant. A note says plainly what access does not do: anyone holding credentials that read the destination — an S3 or Azure key, or a GCS HMAC key for DuckDB — reads every table in it |
+Below, **Tables**: every table in it, by the name SQL reads, `sales.orders`, above its topic; the
+materialization writing it, a link; its state as everywhere else (§10.6), from its record and its
+materialization's — Flowing, Catching up, Stopped, **Kept** (no longer written, still readable),
+**Being dropped**, **Starting** while it is created — and *committed 3 min ago*, or *nothing committed
+yet*. A table links to its page (§11.4a) for someone who may
+read the dataset. Locked to the person: a note that they see the names, not the schemas or data, and
+whom to ask. Empty: *No tables yet*, and how one gets there, with **New materialization**.
+
+**Share** (`SharePopover.tsx`) opens beside the button, the way a document is shared: *Share sales*,
+a row to add a person or group with a role — **Reader** unless another is chosen — then each person
+and group with a role on it, their role a choice beside them that also offers **Remove access**; someone
+holding several roles shows them together (*Writer + Owner*). Each role in one sentence: **Reader** sees
+its schemas, queries and exports its tables, and reads them through the catalog; **Writer** also adds
+tables to it and drops them; **Owner** also changes the dataset and who can use it. An owner grants
+only roles they hold on it themselves, and cannot take away a role they could not grant: such a grant
+shows its roles as words. A note says plainly what access does not do: *Midstream checks access, not
+the storage: anyone with a key that reads the bucket reads every table in it. Table names are not
+secret.* The toast says *Shared with Ana Ruiz* or *Ana Ruiz no longer has access*.
+`/datasets/<name>/access`, the old Access tab's address, opens the page with Share open.
+
+**Delete dataset…** shows the plan of a delete (§10.10). While it holds tables it cannot be deleted:
+the dialog says so — *It still holds 2 tables. A dataset can be deleted once its tables are gone* —
+lists them under **Holds**, each with the materialization writing it, and only closes. Once empty:
+**Deletes** the dataset and who can use it, every grant going with it; its name is free again; and a
+danger **Delete sales**. **Edit description…** asks for one sentence; the name never changes.
 
 A change of access reloads the person's own session, since what they may do may have changed with it;
 open detail pages of others pick it up within 30 seconds (08 §8.22).

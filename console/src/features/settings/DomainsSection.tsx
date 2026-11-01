@@ -37,15 +37,8 @@ export function DomainsSection(): ReactNode {
   return (
     <div className="space-y-5">
       {config.data.federationKeysAgree === false ? (
-        <div
-          role="alert"
-          className="flex items-start gap-3 rounded-[var(--radius-panel)] border px-4 py-3 text-[13px] leading-relaxed"
-          style={{
-            borderColor: 'color-mix(in srgb, var(--color-phase-failed) 35%, transparent)',
-            background: 'color-mix(in srgb, var(--color-phase-failed) 8%, transparent)',
-          }}
-        >
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--color-phase-failed)]" />
+        <div role="alert" className="flex items-start gap-3 rounded-[var(--radius-panel)] bg-[var(--color-flare-wash)] px-4 py-3 text-[13px] leading-relaxed">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--color-flare-ink)]" />
           <p>
             <strong className="font-medium">The domains sign access tokens with different keys.</strong> A token made in one
             domain is refused in another. Give every domain&rsquo;s auth Secret the same <code>federation-key</code> and restart
@@ -82,7 +75,7 @@ export function DomainsSection(): ReactNode {
                   <dt className="text-[var(--color-ink-faint)]">Version</dt>
                   <dd className="numeric truncate">{domain.version ?? '—'}</dd>
                   <dt className="text-[var(--color-ink-faint)]">Signing key</dt>
-                  <dd className={stray.has(domain.federationKeyId ?? '') ? 'numeric text-[var(--color-phase-failed)]' : 'numeric'}>
+                  <dd className={stray.has(domain.federationKeyId ?? '') ? 'numeric text-[var(--color-flare-ink)]' : 'numeric'}>
                     {domain.federationKeyId ?? '—'}
                     {stray.has(domain.federationKeyId ?? '') ? ' · differs' : ''}
                   </dd>
@@ -91,7 +84,7 @@ export function DomainsSection(): ReactNode {
                   {you.signedIn ? (
                     <span className="truncate text-[var(--color-ink-muted)]">Signed in as {you.principal.email}</span>
                   ) : domain.status === 'misconfigured' ? null : (
-                    <Link to={`/sign-in/${encodeURIComponent(domain.id)}`} className="font-medium text-[var(--color-accent)] hover:underline">
+                    <Link to={`/sign-in/${encodeURIComponent(domain.id)}`} className="font-medium text-[var(--color-ink)] underline underline-offset-2">
                       Sign in
                     </Link>
                   )}

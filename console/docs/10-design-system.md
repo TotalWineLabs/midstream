@@ -371,14 +371,16 @@ The glossary: terms the console says differently from the system.
 | Pattern | Use it for | Shape |
 |---|---|---|
 | **Undo, not "Are you sure?"** | Reversible actions: stop, resume, pin | Act at once; a toast with Undo |
-| **A plan first** | Where data or time is at stake: create, change topics, delete, reprotect | A card listing what will exist, change or go, by SQL names, and what it costs ("pauses for about 5 minutes"); Cancel and the action. The create page is the model: the composer leads, the plan sits beside it (`CreateMaterializationPage.tsx`) |
-| **Consequences named** | Destructive actions | The dialog lists each table and its rows |
+| **A plan first** | Where data or time is at stake: create, edit, change topics, delete, reprotect | A card listing what will exist, change or go, by SQL names, what stays, and what it costs ("its workers stop for about two minutes"); Cancel and the action. Creating and editing a materialization are the model: the composer leads, the plan sits beside it, kept current as anything changes (`CreateMaterializationPage.tsx`, `EditMaterializationPage.tsx`). Deleting a materialization or a dataset shows the plan in the dialog that asks. The action says what it does — *Save, dropping 2 tables*, *Delete it and 2 tables* — as a danger button when data is destroyed, and what stops it is said beside it, once. Its parts: `components/Plan.tsx` |
+| **Consequences named** | Destructive actions | The plan lists each table that goes, with its rows and size, under a heading that says it cannot be undone |
 | **⌘K** | Going anywhere, doing anything | One field: places, tables, actions with their target named |
 | **Properties column** | A selected thing's details | A right column, closable, keys in Silt, values in Foam |
 | **(i)** | How a number is measured | A popover beside the number |
 | **Activity** | Changes in flight and what just happened | Real steps with estimates; a refusal that arrives later lands here too |
 | **Query thread** | Asking the data | Each statement and its answer in turn, kept in the browser by day |
-| **Share** | Who can use a dataset | A popover like a document's: people, roles in one sentence each, what access doesn't cover |
+| **Share** | Who can use a dataset | A popover like a document's, opened from **Share** in the header: a row to add someone with a role, the people and groups with their role as a choice, roles in one sentence each, what access doesn't cover (`SharePopover.tsx`) |
+| **Search in place** | A page with many things to find: Settings | A box heading the page's navigation, focused with `/` (a page claims the key through `FOCUS_SEARCH_EVENT`; ⌘K stays the command menu's). What matches replaces the content, grouped by where it lives, each result the thing itself — a setting is changed right there |
+| **Drafts** | Edits saved together: Settings | An edited row has a raised ground and an ink bar in its margin, *Unsaved* beside its name; its section has a dot; a bar at the foot counts the edits and offers Discard and Save |
 | **Empty state** | Nothing here yet | What this is, in one sentence, and the one action that fills it |
 
 ## 10.11 Components
@@ -397,7 +399,10 @@ The glossary: terms the console says differently from the system.
 | `LiveIndicator` | `components/AppShell.tsx` | The link to a control plane, said only while it is down: a Buoy dot and the words |
 | `Button` | `components/ui/primitives.tsx` | `primary` (ink, one per screen), `secondary`, `ghost`, `danger` |
 | `Panel`, `PanelHeader`, `Badge`, `Input`, `Field`, `SegmentedControl`, `EmptyState`, `Skeleton`, `KeyValue` | `components/ui/primitives.tsx` | Building blocks |
-| `Dialog`, `Popover`, `ToastProvider` | `components/ui/` | Floating surfaces |
+| `Dialog`, `Popover`, `ToastProvider` | `components/ui/` | Floating surfaces; a popover keeps inside the screen |
+| `PlanCard`, `PlanGroup`, `PlanTable`, `PlanItem`, `PlanChange`, `PlanRow`, `PlanNote`, `PlanBlocked` | `components/Plan.tsx` | A plan first (§10.10): the card, a group of what it does to a kind of thing, a table by its SQL name, a value from → to, what it costs, what stops it |
+| `SharePopover` | `features/datasets/SharePopover.tsx` | Share (§10.10) |
+| `SettingsSearchField`, `SettingsSearchResults` | `features/settings/SettingsSearch.tsx` | Search in place (§10.10), on the Settings pages |
 | `TimeSeriesChart`, `Sparkline` | `components/` | Charts (§10.8) |
 | `DataGrid` | `components/DataGrid.tsx` | Rows |
 | `Avatar`, `RelativeTime`, `Identifier`, `CopyButton` | `components/` | People, times, ids |
