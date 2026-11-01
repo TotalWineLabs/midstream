@@ -57,12 +57,15 @@ function usePalette(): RiverPalette {
  */
 export function River({
   strands,
+  rows,
   kafka,
   midstream,
   lake,
   className,
 }: {
   strands: Strand[];
+  /** Rows committed across the fleet: how full the lake shows; null while unknown. */
+  rows: number | null;
   /** The three labels above the river: its source, the materializations, its lake. */
   kafka: ReactNode;
   midstream: ReactNode;
@@ -100,6 +103,7 @@ export function River({
     if (width > 0 && height > 0) engine.current?.resize(width, height, window.devicePixelRatio || 1);
   }, [width, height]);
   useEffect(() => engine.current?.setStrands(riverStrands), [riverStrands]);
+  useEffect(() => engine.current?.setLakeRows(rows), [rows]);
   useEffect(() => engine.current?.setHover(hover?.key ?? null), [hover?.key]);
 
   // Running only while on screen, in a tab that is showing, and when motion is welcome.
@@ -147,14 +151,17 @@ export function River({
           if (target) void navigate(target.to);
         }}
       >
-        <canvas ref={bed} aria-hidden className="absolute inset-0 h-full w-full" />
-        {/* The bloom: the water again, blurred beneath it - light in the dark, a soft tint in the light. */}
-        <canvas
-          ref={glow}
-          aria-hidden
-          className="absolute inset-0 h-full w-full opacity-40 mix-blend-multiply blur-[5px] dark:opacity-80 dark:mix-blend-screen dark:blur-[7px] dark:saturate-150"
-        />
-        <canvas ref={water} aria-hidden className="absolute inset-0 h-full w-full" />
+        {/* Clipped to the river, so the bloom ends with the water rather than spilling past the panel. */}
+        <div className="absolute inset-0 overflow-hidden">
+          <canvas ref={bed} aria-hidden className="absolute inset-0 h-full w-full" />
+          {/* The bloom: the water again, blurred beneath it - light in the dark, a soft tint in the light. */}
+          <canvas
+            ref={glow}
+            aria-hidden
+            className="absolute inset-0 h-full w-full opacity-40 mix-blend-multiply blur-[5px] dark:opacity-80 dark:mix-blend-screen dark:blur-[7px] dark:saturate-150"
+          />
+          <canvas ref={water} aria-hidden className="absolute inset-0 h-full w-full" />
+        </div>
         {hovered && hover ? (
           <p
             className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-[var(--radius-control)] border border-[var(--color-line-strong)] bg-[var(--color-pop)] px-2.5 py-1 text-[12px] whitespace-nowrap shadow-sm"

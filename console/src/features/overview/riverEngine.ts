@@ -6,15 +6,17 @@
  * particles are its records: their speed is its throughput — faster in the middle of the channel
  * than at its edges, as in a stream — and each leaves a trail as long as its speed, so velocity is
  * what you see. A record turns from mist to its state's colour exactly where it crosses the gate and
- * becomes a row. Rows run on into the lake as they were moving, under its surface, slowing and
- * spreading as they settle, and fade into it. A backlog crowds the channel; a failed or starting
- * materialization holds its records at the gate; a stopped one is a still, dashed channel.
+ * becomes a row. Rows run on into the lake as they were moving, under its surface, and slow into its
+ * current (`riverLake.ts`), where every channel's rows combine and flow on. A backlog crowds the
+ * channel; a failed or starting materialization holds its records at the gate; a stopped one is a
+ * still, dashed channel.
  *
  * The bed canvas (channels, gate, lake) is drawn in 2D; the water — every particle a comet, its
  * trail as long as its speed — on the GPU (`riverWater.ts`), or in 2D where WebGL 2 is unavailable.
  * Both are drawn fresh each frame. Sizes and speeds follow the river's width, so a wide river is a
  * bolder one rather than a finer one.
  */
+import { LAKE_EXPOSURE, Lake } from './riverLake';
 import { COMET_FLOATS, RiverWater } from './riverWater';
 import type { StatusKind } from '@/lib/status';
 
@@ -93,13 +95,13 @@ const STEP = 2;
 const GLINT_LIFE = 0.35;
 /** Glints showing at once, at most: a gate that glints now and then, not one lit up. */
 const GLINTS = 4;
-/** Seconds a row lasts in the lake, on average: by then it has faded into it. */
-const LAKE_LIFE = 1.6;
+/** Seconds a row lasts in the lake, on average: by then it has faded into the lake's own water. */
+const LAKE_LIFE = 5;
 /**
- * How fast a row fades into the lake: its time constant, short enough that rows fade faster than
- * they slow, so the water is brightest where the channel runs in and dissolves outward from there.
+ * How fast a row fades into the lake: its time constant, long enough to see it join the lake's
+ * current and run on in it, short enough that the water is brightest where the channel runs in.
  */
-const LAKE_FADE = 0.45;
+const LAKE_FADE = 1.5;
 /** How fast rows slow in the lake, per second: along it, and down into it. */
 const LAKE_DRAG = { along: 2, down: 4 };
 const MAX_PARTICLES = 3200;
@@ -165,8 +167,9 @@ export class RiverEngine {
   private gateBottom = 0;
   private lakeY = 0;
   private lakeLeft = 0;
-  /** How deep under the surface rows settle, at most. */
-  private plumeDepth = 0;
+  /** The lake's own water: settled rows, its current, its surface. */
+  private readonly lake = new Lake();
+  private lakeRows: number | null = null;
 
   constructor(bed: HTMLCanvasElement, water: HTMLCanvasElement, glow: HTMLCanvasElement | null, palette: RiverPalette) {
     this.bed = bed;
@@ -179,6 +182,19 @@ export class RiverEngine {
     this.wctx = this.gpu ? null : water.getContext('2d');
     this.gctx = glow?.getContext('2d') ?? null;
     this.palette = palette;
+  }
+
+  /** Rows the lake holds: how full it shows. */
+  setLakeRows(rows: number | null): void {
+    this.lakeRows = rows;
+    this.feedLake();
+    if (!this.running) this.paint();
+  }
+
+  /** The lake's water: its rows, and the rows arriving a second, which set its current's speed. */
+  private feedLake(): void {
+    const arriving = this.strands.reduce((sum, strand) => sum + (strand.kind === 'stopped' ? 0 : Math.max(0, strand.rate ?? 0)), 0);
+    this.lake.setFlow(this.lakeRows, arriving);
   }
 
   setPalette(palette: RiverPalette): void {
@@ -205,6 +221,7 @@ export class RiverEngine {
 
   setStrands(strands: RiverStrand[]): void {
     this.strands = strands;
+    this.feedLake();
     this.layout();
     if (!this.running) this.paint();
   }
@@ -296,7 +313,7 @@ export class RiverEngine {
     this.gateX = W * 0.5;
     this.lakeY = H * 0.74;
     this.lakeLeft = W * 0.6;
-    this.plumeDepth = Math.max(8, Math.min(H - this.lakeY - 10, 32 * s));
+    this.lake.layout(W, H, s, this.lakeY, this.lakeLeft);
     const spread = (centre: number, gap: number): number[] => {
       let cursor = centre - (total + gap * Math.max(0, widths.length - 1)) / 2;
       return widths.map((width) => {
@@ -338,10 +355,36 @@ export class RiverEngine {
       if (track.particles.length > count) track.particles.length = count;
     });
     this.tracks = tracks;
-    // A channel new to the river arrives already flowing, its rows already in the lake.
     for (const track of tracks) {
-      if (previous.has(track.key)) continue;
-      for (let step = 0; step < 100; step += 1) this.advance(track, 0.05, false);
+      if (!previous.has(track.key)) this.prime(track);
+      // A failed or starting channel's records wait at its gate, even in a frame that never moves.
+      const kind = track.strand.kind;
+      if (kind !== 'failed' && kind !== 'starting') continue;
+      const gateF = track.gateAt / track.length;
+      for (const particle of track.particles) {
+        if (particle.f < gateF - 0.003 && particle.lake < 0) continue;
+        Object.assign(particle, this.spawn(gateF - 0.003 - Math.random() * Math.random() * 0.05));
+      }
+    }
+  }
+
+  /**
+   * A channel new to the river arrives already flowing: each particle somewhere in its round, in the
+   * channel or already in the lake, as often as it spends its time in each — the river as it is after
+   * running a while, from the first frame, still or moving.
+   */
+  private prime(track: Track): void {
+    const kind = track.strand.kind;
+    if (kind === 'failed' || kind === 'starting' || kind === 'stopped') return;
+    const gateF = track.gateAt / track.length;
+    const pace = kind === 'attention' ? 0.45 : 1;
+    for (const particle of track.particles) {
+      const transit = (track.length * (gateF + (1 - gateF) / pace)) / Math.max(1, track.targetSpeed * particle.v);
+      if (Math.random() >= LAKE_LIFE / (LAKE_LIFE + transit)) continue;
+      particle.f = 1;
+      this.enterLake(track, particle, pace);
+      const age = Math.random() * particle.life;
+      for (; particle.lake < age; particle.lake += 0.05) this.stepLake(particle, 0.05);
     }
   }
 
@@ -462,21 +505,18 @@ export class RiverEngine {
 
   private update(dt: number): void {
     this.time += dt;
-    for (const track of this.tracks) this.advance(track, dt, true);
+    this.lake.advance(dt);
+    for (const track of this.tracks) this.advance(track, dt);
     for (const glint of this.glints) glint.t += dt;
     this.glints = this.glints.filter((glint) => glint.t < GLINT_LIFE);
   }
 
-  /** One step of a channel's water; `glints` false while it is only being filled. */
-  private advance(track: Track, dt: number, glints: boolean): void {
+  /** One step of a channel's water. */
+  private advance(track: Track, dt: number): void {
     track.speed += (track.targetSpeed - track.speed) * Math.min(1, dt * 1.2);
     const kind = track.strand.kind;
     const holds = kind === 'failed' || kind === 'starting';
     const gateF = track.gateAt / track.length;
-    // The lake's own slow drift, which rows come to rest in.
-    const drift = 5 * this.scale;
-    const along = Math.exp(-LAKE_DRAG.along * dt);
-    const down = Math.exp(-LAKE_DRAG.down * dt);
     for (const particle of track.particles) {
       if (particle.lake >= 0) {
         particle.lake += dt;
@@ -484,12 +524,7 @@ export class RiverEngine {
           Object.assign(particle, this.spawn(-Math.random() * 0.05));
           continue;
         }
-        // Slowing as the lake takes it, and drawn to its depth: a dive that levels out, never a bounce.
-        const depth = this.lakeY + this.plumeDepth * (0.15 + 0.425 * (1 + particle.u));
-        particle.vx = drift + (particle.vx - drift) * along;
-        particle.vy = particle.vy * down + (depth - particle.y) * 3 * dt;
-        particle.x += particle.vx * dt;
-        particle.y += particle.vy * dt;
+        this.stepLake(particle, dt);
         continue;
       }
       const downstream = particle.f >= gateF;
@@ -502,11 +537,23 @@ export class RiverEngine {
         particle.px = Number.NaN;
         continue;
       }
-      if (glints && before < gateF && particle.f >= gateF && this.glints.length < GLINTS && Math.random() < 0.06) {
+      if (before < gateF && particle.f >= gateF && this.glints.length < GLINTS && Math.random() < 0.06) {
         this.glints.push({ key: track.key, y: this.place(track, particle)[1], t: 0, rgb: this.colorOf(kind) });
       }
       if (particle.f >= 1) this.enterLake(track, particle, pace);
     }
+  }
+
+  /**
+   * A row in the lake, slowing to the lake's own current. The dive levels out where the water stops
+   * it and the row runs on at that depth — never pulled back up, so never a hook.
+   */
+  private stepLake(particle: Particle, dt: number): void {
+    const [u, v] = this.lake.flow(particle.x, particle.y);
+    particle.vx = u + (particle.vx - u) * Math.exp(-LAKE_DRAG.along * dt);
+    particle.vy = v + (particle.vy - v) * Math.exp(-LAKE_DRAG.down * dt);
+    particle.x += particle.vx * dt;
+    particle.y = Math.min(this.height - 2, particle.y + particle.vy * dt);
   }
 
   /** A row leaving its channel: on into the lake from where it was, as fast and in the same direction. */
@@ -638,10 +685,30 @@ export class RiverEngine {
     const width = (dark ? 1.6 : 2) * s;
     const seconds = dark ? TRAIL_SECONDS.dark : TRAIL_SECONDS.light;
     const longest = TRAIL_LONGEST * s;
-    const total = this.tracks.reduce((sum, track) => sum + track.particles.length, 0);
+    const total = this.tracks.reduce((sum, track) => sum + track.particles.length, 0) + this.lake.count;
     if (this.comets.length < total * COMET_FLOATS) this.comets = new Float32Array(Math.ceil(total * 1.25) * COMET_FLOATS);
     const data = this.comets;
     let at = 0;
+    // The lake's own water first, beneath the rows running into it.
+    this.lake.emit(
+      (x, y, dx, dy, length, cometWidth, alpha, [r, g, b]) => {
+        data[at] = x;
+        data[at + 1] = y;
+        data[at + 2] = dx;
+        data[at + 3] = dy;
+        data[at + 4] = length;
+        data[at + 5] = cometWidth;
+        data[at + 6] = alpha;
+        data[at + 7] = r / 255;
+        data[at + 8] = g / 255;
+        data[at + 9] = b / 255;
+        at += COMET_FLOATS;
+      },
+      this.palette.current,
+      dark,
+      // Pointing at a channel quiets the lake too, so its rows stand out in it.
+      this.hover === null ? 1 : 0.45,
+    );
     for (const track of this.tracks) {
       const dim = this.dimOf(track.key);
       const kind = track.strand.kind;
@@ -655,6 +722,7 @@ export class RiverEngine {
         let dy: number;
         let speed: number;
         let fade: number;
+        let exposure = seconds;
         if (particle.lake >= 0) {
           x = particle.x;
           y = particle.y;
@@ -662,6 +730,10 @@ export class RiverEngine {
           dx = speed > 0 ? particle.vx / speed : 1;
           dy = speed > 0 ? particle.vy / speed : 0;
           fade = lakeFade(particle);
+          // Seen as the lake is, in long exposure, once it has levelled out of its dive: a long
+          // straight trail on a row still turning would cut below the curve it took.
+          const settled = Math.min(1, Math.max(0, (particle.lake - 0.7) / 1.3));
+          exposure = seconds + (LAKE_EXPOSURE - seconds) * settled * settled * (3 - 2 * settled);
         } else {
           [x, y] = this.place(track, particle);
           const index = Math.min(track.xs.length - 1, Math.floor((Math.max(0, Math.min(1, particle.f)) * track.length) / STEP));
@@ -678,7 +750,7 @@ export class RiverEngine {
         data[at + 1] = y;
         data[at + 2] = dx;
         data[at + 3] = dy;
-        data[at + 4] = Math.min(longest, speed * seconds);
+        data[at + 4] = Math.min(longest, speed * exposure);
         data[at + 5] = width;
         data[at + 6] = alpha;
         data[at + 7] = r / 255;
@@ -758,50 +830,7 @@ export class RiverEngine {
   }
 
   private drawLake(): void {
-    const ctx = this.ctx;
-    const W = this.width;
-    const H = this.height;
-    const { dark, current } = this.palette;
-    const left = this.lakeLeft;
-    // The water: Current, deepening away from its surface, its near shore curving in.
-    const depth = ctx.createLinearGradient(0, this.lakeY, 0, H);
-    depth.addColorStop(0, rgba(current, dark ? 0.15 : 0.16));
-    depth.addColorStop(1, rgba(current, 0));
-    ctx.fillStyle = depth;
-    ctx.beginPath();
-    ctx.moveTo(left, this.lakeY);
-    ctx.bezierCurveTo(left + (W - left) * 0.2, this.lakeY, left + (W - left) * 0.12, H, left + (W - left) * 0.45, H);
-    ctx.lineTo(W, H);
-    ctx.lineTo(W, this.lakeY);
-    ctx.closePath();
-    ctx.fill();
-    // Light under the surface, shimmering as the water moves.
-    for (let line = 0; line < 4; line += 1) {
-      const y = this.lakeY + 7 + line * ((H - this.lakeY) / 5);
-      const shimmer = 0.5 + 0.5 * Math.sin(this.time * (0.6 + line * 0.23) + line * 1.7);
-      const from = left + (W - left) * (0.3 + 0.08 * line) + Math.sin(this.time * 0.25 + line) * 14;
-      const sheen = ctx.createLinearGradient(from, 0, W, 0);
-      sheen.addColorStop(0, rgba(current, 0));
-      sheen.addColorStop(0.5, rgba(current, (dark ? 0.12 : 0.14) * shimmer * (1 - line / 4)));
-      sheen.addColorStop(1, rgba(current, 0));
-      ctx.strokeStyle = sheen;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(from, y);
-      ctx.lineTo(W - 6, y);
-      ctx.stroke();
-    }
-    // The waterline: where rows settle, and every engine can read them.
-    const line = ctx.createLinearGradient(left, 0, W, 0);
-    line.addColorStop(0, rgba(current, 0));
-    line.addColorStop(0.28, rgba(current, dark ? 0.8 : 0.85));
-    line.addColorStop(1, rgba(current, dark ? 0.45 : 0.5));
-    ctx.strokeStyle = line;
-    ctx.lineWidth = 1.25 * this.scale;
-    ctx.beginPath();
-    ctx.moveTo(left, this.lakeY);
-    ctx.lineTo(W, this.lakeY);
-    ctx.stroke();
+    this.lake.drawBed(this.ctx, this.palette.current, this.palette.dark);
   }
 
   private drawGate(): void {

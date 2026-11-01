@@ -110,6 +110,7 @@ export function OverviewPage(): ReactNode {
                   >
                     <River
                       strands={strands}
+                      rows={data.totals.rowsCommitted}
                       kafka={
                         <>
                           <b className="font-semibold text-[var(--color-ink)]">Kafka</b> · {formatCount(topics)} {topics === 1 ? 'topic' : 'topics'}
