@@ -45,7 +45,6 @@
     "features/datasets/DatasetPicker.tsx": 8,
     "features/datasets/DatasetsPage.tsx": 1,
     "features/datasets/TableDraftRow.tsx": 2,
-    "features/detail/EditMaterializationDialog.tsx": 9,
     "features/detail/OverviewTab.tsx": 2,
     "features/detail/RuntimeTab.tsx": 1,
     "features/detail/TablesPanel.tsx": 2,
