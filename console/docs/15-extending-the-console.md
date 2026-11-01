@@ -277,7 +277,8 @@ Before considering a change complete:
 - [ ] `npm run build` succeeds and `QueryEditor` is still a separate chunk
 - [ ] `npm audit` reports 0 vulnerabilities
 - [ ] Loading, empty, error, and content states all exist for any new async surface
-- [ ] Light and dark themes both verified
+- [ ] Light and dark themes both verified, desktop and phone; the `console-design` skill's checklist
+      followed for anything visible, and `src/design.test.ts` passing ([10 §10.14](./10-design-system.md#1014-keeping-to-it))
 - [ ] Behaviour verified with the control plane **down** as well as up
 - [ ] No new `process.env` reads outside `config.ts`
 - [ ] No new imports crossing the `/console` ↔ `python/` boundary

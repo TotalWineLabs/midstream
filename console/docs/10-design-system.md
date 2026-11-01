@@ -436,4 +436,26 @@ Before a change to the interface is done:
 - [ ] Words follow §10.9: plain status, no codes, no zero counts, no method captions in view.
 - [ ] Both themes, desktop and phone, keyboard only, and reduced motion, checked.
 - [ ] Contrast measured for any new colour pairing.
+- [ ] The design check passes (`src/design.test.ts`), and a baseline it says is too high is lowered.
 - [ ] This document updated if the change adds a pattern, a component or a rule.
+
+## 10.14 Keeping to it
+
+Every session that changes the interface — a person's or an agent's — meets the design language in
+three places, each doing what the others cannot:
+
+| Where | What it carries | When |
+|---|---|---|
+| `AGENTS.md` | The rule, in a sentence, and where to start: the skill | Every session in the repository |
+| The `console-design` skill (`.claude/skills/console-design/SKILL.md`) | How to apply this document, step by step, and what to look at before it is done | A task that touches the interface |
+| The design check (`src/design.test.ts`, in `npm test` and CI) | The rules a script can check: no literal colours or palette classes, no pre-Current tokens, no motion outside §10.7, no all caps, no state colour on a badge, no live dot on a page | Every change, whoever made it |
+
+This document stays the one source: the skill points into it rather than repeating it, and the check
+encodes its mechanical rules. What only judgment can tell — one question per screen, plain words,
+Current only for what flows — is the skill's checklist and review's.
+
+Screens built before Current still break some rules. The check counts them per rule and file in
+`src/design-baseline.json`, which only goes down: a file may not gain a violation, a file not in it
+may have none, and a change that fixes one lowers it (`DESIGN_BASELINE=lower node --test
+src/design.test.ts`, which lowers and never raises). A deliberate exception is added by hand, where
+review sees it. A new rule a script can check joins `DESIGN_RULES` with its own unit cases.
