@@ -208,16 +208,27 @@ function StateReadout({
     );
   }
 
-  // Stopped, starting, or something wrong: the words lead, and the way on sits beside them.
-  const headline =
+  // Stopped, starting, or something wrong: the words lead, saying more than the pill above them,
+  // and the way on sits beside them.
+  const headline: ReactNode =
     status.kind === 'stopped'
-      ? status.label
+      ? status.label === 'Deleting'
+        ? 'Removing its runtime and tables'
+        : status.moving
+          ? 'Shutting down its workers'
+          : (
+              <>
+                Stopped <RelativeTime value={detail.status.last_transition_time} />
+              </>
+            )
       : (status.reason ?? status.label);
   const context =
     status.kind === 'stopped'
-      ? status.moving
-        ? 'Its workers are shutting down. Nothing is lost.'
-        : 'Its tables stay readable, and Resume picks up where it left off.'
+      ? status.label === 'Deleting'
+        ? null
+        : status.moving
+          ? 'Nothing is lost: Resume picks up where it left off.'
+          : 'Its tables stay readable, and Resume picks up where it left off.'
       : status.kind === 'starting'
         ? null
         : detail.status.phase_message && withFieldNames(detail.status.phase_message) !== headline

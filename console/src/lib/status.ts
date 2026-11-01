@@ -42,6 +42,9 @@ const UPDATING = new Set([
   'topic_change_pending',
 ]);
 
+/** Reasons that say how a stop is going. */
+const STOPPING = new Set(['waiting_for_runtime_scale_down', 'waiting_for_consumer_group_empty']);
+
 /**
  * Each reason code the control plane gives, in words a person reads at a glance. Null for a reason
  * the state's own word already says. Codes stay in Diagnostics.
@@ -118,7 +121,8 @@ export function statusOf(input: StatusInput): Status {
 
   if (desired === 'stopped') {
     if (observed === 'stopped' || observed === 'paused') return said('stopped', 'Stopped', null, false);
-    return said('stopped', 'Stopping', reasonWords(input.reason), true);
+    // Only a stop's own reasons: the rollout that carries it out is not news.
+    return said('stopped', 'Stopping', STOPPING.has(input.reason ?? '') ? reasonWords(input.reason) : null, true);
   }
   if (observed === 'stopped') return said('starting', 'Resuming', null, true);
   if (observed === 'paused') return said('stopped', 'Paused', null, false);

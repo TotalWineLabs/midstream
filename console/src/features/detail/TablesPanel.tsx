@@ -205,5 +205,5 @@ function TableStatus({ record, block, state }: { record: CpTableSummary | null; 
       </span>
     );
   }
-  return <Badge tone="running">ok</Badge>;
+  return <span className="text-[var(--color-ink-muted)]">Written</span>;
 }

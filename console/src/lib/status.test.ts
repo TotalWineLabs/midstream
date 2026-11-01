@@ -22,6 +22,9 @@ describe('statusOf', () => {
     assert.equal(status({ desired: 'running', observed: 'stopped' }).label, 'Resuming');
     const stopping = status({ desired: 'stopped', observed: 'running' });
     assert.deepEqual([stopping.kind, stopping.label, stopping.moving], ['stopped', 'Stopping', true]);
+    // The rollout carrying a stop out is not its reason; waiting for the workers to stop is.
+    assert.equal(status({ desired: 'stopped', observed: 'deploying', reason: 'resource_generation_not_observed' }).reason, null);
+    assert.equal(status({ desired: 'stopped', observed: 'deploying', reason: 'waiting_for_runtime_scale_down' }).reason, 'Waiting for its workers to stop');
     assert.equal(status({ desired: 'deleting', observed: 'running' }).label, 'Deleting');
   });
 

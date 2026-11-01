@@ -321,7 +321,7 @@ leads; everything about how it runs is in Diagnostics (§11.6).
 |---|---|---|---|
 | Flowing | Rows a second, rolling as it changes | **Complete through** the earliest of the tables' `validThrough`, or the last commit | Rows a second, the last 30 minutes |
 | Catching up | Records behind | *Caught up around 4:30 PM · 62% there · falling 5,914 a second*: the drain's end at its current pace, how far from the backlog's peak (`catchUpProgress`), and the rate | Records behind over **15m / 1h / 6h**, on an axis fitted to the values |
-| Stopped | **Stopped** | *Its tables stay readable, and Resume picks up where it left off.* (**Stopping**: *Its workers are shutting down.*) | **Resume**, with the permission |
+| Stopped | *Stopped 5 minutes ago* | *Its tables stay readable, and Resume picks up where it left off.* (Stopping: *Shutting down its workers*, shimmering; Deleting: *Removing its runtime and tables*) | **Resume**, with the permission |
 | Starting, Updating, Resuming | What it is doing, shimmering: *Waiting for its workers* | — | — |
 | Needs attention, Failed | The reason in words, or the control plane's message | The message, where it says more | **Open Diagnostics** |
 
@@ -337,8 +337,8 @@ name a link into the Data tab with it chosen when the person may query it, else 
 dataset; an icon into the Tables tab — above its topic, its rows, size and files from the control
 plane's record, its topic's lag, its schema id, its last commit, and its state — **not created yet**
 until the control plane has sampled its topic and created it, **kept · read-only**, **dropping**,
-**dropped · files kept**, its last error in red, or what runs on it (files pending, a maintenance
-job). The heading counts them, and the kept ones beside (`features/detail/TablesPanel.tsx`).
+**dropped · files kept**, its last error in red, what runs on it (files pending, a maintenance job),
+or **Written**. The heading counts them, and the kept ones beside (`features/detail/TablesPanel.tsx`).
 
 **Properties**, in a column beside (below on a phone): the state with its reason, the **Target** while
 it differs, what it **Reads**, what it **Writes** (datasets and how many tables), **Workers**,
@@ -363,15 +363,6 @@ upward chevron: *Scaled up to 16 members 5 minutes ago: 110,869,158 records behi
 min to catch up with 1 member. Back to 1 once caught up.* With two or more runtime members, a summary of their states and
 **Show N members**: each member's state (*loading the table* while it reads its pointer), its own
 rows/s, when it last reported, and a **committer** badge on the member that commits.
-
-**Tables** — one row per table, in the order of its topics, then the kept tables, then any being
-dropped: the table as SQL reads it, `sales.orders` — its dataset a link to the dataset's page, its
-name a link into the Data tab with it chosen when the person may query it, else a lock naming the
-dataset; an icon into the Table tab — above its topic, its rows, size and files from the control plane's record, its topic's lag, its schema id,
-its last commit, and its state — **not created yet** until the control plane has sampled its topic
-and created it, **kept · read-only**, **dropping**, **dropped · files kept**, its last error in red,
-or what runs on it (files pending, a maintenance job). The title counts both, *Tables (2 · 1 kept)*
-(`features/detail/TablesPanel.tsx`).
 
 **Consumer lag** — how far the tables trail their source topics, all together. It is measured from the runtime
 consumer group's committed offsets, and a runtime commits an offset only once its row is in the
