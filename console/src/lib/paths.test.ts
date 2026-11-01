@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { domainPath, sectionOf, sectionPath } from './paths.ts';
+import { domainPath, sectionOf, sectionPath, tablePath } from './paths.ts';
 
 describe('domainPath', () => {
   it('puts a path under its domain, with or without its leading slash', () => {
@@ -12,6 +12,15 @@ describe('domainPath', () => {
 
   it('encodes the domain as a path segment', () => {
     assert.equal(domainPath('a/b', '/x'), '/d/a%2Fb/x');
+  });
+});
+
+describe('tablePath', () => {
+  it('puts a table under its dataset, its Data tab at the page itself', () => {
+    assert.equal(tablePath('sales', 'orders'), '/datasets/sales/tables/orders');
+    assert.equal(tablePath('sales', 'orders', 'schema'), '/datasets/sales/tables/orders/schema');
+    assert.equal(domainPath('domain_a', tablePath('sales', 'orders v2', 'history')), '/d/domain_a/datasets/sales/tables/orders%20v2/history');
+    assert.equal(sectionOf(domainPath('domain_a', tablePath('sales', 'orders'))), 'datasets');
   });
 });
 

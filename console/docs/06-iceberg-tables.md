@@ -192,7 +192,7 @@ the control plane's answers through: `…/tables/:table/schema`, `…/schema/ver
 `…/schema/versions/:schemaId`. A `:table` the materialization does not have is a `404` naming its
 tables.
 
-## 6.5 The Table tab's view
+## 6.5 A table's History and Connect view
 
 `GET /api/materializations/:id/tables/:table` (`routes/table.ts`, `materializations.view_details`)
 joins the control plane's record of that table (handbook 04 §4.6.4) with what the console reads from

@@ -5,11 +5,8 @@ import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-r
 import { EditMaterializationDialog } from './EditMaterializationDialog';
 import { DetailOverviewTab } from './MaterializationOverview';
 import { RuntimeTab } from './RuntimeTab';
-import { TableTab } from './TableTab';
 import { canDelete, canEdit, canResume, canStop, useLifecycleActions } from '../materializations/actions';
-import { DataTab } from '../data/DataTab';
 import { ProtectionTab } from '../protection/ProtectionTab';
-import { SchemaTab } from '../schema/SchemaTab';
 import { LiveIndicator, PageBody, PageHeader } from '@/components/AppShell';
 import { StatusPill } from '@/components/Status';
 import { Popover } from '@/components/ui/Popover';
@@ -19,7 +16,8 @@ import { cn } from '@/lib/cn';
 import { displayName, formatCount } from '@/lib/format';
 import { isPinned, togglePin, usePins } from '@/lib/pins';
 import { statusOf } from '@/lib/status';
-import { TABLE_PARAM } from '../tables/selectedTable';
+import { TABLE_PARAM, resolveTable } from '../tables/selectedTable';
+import { tablePath, type TableTab } from '@/lib/paths';
 import { useAuth } from '@/lib/auth';
 import { useDetailStream } from '@/lib/live';
 import { readableTables, type CpDetail, type CpTableSpec } from '@shared/types';
@@ -27,17 +25,16 @@ import { useDomain, useDomainPath } from '@/lib/domains';
 
 /**
  * Each tab, and the dataset permission it needs, beyond seeing the materialization at all, on at
- * least one of its tables' datasets: the Schema tab shows the tables whose schemas the person may
- * see, the Data tab those they may query.
+ * least one of its tables' datasets. A table's data, schema and history are on the table's own page.
  */
 const TABS = [
   { key: '', label: 'Overview', permission: null },
-  { key: 'schema', label: 'Schema', permission: 'dataset.view_schema' },
-  { key: 'data', label: 'Data', permission: 'data.query' },
-  { key: 'table', label: 'Tables', permission: null },
   { key: 'protection', label: 'Protection', permission: 'dataset.view_schema' },
   { key: 'runtime', label: 'Diagnostics', permission: null },
 ] as const;
+
+/** The tabs a materialization had for its tables, and where on a table's page each one went. */
+const MOVED: Record<string, TableTab> = { data: 'data', schema: 'schema', table: 'history' };
 
 /** Every table a delete removes - written, kept, or still being dropped - in its dataset. */
 function tablesRemoved(detail: CpDetail): CpTableSpec[] {
@@ -69,6 +66,18 @@ export function DetailPage(): ReactNode {
   const unwritable = [...new Set(removed.filter((spec) => !can('dataset.write', spec.dataset_id)).map((spec) => spec.dataset))];
   // A tab you may not open — from a shared link, say — falls back to the overview.
   const activeTab = tabs.some((item) => item.key === (tab ?? '')) ? (tab ?? '') : '';
+
+  // An address from before tables had pages: the table it named, on its own page, as it was asked for.
+  const moved = tab ? MOVED[tab] : undefined;
+  if (moved && detail) {
+    const spec = resolveTable(specs, searchParams.get(TABLE_PARAM));
+    if (spec) {
+      const rest = new URLSearchParams(searchParams);
+      rest.delete(TABLE_PARAM);
+      const query = moved === 'data' && rest.size > 0 ? `?${rest.toString()}` : '';
+      return <Navigate to={`${domainPath(tablePath(spec.dataset, spec.name, moved))}${query}`} replace />;
+    }
+  }
 
   if (data && !detail && data.error) {
     return (
@@ -166,14 +175,7 @@ export function DetailPage(): ReactNode {
                   role="tab"
                   aria-selected={active}
                   type="button"
-                  onClick={() => {
-                    // The table chosen on one tab is the one the next shows.
-                    const table = searchParams.get(TABLE_PARAM);
-                    const query = table ? `?${TABLE_PARAM}=${encodeURIComponent(table)}` : '';
-                    navigate(domainPath(`/materializations/${materializationId}${item.key ? `/${item.key}` : ''}${query}`), {
-                      replace: true,
-                    });
-                  }}
+                  onClick={() => navigate(domainPath(`/materializations/${materializationId}${item.key ? `/${item.key}` : ''}`), { replace: true })}
                   className={cn(
                     'border-b-2 px-3 pb-2.5 text-[13px] font-medium whitespace-nowrap transition-colors',
                     active
@@ -194,12 +196,6 @@ export function DetailPage(): ReactNode {
           <Skeleton className="h-32" />
           <Skeleton className="h-64" />
         </PageBody>
-      ) : activeTab === 'schema' ? (
-        <SchemaTab materializationId={materializationId} snapshot={data} />
-      ) : activeTab === 'data' ? (
-        <DataTab materializationId={materializationId} snapshot={data} />
-      ) : activeTab === 'table' ? (
-        <TableTab snapshot={data} />
       ) : activeTab === 'protection' ? (
         <ProtectionTab snapshot={data} />
       ) : activeTab === 'runtime' ? (

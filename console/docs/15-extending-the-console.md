@@ -72,9 +72,9 @@ Rules that keep derived metrics honest:
 3. No routing change is needed — `/materializations/:id/:tab` already matches.
 4. Follow the four-state contract: loading skeleton, empty state with a reason, error state with a
    recovery action, content.
-5. A tab about one table takes it from `useSelectedTable(detail)` (`features/tables/selectedTable.ts`)
-   and shows `<TablePicker>` for a materialization of several; the choice lives in `?table=`, which
-   `DetailPage` keeps across tabs.
+5. Something about one table belongs on the table's page (`features/tables/TablePage.tsx`), as a tab
+   of its own: it takes the table from the page, by name (`selectedTable.ts::namedTable`), and its
+   address is `tablePath(dataset, table, tab)` (`lib/paths.ts`).
 
 ## 15.4 Gating something on a permission, or adding a permission
 

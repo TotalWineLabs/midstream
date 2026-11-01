@@ -18,8 +18,8 @@ import { sectionOf, sectionPath, useConsoleConfig, useScopeDomainId, type ShellS
 import { useFleet } from '@/lib/fleet';
 import { formatRelativeTime } from '@/lib/format';
 import { FleetStreamProvider, useTicker, type LiveStatus } from '@/lib/live';
-import { domainPath } from '@/lib/paths';
-import { togglePin, usePins } from '@/lib/pins';
+import { domainPath, tablePath } from '@/lib/paths';
+import { togglePin, usePins, type Pin } from '@/lib/pins';
 import { FOCUS_SEARCH_EVENT } from '@/lib/shortcuts';
 import { itemStatus, statusGroup } from '@/lib/status';
 import type { ConsoleDomain } from '@shared/types';
@@ -355,6 +355,15 @@ function NeedsYouBadge({ scope, collapsed }: { scope: string | null; collapsed: 
   );
 }
 
+/** Where a pin opens: the page of what was pinned. */
+function pinPath(pin: Pin): string {
+  if (pin.kind === 'materialization') return domainPath(pin.domain, `/materializations/${encodeURIComponent(pin.id)}`);
+  if (pin.kind === 'dataset') return domainPath(pin.domain, `/datasets/${encodeURIComponent(pin.id)}`);
+  // `<dataset>.<table>`: a dataset's name has no dot.
+  const dot = pin.id.indexOf('.');
+  return domainPath(pin.domain, tablePath(pin.id.slice(0, dot), pin.id.slice(dot + 1)));
+}
+
 /** What this person keeps to come back to, each with its state. No heading when there is nothing. */
 function PinnedItems({ collapsed }: { collapsed: boolean }): ReactNode {
   const pins = usePins();
@@ -367,9 +376,11 @@ function PinnedItems({ collapsed }: { collapsed: boolean }): ReactNode {
       {collapsed ? null : <p className="px-2.5 pb-1.5 text-[12px] text-[var(--color-ink-faint)]">Pinned</p>}
       <ul className="flex min-h-0 flex-col gap-0.5 overflow-y-auto">
         {pins.map((pin) => {
-          const item = pin.kind === 'materialization' ? byKey.get(`${pin.domain}/${pin.id}`) : undefined;
-          const label = item?.name ?? pin.label;
-          const to = pin.kind === 'materialization' ? domainPath(pin.domain, `/materializations/${encodeURIComponent(pin.id)}`) : domainPath(pin.domain, `/datasets/${encodeURIComponent(pin.id)}`);
+          // A table shows its materialization's state, under its own name.
+          const owner = pin.kind === 'materialization' ? pin.id : pin.kind === 'table' ? pin.materializationId : undefined;
+          const item = owner ? byKey.get(`${pin.domain}/${owner}`) : undefined;
+          const label = pin.kind === 'materialization' ? (item?.name ?? pin.label) : pin.label;
+          const to = pinPath(pin);
           return (
             <li key={`${pin.kind}/${pin.domain}/${pin.id}`} className="group relative">
               <NavLink
@@ -384,7 +395,11 @@ function PinnedItems({ collapsed }: { collapsed: boolean }): ReactNode {
                 }
               >
                 {item ? <StatusGlyph status={itemStatus(item)} /> : <Database className="size-3.5 shrink-0" />}
-                {collapsed ? <span className="sr-only">{label}</span> : <span className="min-w-0 truncate">{label}</span>}
+                {collapsed ? (
+                  <span className="sr-only">{label}</span>
+                ) : (
+                  <span className={cn('min-w-0 truncate', pin.kind === 'table' && 'numeric text-[12.5px]')}>{label}</span>
+                )}
               </NavLink>
               {collapsed ? null : (
                 <button

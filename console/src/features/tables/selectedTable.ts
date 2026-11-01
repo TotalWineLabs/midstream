@@ -1,9 +1,6 @@
-import { useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import type { CpTableSpec } from '@shared/types';
 
-import { readableTables, type CpDetail, type CpTableSpec } from '@shared/types';
-
-/** The query parameter naming the table the Data, Schema and Table tabs show. */
+/** The query parameter that named a table on a materialization's Data, Schema and Tables tabs, before tables had pages. */
 export const TABLE_PARAM = 'table';
 
 /**
@@ -23,44 +20,15 @@ export function resolveTable(
 }
 
 /**
- * The table a tab shows, from `?table=`, and a way to choose another.
- *
- * The parameter is shared by the Data, Schema and Table tabs, so moving between them keeps looking
- * at the same table. The materialization's first table needs no parameter. Kept tables are there
- * too, after the written ones: they stay readable. A tab that needs access to a table's dataset
- * passes `allowed`: a table it refuses is never the one shown.
+ * The table a page is about, by its name as SQL compares names — never another in its place. Null
+ * when the materialization has no such table, or `allowed` refuses it.
  */
-export function useSelectedTable(
-  detail: CpDetail | null,
-  allowed?: (table: CpTableSpec) => boolean,
-): {
-  table: CpTableSpec | null;
-  tables: CpTableSpec[];
-  select: (name: string) => void;
-} {
-  const [params, setParams] = useSearchParams();
-  const tables = detail ? readableTables(detail.materialization) : [];
-  const table = resolveTable(tables, params.get(TABLE_PARAM), allowed);
-  const first = tables[0]?.name ?? null;
-  const select = useCallback(
-    (name: string) => {
-      setParams(
-        (current) => {
-          const next = new URLSearchParams(current);
-          if (name === first) next.delete(TABLE_PARAM);
-          else next.set(TABLE_PARAM, name);
-          return next;
-        },
-        { replace: true },
-      );
-    },
-    [setParams, first],
-  );
-  return { table, tables, select };
-}
-
-/** `sales.orders`, or `sales.orders · orders.v2` when the table's name is not its topic's. */
-export function tableLabel(table: CpTableSpec): string {
-  const name = `${table.dataset}.${table.name}`;
-  return table.name === table.source_topic ? name : `${name} · ${table.source_topic}`;
+export function namedTable(
+  tables: readonly CpTableSpec[],
+  name: string,
+  allowed: (table: CpTableSpec) => boolean = () => true,
+): CpTableSpec | null {
+  const wanted = name.trim().toLowerCase();
+  const found = tables.find((table) => table.name.toLowerCase() === wanted);
+  return found && allowed(found) ? found : null;
 }

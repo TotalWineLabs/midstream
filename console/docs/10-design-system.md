@@ -278,8 +278,11 @@ Rules:
   suffice, a crosshair to scrub any moment, the value first in the readout. Throughput and lag are
   Current. A state's colour never paints a series.
 - **The waterline** sits wherever live and committed meet: between a table's live rows and its
-  committed ones, and at zero on a backlog chart. Live rows above it, "Committed through 2:41:04 PM" on
-  it, committed rows below.
+  committed ones, and at zero on a backlog chart. In a table's grid (§11.8): live rows above it on
+  Current's faintest ground, their row numbers in Current; on it, in Current, "Committed 2:41:12 PM" —
+  the last commit, which every row below it is in, not "complete through", which a backfill can leave
+  months behind its newest rows; committed rows below. It is a 26 px strip of its own, the line
+  fading in at the left and out at the right, its label held in view as the grid scrolls sideways.
 - **A backlog shows its end:** while catching up, the readout says when it will be done at the
   current pace (*Caught up around 4:30 PM · 62% there*); the chart's dotted projection to zero is to
   come.

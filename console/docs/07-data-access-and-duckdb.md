@@ -7,8 +7,8 @@ Sources: `server/data/{catalog,objects,logical,duckdb,sql,tail}.ts`, `server/sto
 
 Each source topic of a materialization is an Iceberg table of its own (handbook 11), in the dataset
 chosen for it — its Iceberg namespace — and named after the topic unless someone chose another name.
-A browse run reads one of them, the one the
-Data tab's table picker shows; a statement reads any of them (§07.5). Each table's data files are
+A browse run reads one of them, the table whose page it is on; a statement reads any of them
+(§07.5). Each table's data files are
 Parquet under `<location>/data/ts_day=<YYYY-MM-DD>/` (or `ts_hour=`, `ts_month=`, or no partition directory), one
 per seal and table partition, later compacted:
 

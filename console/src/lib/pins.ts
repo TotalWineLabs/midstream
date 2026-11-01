@@ -1,13 +1,18 @@
 import { useSyncExternalStore } from 'react';
 
-/** Something kept in the sidebar to come back to: a materialization or a dataset, in its domain. */
+/** Something kept in the sidebar to come back to: a materialization, a dataset or a table, in its domain. */
 export interface Pin {
-  kind: 'materialization' | 'dataset';
+  kind: 'materialization' | 'dataset' | 'table';
   domain: string;
+  /** A table's is `<dataset>.<table>`. */
   id: string;
   /** Its name when it was pinned, shown until the fleet says its current one. */
   label: string;
+  /** A table's materialization, whose state the sidebar shows beside it. */
+  materializationId?: string;
 }
+
+const KINDS: ReadonlySet<unknown> = new Set(['materialization', 'dataset', 'table']);
 
 const KEY = 'console.pins';
 const listeners = new Set<() => void>();
@@ -25,7 +30,13 @@ function read(): Pin[] {
 function isPin(value: unknown): value is Pin {
   if (!value || typeof value !== 'object') return false;
   const pin = value as Record<string, unknown>;
-  return (pin.kind === 'materialization' || pin.kind === 'dataset') && typeof pin.domain === 'string' && typeof pin.id === 'string' && typeof pin.label === 'string';
+  return (
+    KINDS.has(pin.kind) &&
+    typeof pin.domain === 'string' &&
+    typeof pin.id === 'string' &&
+    typeof pin.label === 'string' &&
+    (pin.materializationId === undefined || typeof pin.materializationId === 'string')
+  );
 }
 
 function snapshot(): Pin[] {

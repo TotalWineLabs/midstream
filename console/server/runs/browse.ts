@@ -261,17 +261,65 @@ export class BrowseRun extends Run {
       rows = (complete || first) && !this.isTerminal() ? this.ahead(read) : read();
       if (complete) this.remember(key, rows);
     }
+    // Placed from the segments as they are now: a refresh that moves them clears the page cache too.
+    const live = this.liveRanges(offset, limit);
+    const boundary = this.boundary();
+    const shown = await rows;
     const page: RunPage = {
       runId: this.id,
       offset,
-      rows: await rows,
+      rows: shown,
       columns: this.columns ?? [],
+      live,
+      waterline: boundary !== null && boundary >= offset && boundary <= offset + shown.length ? boundary - offset : null,
       complete,
       total: this.rows,
       totalExact: this.totalExact,
     };
     if (complete) this.prefetch(offset + limit, limit);
     return page;
+  }
+
+  /** Rows of `[offset, offset + limit)` read from the live tail, as `[from, to)` ranges of the page. */
+  private liveRanges(offset: number, limit: number): Array<[number, number]> {
+    const end = Math.min(offset + limit, this.rowsReady);
+    const ranges: Array<[number, number]> = [];
+    for (let index = this.segmentAt(offset); index < this.readyIndex; index += 1) {
+      const start = this.starts[index] as number;
+      if (start >= end) break;
+      const segment = this.segments[index] as Segment;
+      if (segment.object.tail !== true) continue;
+      const from = Math.max(start, offset) - offset;
+      const to = Math.min(start + (segment.count ?? 0), end) - offset;
+      if (to <= from) continue;
+      const last = ranges.at(-1);
+      if (last && last[1] === from) last[1] = to;
+      else ranges.push([from, to]);
+    }
+    return ranges;
+  }
+
+  /**
+   * The run position where its committed rows meet the live tail's: newest first, the first
+   * committed row, every row before it the tail's; oldest first, just past the last committed row.
+   * Null until the segments that decide it are counted.
+   */
+  private boundary(): number | null {
+    if (this.order === 'newest') {
+      for (let index = 0; index < this.segments.length; index += 1) {
+        const segment = this.segments[index] as Segment;
+        if (segment.object.tail === true || segment.count === 0) continue;
+        return index < this.readyIndex ? (this.starts[index] as number) : null;
+      }
+      return this.readyIndex === this.segments.length ? this.rowsReady : null;
+    }
+    if (this.readyIndex < this.segments.length) return null;
+    for (let index = this.segments.length - 1; index >= 0; index -= 1) {
+      const segment = this.segments[index] as Segment;
+      if (segment.object.tail === true || segment.count === 0) continue;
+      return (this.starts[index] as number) + (segment.count ?? 0);
+    }
+    return 0;
   }
 
   /** Run a read with counting held back until it finishes. */

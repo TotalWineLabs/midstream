@@ -14,9 +14,9 @@ describe('resultPath', () => {
     assert.equal(resultPath(result({ domain: 'domain_b' })), '/d/domain_b/materializations/orders');
   });
 
-  it('opens a table on its materialization’s Table tab, chosen by its name', () => {
+  it('opens a table on its own page, in its dataset', () => {
     const table = result({ kind: 'table', id: 'sales.orders_v2', label: 'domain_a.sales.orders_v2', materializationId: 'shop' });
-    assert.equal(resultPath(table), '/d/domain_a/materializations/shop/table?table=orders_v2');
+    assert.equal(resultPath(table), '/d/domain_a/datasets/sales/tables/orders_v2');
   });
 
   it('opens a dataset’s page in its domain', () => {

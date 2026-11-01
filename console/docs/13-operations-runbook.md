@@ -136,7 +136,7 @@ Per refresh pass with defaults, for each domain:
 ```
 
 Reading tables costs object storage, not the control plane: a pointer read per table at most every
-`CONSOLE_TABLE_METADATA_FRESH_MS` (5 s) while its Data or Table tab is open, or every
+`CONSOLE_TABLE_METADATA_FRESH_MS` (5 s) while its page is open, or every
 `CONSOLE_SNAPSHOT_CACHE_MS` (2 s) for runs, and a metadata file and new manifests only when a commit
 has replaced them (06 §6.2).
 
@@ -171,7 +171,7 @@ Structured JSON via Pino, `service: midstream-console`.
 | `warn` | `data access is disabled; the Data tab is unavailable` | At start, when the Data explorer is off: the console reads no object storage |
 | `warn` | `parquet cache eviction failed` | Cache may exceed its budget |
 | `warn` | `table could not be read` | A Data tab read or a run could not read a table; `err` has storage's own error, and the user got a `503` naming what failed (§13.7) |
-| `warn` | `table metadata unreadable` | The same, for the Table tab's view |
+| `warn` | `table metadata unreadable` | The same, for a table's History and Connect tabs |
 | `warn` | `table refresh failed` | A background re-read of a table's pointer failed; the previous read is served until one succeeds |
 | `warn` | `schema refresh failed` | The live store could not read a table's schema projection (`table` names it); the previous one is kept (`schema refresh still failing` at `debug` until it can) |
 | `warn` | `topic catalog refresh failed` | The topic list for the create dialog could not be reloaded; the previous list is served |
@@ -333,7 +333,7 @@ The message says what failed:
 | `object storage answered 403` | The profile's credentials may not read the table's bucket or container | Grant its identity read (and list) on it: the key file's or ADC's service account and, for direct gcs, the HMAC key's; the S3 key's policy; the Azure role or SAS |
 | `object storage could not be reached` | No credentials found, no network to the storage or its endpoint, or a timeout | `gcloud auth application-default login` locally for gcs; check the profile's endpoint and egress in the cluster |
 | `no object at …` | A metadata file or manifest the table names is gone: usually a snapshot that expired mid-read, so a retry works | If it persists, the table is damaged; handbook 12 |
-| `names … outside its location` / `says it is at …` | The table points at files the console will not read ([12 §12.6](./12-security-model.md#126-paths-a-table-names)) | Find the commit that did it (Table tab › Snapshots) |
+| `names … outside its location` / `says it is at …` | The table points at files the console will not read ([12 §12.6](./12-security-model.md#126-paths-a-table-names)) | Find the commit that did it (the table's History › Snapshots) |
 
 ```bash
 kubectl -n midstream logs deploy/midstream-console | grep 'table could not be read'
@@ -363,7 +363,7 @@ object is four round trips. Check, in order:
    running near its bucket does better. Raising `CONSOLE_RUN_SCAN_CONCURRENCY` helps far from the
    bucket ([03](./03-configuration-reference.md)).
 4. Uncompacted files. A table a backfill wrote has many small files until compaction works through
-   them; the Table tab's partitions show `compactionDue` where the next compaction takes them. The
+   them; a table's Connect tab shows `compactionDue` on the partitions where the next compaction takes them. The
    partition still being written has none until it settles: an hour after its last commit, or, in
    this month's partition, file by file as each is an hour old.
 
@@ -409,7 +409,7 @@ term.
 |------|---------|
 | Clear the Parquet cache | `rm -rf "$CONSOLE_DATA_DIR/parquet-cache"` (safe while running) |
 | Clear stored results | `rm -rf "$CONSOLE_RUN_DIR"` while the console is stopped |
-| Run a table's maintenance now | Table tab › **Run now** (`materializations.maintain`); the maintenance app runs it, stopped or not |
+| Run a table's maintenance now | The table's History › **Run now** (`materializations.maintain`); the maintenance app runs it, stopped or not |
 | Add or remove a materialization's topic | Detail › **Edit** › Source topics (`materializations.edit`, and write access to the datasets of the tables it adds, removes or drops); a removed topic's table is kept read-only or dropped, and the runtime is stopped for about five minutes |
 | Create a dataset, or give someone access to one | Datasets › **New dataset** (`datasets.create`); a dataset's page › **Access**, for its owners |
 | Find who may read a dataset | Its page › **Access**; a person's or group's page › **Dataset access** for theirs |
@@ -435,7 +435,7 @@ upgraded to this one, which is installed anew (handbook
 3. `npm run build` — confirm `QueryEditor` is still a separate chunk.
 4. Run the verification harness in [14](./14-testing-and-verification.md).
 5. Smoke test against a real control plane: fleet renders, a detail page streams, the Schema tab
-   lists versions, the Table tab shows snapshots and partitions, the Data tab returns rows.
+   lists versions, a table's History shows snapshots and its Connect partitions, its Data tab returns rows.
 6. Deploy, then confirm `/api/health` reports `controlPlaneConnected: true`.
 7. Open Settings and confirm it is not read-only. Settings need control plane 0.5.0 or later:
    against an older one the page is read-only, because the control plane does not answer

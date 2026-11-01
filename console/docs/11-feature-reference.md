@@ -303,17 +303,41 @@ If the control plane is unreachable and no detail has ever been fetched, the pag
 
 ### Tabs
 
-**Overview**, **Schema**, **Data**, **Tables**, **Protection**, **Diagnostics**. URL segments: ``
-(Overview), `schema`, `data`, `table`, `protection`, `runtime`. The Schema, Data and Table tabs
-show one table at a time, named by `?table=` (the first table when absent) and chosen with the
-table picker each shows when there are two or more; switching tabs keeps `?table=`. Every tab needs
-`materializations.view_details`; beyond it, **Schema** and **Protection** need `dataset.view_schema` and **Data**
-`data.query`, each on at least one of the tables' datasets. Those tabs choose among the tables the
-person may use there: the others are in the picker, *· locked*, and never shown — a `?table=` naming
-one opens the first allowed instead. A tab someone may not open is not shown, and a link to it opens
-the Overview. **Export** on the Data tab needs `data.export` on every dataset the run read, and **Run
-now** on the Table tab `materializations.maintain`. The rule is the server's (12 §12.2): the console
-only follows it.
+**Overview**, **Protection**, **Diagnostics**. URL segments: `` (Overview), `protection`, `runtime`.
+A materialization is about the pipeline; each table it writes has a page of its own for its rows,
+schema and history (§11.4a). The tabs it had for them redirect there: `data`, `schema` and `table`
+(with `?table=`, the first table when absent) open that table's Data, Schema and History, a Data
+address keeping its view (`run=`, filters, range). Every tab needs `materializations.view_details`;
+beyond it, **Protection** needs `dataset.view_schema` on at least one of the tables' datasets. A tab
+someone may not open is not shown, and a link to it opens the Overview. The rule is the server's
+(12 §12.2): the console only follows it.
+
+---
+
+## 11.4a A table (`/d/<domain>/datasets/<dataset>/tables/<table>[/:tab]`)
+
+What is in it? (`features/tables/TablePage.tsx`) A table lives in its dataset, which names it; the
+materialization that writes it feeds every tab (`useDetailStream`), found through the dataset
+(`GET /datasets/:dataset`). An address in another case redirects to the table's own spelling.
+
+**Header** — **Datasets / sales** above the title, `sales.orders` with its dataset quieter: the name
+SQL reads it by. Below: its state — its materialization's while it writes the table (§10.6), else
+**Kept** (read-only, no longer written), **Starting** (being created) or **Being dropped** — with the
+live dot; then *complete through 2:41 PM* (every record with a Kafka timestamp before then is in it),
+its rows and size from the control plane's record, and *from Orders*, a link to the materialization.
+**Pin** keeps it in the sidebar, under its SQL name with its materialization's state.
+
+| Tab | Address | Answers | Needs, on its dataset |
+|---|---|---|---|
+| **Data** | the page itself | What rows does it hold? The Data tab (§11.8) on this table, live rows above the waterline | `data.query` |
+| **Schema** | `/schema` | What fields, and how did they change? (§11.7) | `dataset.view_schema` |
+| **History** | `/history` | How did it get here? Its figures, snapshots and maintenance (§11.10) | — |
+| **Connect** | `/connect` | How does another engine read it? Its snippets, files by partition and properties (§11.10) | — (the snippets `catalog.read`) |
+
+A tab the person may not open is not shown; an address naming one opens the first they may. A
+dataset locked to them shows the name and a note, never its schema or data; so does a person who
+may not see materializations' details. A table the dataset does not hold (dropped, or never written
+there) says so, with a link to the dataset's tables.
 
 ---
 
@@ -340,8 +364,8 @@ it scaled up, *none while stopped*.
 
 **Tables** — one row per table, in the order of its topics, then the kept tables, then any being
 dropped: the table as SQL reads it, `sales.orders` — its dataset a link to the dataset's page, its
-name a link into the Data tab with it chosen when the person may query it, else a lock naming the
-dataset; an icon into the Tables tab — above its topic, its rows, size and files from the control
+name a link to the table's page (§11.4a) — on its rows when the person may query it, else its
+history — or a lock naming the dataset — above its topic, its rows, size and files from the control
 plane's record, its topic's lag, its schema id, its last commit, and its state — **not created yet**
 until the control plane has sampled its topic and created it, **kept · read-only**, **dropping**,
 **dropped · files kept**, its last error in red, what runs on it (files pending, a maintenance job),
@@ -415,13 +439,11 @@ as badges. Empty state explains the binding is written when `apply_runtime` comp
 
 ---
 
-## 11.7 Detail → Schema
+## 11.7 Table → Schema
 
-One table's schema, as the control plane projects it (06 §6.3). Each table of a materialization has
-a schema of its own that evolves on its own; with two or more, a table picker above the rail
-chooses which (`?table=`): the tables whose datasets the person may see the schemas of
-(`dataset.view_schema`), the others listed locked. Two columns: a rail of every schema the table has
-had and the selected one.
+A table's schema, as the control plane projects it (06 §6.3), on its page (§11.4a). Each table has
+a schema of its own that evolves on its own. Two columns: a rail of every schema the table has had
+and the selected one.
 
 ### Versions rail
 
@@ -492,17 +514,16 @@ field keeps the values written before it.
 
 ---
 
-## 11.8 Detail → Data
+## 11.8 Table → Data
 
-One way to ask a question: choose a time range, add filters or write SQL, press **Run**. Everything
+A table's rows, on its page (§11.4a). One way to ask a question: choose a time range, add filters or write SQL, press **Run**. Everything
 on the tab — the opening view, paging, profiles, exports — reads from the run that produced what is
 on screen. How a run executes is the server's business; there are no modes, previews, or jobs to
 choose between (see [07](./07-data-access-and-duckdb.md)).
 
 ### Opening the tab
 
-The tab runs the preview of the chosen table at once — the first table, or the one `?table=` names —
-every committed row of its current snapshot, newest first, with its **exact** row count — `✓ 26,060,201 rows · All time` — and the first page. The
+The tab runs the table's preview at once — every committed row of its current snapshot, newest first, with its **exact** row count — `✓ 26,060,201 rows · All time` — and the first page. The
 manifests know every file's row count, so this reads nothing but the page itself and is on screen at
 any table size. When the URL
 names a run (after a refresh, say), the tab re-attaches to it instead, progress and all.
@@ -521,8 +542,7 @@ newest of all, first in newest-first order.
 
 | Control | Behaviour |
 |---|---|
-| Column list toggle | Shows or hides the column rail |
-| **Table** | With two or more tables (not in SQL, which names its own): which one the structured view reads, among those the person may query; the others are listed *· locked*. Choosing one runs its preview at once, with the filters and column choices cleared, since its columns are its own; the choice is in the address bar (`table=`) |
+| Column list toggle | Shows or hides the column rail; on a phone it starts hidden |
 | **Time range** | Splunk-style picker (below). Choosing a range does not run anything |
 | **Newest first / Oldest first** | Row order of the structured view |
 | Filters | Chips, and **Filter** to add one: find the field, then choose an operator and a value, with value suggestions from the run on screen |
@@ -628,6 +648,14 @@ Any page is one direct read of one file's rows, so page 2 and page 40,000 cost t
 next page is read ahead — on the server and in the browser — so turning pages does not wait. The
 toolbar's order: **Newest first** means files holding the latest Kafka timestamps first, latest
 offsets first within each; a global sort is a statement's `ORDER BY`.
+
+**The waterline** (§10.8). Browsing, the rows past the table's last commit — the live tail's,
+which no engine but the console reads yet — have Current's faintest ground, their row numbers in
+Current. Where they meet the committed rows a line runs across the grid: *Committed 2:41:12 PM*, the
+last commit, which every row on its other side is in; its tooltip says so. Newest first it sits
+below the live rows, at the top of the first page when nothing has arrived since; oldest first,
+after the last committed row. The server marks both on every page (`RunPage.live`,
+`RunPage.waterline`), so the line is exact whatever the filters. A statement's result has neither.
 
 Column headers do not sort. Clicking a cell copies it; the row gutter opens the row drawer (below).
 `null` renders as italic `null`.
@@ -960,23 +988,23 @@ and what changed, before and after. Entries are kept for the audit retention set
 | A table's dataset decides what of it a person sees: its schema, data, snapshots as of a time, connection snippets. Tables of datasets locked to them are listed, with a lock, never hidden: names are not secret | `useCan(permission, datasetId)`, `shared/access.ts` |
 | A change to users, groups or roles waits for the control plane to apply it before the toast | `useIdentityChange` |
 
-## 11.10 Detail → Table
+## 11.10 Table → History and Connect
 
-One of the materialization's Iceberg tables: what is in it, how it is kept, and how to reach it from
-other engines (`features/detail/TableTab.tsx`; data from `GET /api/materializations/:id/tables/:table`,
-06 §6.5). With two or more tables, a table picker chooses which (`?table=`). Its header names the
-topic and the dataset, a link to the dataset's page.
+A table's Iceberg side, on its page (§11.4a): how it got here and how it is kept (**History**:
+figures, snapshots, maintenance), and how to reach it from other engines and how it is laid out
+(**Connect**: the snippets, files by partition, properties) (`features/detail/TableTab.tsx`; data
+from `GET /api/materializations/:id/tables/:table`, 06 §6.5).
 
 | Panel | Shows |
 |---|---|
 | Figures | **Rows**, with *Complete through* (every record with a Kafka timestamp before then is in the table); **Size**; **Data files**, with how many are small; **Last commit**, with its duration |
-| Snapshots | The newest 200: when committed, the operation (append, a compaction's replace, a **reprotect**'s, …), files and rows added, the offsets reached. The current one's row opens the Data tab, for someone who may query the table's dataset; the Data tab reads the latest data only, so older rows do not |
+| Snapshots | The newest 200: when committed, the operation (append, a compaction's replace, a **reprotect**'s, …), files and rows added, the offsets reached. The current one's row opens the table's Data tab, for someone who may query its dataset; the Data tab reads the latest data only, so older rows do not |
 | Maintenance | **Compaction**, **Snapshot expiry** and **Orphan cleanup**: each job's last run — when, its outcome, its partitions, `32 files → 1`, bytes, snapshots expired and kept, orphans deleted of those listed, how long it took; a skipped run's note in muted text and a failure's in amber; the job running now. The maintenance app runs them on its own schedule, whether or not the runtime runs, kept tables included. **Run now** (`materializations.maintain`) asks it to run one on this table next; the panel follows the result. Once a reprotect has been asked for, a **Reprotect** row too — *requested*, running, or its last run: files rewritten, values masked, snapshots expired — asked from the Protection tab, not here |
 | Files by partition | Every partition, newest first — `2026-10-23`, `2026-10-23-14` or `2026-10` by the table's partitioning: files, bytes, records and small files, with a mark (*compact*) on a partition the next compaction takes, by the maintenance app's own rule: what is still being written waits for the hot partition delay (06 §6.5); **Files / Bytes** switches the bars. Rows without a timestamp read *no timestamp* |
 | Properties | Identifier, location, metadata file, format version, schema id, partition spec, sort order, current snapshot, table UUID, and the table properties — without the fork map, `materializer.protection` and `schema.*` for someone who may not see the dataset's schemas |
 | Connect | With `catalog.read` on the table's dataset: snippets for **DuckDB**, **PyIceberg**, **Spark**, **Trino** and **By path** (DuckDB's `iceberg_scan` on the location), filled with this deployment's catalog URI and `lake.<dataset>.<table>`, each with **Copy**; a link to make an access token. How each engine reads the data files follows the location's scheme, from the console's storage profile for it: an `s3` secret or `s3.*` properties with the endpoint, region and path style; an `azure` secret or `adls.*` properties with the account; a GCS HMAC secret, `GCSFileIO` or Google credentials. Every credential is a placeholder. Without a profile for the location, a note says the snippet names no endpoint, region or account of its own |
 
-The tab reads the table itself, so it works while the runtime is stopped. A table that cannot be read
+Both tabs read the table itself, so they work while the runtime is stopped. A table that cannot be read
 shows why (*The table could not be read*), and one not created yet says so.
 
 ## 11.10a Detail → Protection
@@ -1012,7 +1040,7 @@ table — the dialog says so and only closes; once empty, its grants go with it 
 
 | Tab | Shows |
 |---|---|
-| Tables | Every table in it, `sales.orders` above its topic: the materialization writing it (its label and id), its state — **being created**, **written**, **kept · read-only**, **being dropped** — and its last commit. A table links to its Table tab for someone who may read the dataset. Locked to the person: a note that they see the names, not the schemas or data |
+| Tables | Every table in it, `sales.orders` above its topic: the materialization writing it (its label and id), its state — **being created**, **written**, **kept · read-only**, **being dropped** — and its last commit. A table links to its page (§11.4a) for someone who may read the dataset. Locked to the person: a note that they see the names, not the schemas or data |
 | Access | Its owners only. **Who may use it**: each person and group with a role on it, their roles as badges, **Change** (roles as checkboxes) and **Remove**; below, **Add a person or group…** with the roles to grant. Reader sees schemas, queries, exports and reads through the catalog; Writer also adds and drops tables; Owner also manages the dataset and its access. An owner grants only roles they hold on it themselves, and cannot take away a role they could not grant. A note says plainly what access does not do: anyone holding credentials that read the destination — an S3 or Azure key, or a GCS HMAC key for DuckDB — reads every table in it |
 
 A change of access reloads the person's own session, since what they may do may have changed with it;

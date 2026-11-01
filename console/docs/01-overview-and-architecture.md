@@ -194,7 +194,7 @@ services never import from `routes/`.
   and sessions belong to each domain's control plane; the console holds one session per domain in a
   cookie and checks each route's permission in its domain. See [12 — Security model](./12-security-model.md).
 - **Not a source of truth.** Every piece of state it displays originates in the control plane or
-  the tables themselves. It writes nothing to either; **Run now** on the Table tab asks the
+  the tables themselves. It writes nothing to either; **Run now** on a table's History tab asks the
   control plane, which hands the job to its maintenance app.
 - **Not a credentials broker.** It reads each destination with the storage profile that covers it
   (GCS, S3 or Azure) and hands nobody its credentials; a table outside every profile is not read.

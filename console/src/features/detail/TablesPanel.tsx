@@ -1,14 +1,14 @@
-import { Database, Lock, Table2, TriangleAlert } from 'lucide-react';
+import { Database, Lock, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
-import { TABLE_PARAM } from '../tables/selectedTable';
 import { RelativeTime } from '@/components/Inline';
 import { Badge, Panel } from '@/components/ui/primitives';
 import { useAuth } from '@/lib/auth';
 import { formatBytes, formatCount, formatExact } from '@/lib/format';
 import type { CpDetail, CpLiveTable, CpTableSpec, CpTableSummary, TableState } from '@shared/types';
 import { useDomainPath } from '@/lib/domains';
+import { tablePath } from '@/lib/paths';
 
 /** A row of the panel: a table, its record once created, and its place in the materialization. */
 interface TableRow {
@@ -38,22 +38,18 @@ function tableRows(detail: CpDetail): TableRow[] {
  * topics were removed, and any being dropped.
  *
  * Totals come from the control plane's table records, which every commit updates; lag from its
- * last measurement of each topic. A table's name opens it in the Data tab, for someone who may query
- * its dataset; its icon, in the Table tab; its dataset, the dataset's page. A lock marks a table
- * whose dataset the person may not read.
+ * last measurement of each topic. A table's name opens its page — on its rows, for someone who may
+ * query its dataset; its dataset, the dataset's page. A lock marks a table whose dataset the person
+ * may not read.
  */
 export function TablesPanel({ detail }: { detail: CpDetail }): ReactNode {
   const domainPath = useDomainPath();
   const { can } = useAuth();
   const canSeeDatasets = can('datasets.view');
-  const materializationId = detail.materialization.materialization_id;
   const rows = tableRows(detail);
   const kept = detail.materialization.retired_tables?.length ?? 0;
   const live = detail.status.runtime_progress?.tables ?? {};
   const lag = detail.status.consumer_lag?.topics ?? {};
-  const first = detail.materialization.tables[0]?.name;
-  const linkTo = (tab: 'data' | 'table', table: string): string =>
-    domainPath(`/materializations/${encodeURIComponent(materializationId)}/${tab}${table === first ? '' : `?${TABLE_PARAM}=${encodeURIComponent(table)}`}`);
 
   return (
     <Panel className="overflow-hidden">
@@ -105,11 +101,11 @@ export function TablesPanel({ detail }: { detail: CpDetail }): ReactNode {
                       )}
                       {!readable ? (
                         <span className="ident -ml-1.5 font-medium line-through decoration-[var(--color-ink-faint)]">{spec.name}</span>
-                      ) : queryable ? (
+                      ) : canSeeDatasets ? (
                         <Link
-                          to={linkTo('data', spec.name)}
+                          to={domainPath(tablePath(spec.dataset, spec.name, queryable ? 'data' : 'history'))}
                           className="ident -ml-1.5 font-medium text-[var(--color-ink)] hover:underline"
-                          title={`Query ${qualified} in the Data tab`}
+                          title={`Open ${qualified}`}
                         >
                           {spec.name}
                         </Link>
@@ -120,11 +116,6 @@ export function TablesPanel({ detail }: { detail: CpDetail }): ReactNode {
                         <span title={`Dataset ${spec.dataset} is locked to you: its schemas and data need a role on it`}>
                           <Lock className="size-3 text-[var(--color-ink-faint)]" aria-label="locked" />
                         </span>
-                      ) : null}
-                      {readable ? (
-                        <Link to={linkTo('table', spec.name)} className="text-[var(--color-ink-faint)] hover:text-[var(--color-ink)]" title={`${qualified} in the Table tab`}>
-                          <Table2 className="size-3.5" />
-                        </Link>
                       ) : null}
                     </span>
                     <span className="numeric block break-all text-[11px] text-[var(--color-ink-muted)]">{spec.source_topic}</span>

@@ -32,7 +32,7 @@
 | **Manifest** | An Avro file listing data files with each one's row count and column bounds. The console reads counts and time spans from manifests without opening a data file |
 | **Committer** | The one runtime member that commits uploaded files to the tables — exactly once — and evolves their schemas |
 | **Partition** | A UTC day (`2026-10-17`), hour (`2026-10-17-10`) or month (`2026-10`) of Kafka timestamps, by the table's partitioning; `__null__` holds rows without one, and an unpartitioned table has none. Not a Kafka partition |
-| **Compaction** | Joining a partition's small files into a few large ones, in a `replace` snapshot; the Table tab's partitions say where it is due |
+| **Compaction** | Joining a partition's small files into a few large ones, in a `replace` snapshot; a table's partitions (its Connect tab) say where it is due |
 | **Schema projection** | The control plane's reading of a table schema: one entry per field with its id, logical name, physical path, type, state and fork version. Every schema the table has had is kept |
 | **Field id** | Iceberg's number for a field, never reused. 1–9 are the metadata columns, payload fields start at 10. Data files are read by field id, so a renamed or forked field is matched by it |
 | **Fork** | When a key's values change type in a way Iceberg cannot widen, the schema gains a sibling field `<name>__v<n>` of the new type, with an id of its own; the old member is `superseded`. Data is never rewritten, and the console folds the family into one column |

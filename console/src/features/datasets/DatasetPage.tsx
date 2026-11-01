@@ -12,6 +12,7 @@ import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import { useApi, useDomainPath } from '@/lib/domains';
+import { tablePath } from '@/lib/paths';
 import type { CpDatasetDetail, CpDatasetTable, DatasetTableState } from '@shared/types';
 
 import { ConfirmDialog } from '../access/ConfirmDialog';
@@ -219,13 +220,12 @@ function DatasetTableRow({ dataset, table, readable }: { dataset: string; table:
   const { can } = useAuth();
   const state = STATE_LABELS[table.state] ?? { label: table.state, tone: 'neutral' as const };
   const detail = domainPath(`/materializations/${encodeURIComponent(table.materialization_id)}`);
-  const tableQuery = `?table=${encodeURIComponent(table.name)}`;
   const canOpen = can('materializations.view_details');
   return (
     <tr className={cn('align-top', table.state === 'dropping' && 'opacity-60')}>
       <td className="px-5 py-2">
         {canOpen && readable && (table.state === 'active' || table.state === 'retired') ? (
-          <Link to={`${detail}/table${tableQuery}`} className="numeric font-medium hover:text-[var(--color-accent)] hover:underline">
+          <Link to={domainPath(tablePath(dataset, table.name))} className="numeric font-medium hover:text-[var(--color-accent)] hover:underline">
             {dataset}.{table.name}
           </Link>
         ) : (

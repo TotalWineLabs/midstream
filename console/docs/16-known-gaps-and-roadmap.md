@@ -126,7 +126,7 @@ Adding any of these is a control-plane change first, then a console change — s
 | No keyboard shortcuts beyond `⌘↵` and `Esc` | No command palette, no `/` to search |
 | The materializations list shows schema ids as `v0`, `v1`… | The Schema tab says *schema 2*; same id, two spellings |
 | No bulk selection | One materialization at a time |
-| Toasts are the only mutation feedback | No persistent activity log; the Table tab's maintenance history is the one exception |
+| Toasts are the only mutation feedback | No persistent activity log; a table's maintenance history (its History tab) is the one exception |
 
 ## 16.7 Engineering
 
