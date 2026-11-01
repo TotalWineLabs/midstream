@@ -19,6 +19,8 @@ describe('statusOf', () => {
     assert.equal(status({ desired: 'running', observed: 'deploying', reason: 'waiting_for_runtime_ready' }).reason, 'Waiting for its workers');
     const updating = status({ desired: 'running', observed: 'deploying', reason: 'resource_rollout_in_progress' });
     assert.deepEqual([updating.kind, updating.label, updating.moving], ['starting', 'Updating', true]);
+    // A first deploy gives a change's reasons: never having run, it is starting.
+    assert.equal(status({ desired: 'running', observed: 'deploying', reason: 'resource_generation_not_observed', everRan: false }).label, 'Starting');
     assert.equal(status({ desired: 'running', observed: 'stopped' }).label, 'Resuming');
     const stopping = status({ desired: 'stopped', observed: 'running' });
     assert.deepEqual([stopping.kind, stopping.label, stopping.moving], ['stopped', 'Stopping', true]);

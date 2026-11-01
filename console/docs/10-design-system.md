@@ -212,7 +212,8 @@ the phone, the sidebar badge.
 | **Stopped** | A hollow square | Slate | `stopped`, `paused` | Who stopped it, and when |
 
 - **Transitions are named by what is happening**, with the dotted ring in the colour of where they
-  lead: **Starting**, **Updating** (a running materialization taking a change), **Resuming** (Dawn),
+  lead: **Starting**, **Updating** (a materialization that has run, taking a change; a first deploy
+  gives a change's reasons, so one whose workers never reported is Starting), **Resuming** (Dawn),
   and **Stopping**, **Deleting** (Slate).
 - **Reasons are words.** `reasonWords()` turns the control plane's reason codes into a short phrase
   ("Its workers keep restarting"). The control plane's message wins where there is one. Codes stay

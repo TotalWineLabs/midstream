@@ -103,6 +103,7 @@ export function DetailOverviewTab({ snapshot }: { snapshot: DetailSnapshot }): R
     health: detail.status.runtime_health.level,
     healthReason: detail.status.runtime_health.reason,
     catchingUp: trend.state === 'draining',
+    everRan: detail.status.last_heartbeat != null || detail.status.runtime_progress !== undefined,
   });
 
   return (

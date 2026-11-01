@@ -29,6 +29,11 @@ export interface StatusInput {
   healthReason?: string | null;
   /** The lag trend reads a backlog above the floor as clearly falling. */
   catchingUp?: boolean;
+  /**
+   * Whether its workers have ever reported. A first deploy gives the same reasons as a change, so
+   * without a heartbeat ever, it is starting, not updating.
+   */
+  everRan?: boolean;
 }
 
 const PENDING = new Set<LifecyclePhase>(['requested', 'discovering', 'discovered', 'deploying']);
@@ -127,7 +132,7 @@ export function statusOf(input: StatusInput): Status {
   if (observed === 'stopped') return said('starting', 'Resuming', null, true);
   if (observed === 'paused') return said('stopped', 'Paused', null, false);
   if (PENDING.has(observed)) {
-    const updating = UPDATING.has(input.reason ?? '');
+    const updating = UPDATING.has(input.reason ?? '') && input.everRan !== false;
     return said('starting', updating ? 'Updating' : 'Starting', reasonWords(input.reason), true);
   }
 
@@ -141,7 +146,8 @@ export function statusOf(input: StatusInput): Status {
 
 /** A fleet row's state, from what the list carries: its phases, reason, health level and lag trend. */
 export function itemStatus(
-  item: Pick<MaterializationSummary, 'desired_phase' | 'observed_phase' | 'phase_reason' | 'runtimeHealth'> & Partial<Pick<MaterializationSummary, 'lagState'>>,
+  item: Pick<MaterializationSummary, 'desired_phase' | 'observed_phase' | 'phase_reason' | 'runtimeHealth'> &
+    Partial<Pick<MaterializationSummary, 'lagState' | 'lastHeartbeat'>>,
 ): Status {
   return statusOf({
     desired: item.desired_phase,
@@ -149,6 +155,7 @@ export function itemStatus(
     reason: item.phase_reason,
     health: item.runtimeHealth,
     catchingUp: item.lagState === 'draining',
+    ...(item.lastHeartbeat === undefined ? {} : { everRan: item.lastHeartbeat !== null }),
   });
 }
 

@@ -278,6 +278,7 @@ function headerStatus(detail: CpDetail) {
     reason: detail.status.phase_reason,
     health: detail.status.runtime_health.level,
     healthReason: detail.status.runtime_health.reason,
+    everRan: detail.status.last_heartbeat != null || detail.status.runtime_progress !== undefined,
   });
 }
 
