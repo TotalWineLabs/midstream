@@ -127,26 +127,33 @@ control plane's retention drops them.
 Empty states: **No materializations yet** (with **New materialization**), **Nothing matches** (with
 **Clear**).
 
-### Create dialog
+### Creating one (`/d/<domain>/materializations/new`)
 
-| Field | Required | Notes |
-|-------|----------|-------|
-| Source topics | yes | One or more of the cluster's topics, up to the control plane's `max_materialization_topics` (20); see [Topic picker](#topic-picker). Each becomes a table, in the dataset chosen on its row (see [Tables](#tables-dataset-and-name)). Focused when the dialog opens. Fixed once created |
-| Name | no | A label for people: free text, at most 128 characters, not unique, changeable at any time with **Edit**. Left empty, the materialization goes by its id. It names no table: SQL reads `<dataset>.<table>`, as the line under the topics shows with the first table |
-| Data protection | no | Beside the name, not behind Advanced: the policy in a line — *Email addresses hashed · Phone numbers hashed · … · default* — opening into a row per kind of sensitive data with **Off**, **Hashed**, **Partial** and **Withheld** (only the masks the kind allows: a secret is never hashed), each kind's examples and what its partial keeps. Pre-set from the domain's *Protected by default*; **Use the default** returns to it. Choosing otherwise needs *Choose data protection* on every dataset the tables go in: without it the control is locked, naming the datasets, and a changed choice blocks **Create**. A choice that hashes in a domain with no protection key says the control plane will refuse it (control-plane handbook [22](../../docs/handbook/22-data-protection.md)) |
-| **Advanced settings** | | Collapsed; its summary reads *Partitioning, replicas, autoscaling, labels, tombstones*. Opens on its own when the control plane rejects one of its fields. It begins with where the tables go and what each member gets — *Its tables are created under the deployment's destination, `gs://my-lake`, and each runtime member gets `64Mi` of storage* — which the dialog does not ask for |
-| Partitioning | no | **By day** (the default, from `default_partition_granularity`), **By hour**, **By month** or **Not partitioned**: how the tables are partitioned by each record's Kafka timestamp. Fixed for the tables' life |
-| Replicas | no | Placeholder shows the default; checked against the control plane's maximum. The members share every topic's partitions; the picker says how many of them the topics can keep busy. Can be changed later with **Edit** |
-| Autoscale | no | Checkbox, on by default: *Adds members while it is far behind its topics, up to 16, and goes back to its replicas once caught up.* With autoscaling off for the deployment it says so, and left on, the materialization autoscales once it is turned on there. Sent only when off. Absent against a control plane before 4.4. Can be changed later with **Edit** |
-| Labels | no | `key=value` pairs, comma separated |
-| Skip tombstones | no | Checkbox, off by default. When on, null-value records are acknowledged without a row; off, each is a row with a null payload |
+A page, not a dialog (`features/materializations/CreateMaterializationPage.tsx`): **New
+materialization** opens it, and ⌘K's **New materialization**; on a page of every domain it asks which
+domain first. It needs `materializations.create`.
+
+**The composer**, on the left:
+
+| Part | Notes |
+|------|-------|
+| *Which topics should flow into the lake?* | One or more of the cluster's topics, up to the control plane's `max_materialization_topics` (20); see [Topic picker](#topic-picker). Each becomes a table, in the dataset chosen on its row (see [Tables](#tables-dataset-and-name)). Focused when the page opens. Fixed once created |
+| Name | Optional, for people: free text, at most 128 characters, changeable later with **Edit**. Without one it goes by its id |
+| Data protection | The policy in a line, opening into a row per kind with **Off**, **Hashed**, **Partial** and **Withheld** (only the masks a kind allows), pre-set from the domain's *Protected by default*; **Use the default** returns to it. Choosing otherwise needs *Choose data protection* on every dataset the tables go in: without it the control is locked, naming the datasets, and a changed choice blocks **Create**. A choice that hashes in a domain with no protection key says the control plane will refuse it (control-plane handbook [22](../../docs/handbook/22-data-protection.md)) |
+| **Options** | Folded, its summary the choices in a line: *by day · 1 worker, more when behind · null records kept*. Opens on its own when the control plane refuses one of its fields. **Partitioned** (by day, the default from `default_partition_granularity`; by hour, by month, or not: *By the Kafka timestamp. Fixed once created.*), **Workers** (the replicas; checked against the control plane's maximum), **Add workers when far behind** (autoscaling, on; *Up to 16, back once caught up*, or that it is off for every materialization; sent only when off; absent before 4.4), **Ignore null records** (tombstones; off: each is a row with its key) and **Labels** (`key=value`, comma separated) |
+
+**The plan**, beside it (below on a phone), says exactly what will exist before anything runs:
+each table as SQL will read it, `sales.orders`, with the topic it comes from; how it is partitioned,
+its workers, how many kinds it masks (each one in the tooltip) and its null records; and *About a
+minute: its names are claimed, its topics sampled, its tables created, then its workers start. You
+can leave; it carries on.* Then **Create**, or **Create 3 tables**. On success the page opens the new
+materialization, which shows **Starting** with what it is doing, and a toast says *Creating Orders —
+You can leave: it carries on.*
 
 The destination, the runtime's namespace and name, and its storage are the deployment's since 4.0
-(handbook 04 §4.5.2): the dialog has no field for them. While the control plane reports no
-destination, an alert at the top says *No materialization can be created yet: this control plane has
-no destination for tables*, pointing to Settings › Materializations › Destination, and **Create** is
-disabled. The defaults come with the console's config, kept for a minute, so a destination set
-elsewhere than the console's Settings page shows within that.
+(handbook 04 §4.5.2): the page has no field for them. While the control plane reports no destination,
+the plan says *No storage is set up for tables yet*, pointing to Settings, and **Create** is disabled.
+The defaults come with the console's config, kept for a minute.
 
 ### Topic picker
 
@@ -354,15 +361,15 @@ chips, and how far the policy has reached: **In force · revision 2**, **Applyin
 Everything the control plane knows about how it runs, for whoever needs to look closely
 (`DiagnosticsPanels` in `features/detail/OverviewTab.tsx`, then `RuntimeTab.tsx`).
 
-**Reconciliation** — `desired_phase`, `observed_phase`, `phase_reason`, `observation_source`,
-`last_transition_time`, `last_heartbeat`, `last_resource_observation_time`, **Tables** (`N of M
-created` until every table exists), **Last commit** (the newest of any table) and the runtime
-version. Below the grid, `phase_message` in muted text and
-`last_error` in red when present. While autoscaling has the runtime scaled up, a line with an
-upward chevron: *Scaled up to 16 members 5 minutes ago: 110,869,158 records behind, about 22 h 43
-min to catch up with 1 member. Back to 1 once caught up.* With two or more runtime members, a summary of their states and
-**Show N members**: each member's state (*loading the table* while it reads its pointer), its own
-rows/s, when it last reported, and a **committer** badge on the member that commits.
+**Reconciliation** — one line, *Desired running, observed running* with the `phase_reason` code
+beside it, and `phase_message` under it; then when it last sent a heartbeat, was observed and changed,
+its last commit, its tables (`N of M created` until every table exists) and the workers' version;
+`last_error` in Flare when present. While autoscaling has it scaled up, *Scaled up to 16 members 5
+minutes ago: … Back to 1 once caught up.* With two or more workers, a summary of their states and
+**Show N members**: each one's state (*loading the table* while it reads its pointer), its own rows a
+second, when it last reported, and a **committer** badge on the one that commits. The panels carry no
+method captions; Kubernetes names are expected here, for support. Conditions show True or False
+neutrally, but for Ready false.
 
 **Consumer lag** — how far the tables trail their source topics, all together. It is measured from the runtime
 consumer group's committed offsets, and a runtime commits an offset only once its row is in the
@@ -974,20 +981,15 @@ shows why (*The table could not be read*), and one not created yet says so.
 
 ## 11.10a Detail → Protection
 
-What the materialization masks, and what each of its tables records of it
-(`features/protection/ProtectionTab.tsx`; data from `GET /api/materializations/:id/protection`, the
-control plane's review, refreshed every 15 s). Shown to people who may see schemas on at least one of
-the tables' datasets; tables in the others are left out, and counted at the foot.
+What it protects, and whether that is in force (`features/protection/ProtectionTab.tsx`):
 
-| Panel | Shows |
-|---|---|
-| Data protection | The policy as chips, its revision (*None: created before data protection* at 0), who chose it — *· current rules applied* after *Apply the current rules* — the members masking with it (`3 of 4`) and the tables recording it, with **In force**, **Applying revision N**, **Applies on resume** or **No member reporting**. A change applies to records written from then on; rows already written keep their values until a reprotect masks them |
-| Rows already written | Per table, kept ones included (*kept*): the files, rows and bytes holding in plain text what it masks now, as the maintenance app last counted them (*not counted yet* before), files that cannot be rewritten yet and why, files of unknown lineage; **requested**, **rewriting** or what the last run did — *masked*, *purged* (it only purged), *nothing to mask*, *failed* — with what the whole request rewrote, masked and purged. **Mask rows already written** — for someone who may run table maintenance and choose protection on every dataset — opens a dialog listing each table's count, with **Purge the plain text now** checked: once every file is rewritten, each table's older snapshots expire and the files they alone held are deleted, ending time travel to before; unchecked, the old files stay readable through older snapshots until they expire. **Mask rows** asks for a reprotect of every table (control-plane handbook [22 §22.14](../../docs/handbook/22-data-protection.md)). Hidden for a control plane before reprotect |
-| *N fields revision R is about to protect otherwise* | While a table has not recorded the current revision yet: what recording it will change, field by field, `plain → Email addresses hashed`. No action: each table records it on its next commit |
-| *N fields the current rules would protect otherwise* | Fields a newer release's rules match that their table recorded otherwise. **Apply the current rules** — for someone who may edit the materialization and choose protection on every dataset it writes into — records the policy again, revision + 1, so the rules apply from then on |
-| One per table, `sales.orders` | Its protected fields — name, kind, mask, the schema it was protected from — and those written plain again (*Plain since schema 4*), the values masked and withheld so far, the revision it records (**Recording revision N** while behind), and its history of policies: revision, when, by whom, at which schema |
-
-Choosing another policy is the **Edit** dialog's (§11.4).
+| Part | Content |
+|------|---------|
+| The answer | How far the policy has reached (**In force · revision 2**, **Applying revision 3**, **Applies on resume**, **No member reporting**), then *4 kinds masked* set large, the kinds as chips with their masks, one sentence — *Masked before anything is written, so no query, engine or file holds the plain value. A change reaches new records within seconds.* — and the revision, who chose it and when. While a change is still reaching it: *Applying: 2 of 3 tables, 1 of 4 workers* |
+| Rows already written | One line when nothing is plain: *Nothing in plain text: every value masked now is masked in every file.* Otherwise how many rows in how many files still hold a value plain, and each table with something to say (plain text, a job running or asked for, its last reprotect and what it did). **Mask rows already written** (`materializations.maintain` and *Choose data protection* on every dataset) opens the reprotect dialog, with **Purge the plain text now**. *How this is counted* folds away the snapshot and expiry detail (`ReprotectPanel.tsx`) |
+| Revision changes ahead, the current rules | Only when there are any: each field whose protection the recorded revision or the current rules would change, `kind mask → kind mask`, with **Apply the current rules** |
+| Protected fields | One panel: each table with a protected field, its masked and withheld counts, and each field's kind, mask and the schema it was protected from (or *Plain since schema N*); the tables that protect nothing named together in one line |
+| History | Each revision once, newest first: when, who, from which schema, and what it masks |
 
 ## 11.11 Datasets (`/datasets`, `/datasets/:name[/:tab]`)
 

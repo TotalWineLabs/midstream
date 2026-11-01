@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { ArrowRight, CornerDownLeft, Database, FolderOpen, LayoutGrid, Pin, Play, Search, Settings, Square, Table2, UserRound, Waves } from 'lucide-react';
+import { ArrowRight, CornerDownLeft, Database, FolderOpen, LayoutGrid, Pin, Play, Plus, Search, Settings, Square, Table2, UserRound, Waves } from 'lucide-react';
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
@@ -105,6 +105,11 @@ function CommandPanel({ onClose }: { onClose: () => void }): ReactNode {
       { label: 'Settings', icon: Settings, to: sectionPath('settings', scope), permission: null },
       { label: 'Your account', icon: UserRound, to: '/settings/account', permission: null },
     ];
+    // Making one: in the page's domain, or the first the person may create one in.
+    const creatable = scope ?? domains.find((domain) => consoleAuth.forDomain(domain.id).can('materializations.create'))?.id ?? null;
+    if (creatable && consoleAuth.forDomain(creatable).can('materializations.create')) {
+      places.push({ label: 'New materialization', icon: Plus, to: domainPath(creatable, '/materializations/new'), permission: null });
+    }
     for (const place of places) {
       if (place.permission && !auth.can(place.permission)) continue;
       if (!place.permission && !consoleAuth.overall.signedIn) continue;
@@ -209,7 +214,7 @@ function CommandPanel({ onClose }: { onClose: () => void }): ReactNode {
       });
     }
     return out;
-  }, [terms, query, fleet, scope, consoleAuth, many, pins, navigate, onClose, run, search.data]);
+  }, [terms, query, fleet, scope, consoleAuth, domains, many, pins, navigate, onClose, run, search.data]);
 
   // A new query starts at the top.
   useEffect(() => setActive(0), [query]);

@@ -267,7 +267,7 @@ features/
   overview/River.tsx                        The fleet as strands from Kafka through Midstream to the lake
   materializations/
     MaterializationsPage.tsx                Grouped by state, the ones that need you first; search; recently deleted
-    CreateMaterializationDialog.tsx         Create form
+    CreateMaterializationPage.tsx           Create: the topics, name, protection and options beside the plan
     actions.ts                              useLifecycleActions (stop acts at once, with Undo) + phase predicates
     MaterializationRow.tsx                  A list row: the state's glyph, name, word and reason, one fact (rowFact)
   detail/

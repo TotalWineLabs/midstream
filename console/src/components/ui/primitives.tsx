@@ -193,22 +193,24 @@ export function Field({
   error,
   required,
   children,
+  className,
 }: {
   label: string;
   hint?: ReactNode;
   error?: string | null;
   required?: boolean;
   children: ReactNode;
+  className?: string;
 }): ReactNode {
   return (
-    <label className="block space-y-1.5">
+    <label className={cn('block space-y-1.5', className)}>
       <span className="flex items-baseline gap-1.5">
         <span className="text-[13px] font-medium">{label}</span>
         {required ? <span className="text-[11px] text-[var(--color-ink-faint)]">required</span> : null}
       </span>
       {children}
       {error ? (
-        <span className="block text-[12px] text-[var(--color-phase-failed)]">{error}</span>
+        <span className="block text-[12px] text-[var(--color-flare-ink)]">{error}</span>
       ) : hint ? (
         <span className="block text-[12px] text-[var(--color-ink-muted)]">{hint}</span>
       ) : null}

@@ -107,36 +107,38 @@ export function DiagnosticsPanels({ snapshot }: { snapshot: DetailSnapshot }): R
     <>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <Panel>
-          <PanelHeader title="Reconciliation" description="What the control plane last concluded." />
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-4 p-5">
-            <KeyValue label="Desired">{humanize(detail.status.desired_phase)}</KeyValue>
-            <KeyValue label="Observed">{humanize(detail.status.observed_phase)}</KeyValue>
-            <KeyValue label="Reason" mono>{detail.status.phase_reason}</KeyValue>
-            <KeyValue label="Source">{humanize(detail.status.observation_source)}</KeyValue>
-            <KeyValue label="Last transition">
-              <RelativeTime value={detail.status.last_transition_time} />
-            </KeyValue>
-            <KeyValue label="Last heartbeat">
+          <PanelHeader title="Reconciliation" />
+          {/* What the control plane last concluded, in its own words, with its code beside. */}
+          <div className="space-y-2 px-5 pt-4 pb-4">
+            <p className="text-[14px]">
+              <span className="text-[var(--color-ink-muted)]">Desired</span> {detail.status.desired_phase},{' '}
+              <span className="text-[var(--color-ink-muted)]">observed</span> {detail.status.observed_phase}
+              <code className="ident ml-2 text-[12px] text-[var(--color-ink-muted)]">{detail.status.phase_reason}</code>
+            </p>
+            {detail.status.phase_message ? (
+              <p className="text-[13px] leading-relaxed text-[var(--color-ink-muted)]">{withFieldNames(detail.status.phase_message)}</p>
+            ) : null}
+          </div>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[var(--color-line)] px-5 py-4 sm:grid-cols-3">
+            <KeyValue label="Heartbeat">
               <RelativeTime value={detail.status.last_heartbeat} />
             </KeyValue>
-            <KeyValue label="Last observation">
+            <KeyValue label="Observed">
               <RelativeTime value={detail.status.last_resource_observation_time} />
             </KeyValue>
-            <KeyValue label="Tables">
-              <TableCounts detail={detail} />
+            <KeyValue label="Changed">
+              <RelativeTime value={detail.status.last_transition_time} />
             </KeyValue>
             <KeyValue label="Last commit">
               <RelativeTime value={newestCommit(detail)} />
             </KeyValue>
-            <KeyValue label="Runtime version" mono>
+            <KeyValue label="Tables">
+              <TableCounts detail={detail} />
+            </KeyValue>
+            <KeyValue label="Workers' version">
               <RuntimeVersion value={detail.status.runtime_version} />
             </KeyValue>
           </dl>
-          {detail.status.phase_message ? (
-            <p className="border-t border-[var(--color-line)] px-5 py-3 text-[13px] leading-relaxed text-[var(--color-ink-muted)]">
-              {withFieldNames(detail.status.phase_message)}
-            </p>
-          ) : null}
           <ScaledUp autoscale={detail.autoscale} stopped={detail.status.desired_phase !== 'running'} />
           <MemberStates members={progress?.member_progress} rates={snapshot.memberRates} committer={liveTables[0]?.member_id ?? null} />
           {detail.status.last_error ? (
@@ -161,11 +163,6 @@ export function DiagnosticsPanels({ snapshot }: { snapshot: DetailSnapshot }): R
         <Panel className="flex flex-col">
           <PanelHeader
             title="Throughput"
-            description={
-              metric === 'rows'
-                ? 'Rows a second, each worker measured between its own heartbeats, summed.'
-                : 'Parquet bytes a second, as a 15-minute trend: batches seal in waves.'
-            }
             actions={
               <SegmentedControl
                 value={metric}
@@ -191,7 +188,7 @@ export function DiagnosticsPanels({ snapshot }: { snapshot: DetailSnapshot }): R
         </Panel>
 
         <Panel>
-          <PanelHeader title="Specification" description="The desired state the control plane records." />
+          <PanelHeader title="Specification" />
           <dl className="grid grid-cols-2 gap-x-4 gap-y-4 p-5">
             <KeyValue label={detail.materialization.source_topics.length === 1 ? 'Source topic' : 'Source topics'} className="col-span-2">
               <span className="block break-all" title={detail.materialization.source_topics.join('\n')}>
@@ -334,7 +331,6 @@ function ConsumerLagPanel({
     <Panel className="flex flex-col">
       <PanelHeader
         title="Consumer lag"
-        description={several ? 'Records on the source topics the runtime has not yet committed, all together.' : 'Records on the source topic the runtime has not yet committed.'}
         actions={
           <SegmentedControl
             value={lagWindow}

@@ -517,7 +517,7 @@ export function TopicPicker({
     hint = (
       <span className="block text-[12px] text-[var(--color-ink-muted)]">
         {partitionsLabel(topic.partitions)} · replication factor {topic.replicationFactor}
-        {topic.category ? ` · ${CATEGORY_LABELS[topic.category]}` : ''}. Add more topics to read them with the same runtime.
+        {topic.category ? ` · ${CATEGORY_LABELS[topic.category]}` : ''}
       </span>
     );
   } else if (value.length > 1) {

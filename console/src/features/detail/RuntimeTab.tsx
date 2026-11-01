@@ -9,10 +9,10 @@ import { humanize, topicsLabel } from '@/lib/format';
 import type { CpResourceCondition, DetailSnapshot } from '@shared/types';
 
 const AGENT_TONE: Record<string, string> = {
-  running: 'var(--color-phase-running)',
-  paused: 'var(--color-phase-paused)',
-  stopped: 'var(--color-phase-idle)',
-  failed: 'var(--color-phase-failed)',
+  running: 'var(--color-current)',
+  paused: 'var(--color-buoy)',
+  stopped: 'var(--color-slate)',
+  failed: 'var(--color-flare)',
 };
 
 export function RuntimeTab({ snapshot }: { snapshot: DetailSnapshot }): ReactNode {
@@ -35,10 +35,7 @@ export function RuntimeTab({ snapshot }: { snapshot: DetailSnapshot }): ReactNod
       <DiagnosticsPanels snapshot={snapshot} />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Panel>
-          <PanelHeader
-            title="Kubernetes resource"
-            description="Latest KasprApp observation recorded by the control plane."
-          />
+          <PanelHeader title="Kubernetes resource" />
           {!observation ? (
             <EmptyState title="No observation yet" className="py-12" />
           ) : (
@@ -80,16 +77,12 @@ export function RuntimeTab({ snapshot }: { snapshot: DetailSnapshot }): ReactNod
             }
           />
           {agents.length === 0 ? (
-            <EmptyState
-              title="No agents reported"
-              description="Agents appear once the runtime KasprApp is applied and observed."
-              className="py-12"
-            />
+            <EmptyState title="No agents reported" description="They appear once its KasprApp is applied and observed." className="py-12" />
           ) : (
             <ul className="divide-y divide-[var(--color-line)]">
               {agents.map(([name, state]) => (
                 <li key={name} className="flex items-center justify-between gap-4 px-5 py-3">
-                  <span className="numeric truncate text-[12px]">{name}</span>
+                  <span className="ident truncate text-[12px]">{name}</span>
                   <span className="flex shrink-0 items-center gap-2 text-[12px] text-[var(--color-ink-muted)]">
                     <span
                       className={cn('size-1.5 rounded-full')}
@@ -105,10 +98,7 @@ export function RuntimeTab({ snapshot }: { snapshot: DetailSnapshot }): ReactNod
       </div>
 
       <Panel>
-        <PanelHeader
-          title="Runtime binding"
-          description="What the control plane last applied, and the hash it reconciles against."
-        />
+        <PanelHeader title="Runtime binding" />
         {!binding ? (
           <EmptyState
             title="Not bound yet"
@@ -157,12 +147,8 @@ function ConditionCard({
   label: string;
   condition: CpResourceCondition | null;
 }): ReactNode {
-  const tone =
-    condition?.status === 'True'
-      ? 'running'
-      : condition?.status === 'False'
-        ? 'failed'
-        : ('neutral' as const);
+  // Only Ready false is trouble: Progressing false, once reconciled, means it is done.
+  const tone = label === 'Ready' && condition?.status === 'False' ? 'failed' : ('neutral' as const);
 
   return (
     <div className="rounded-[var(--radius-control)] border border-[var(--color-line)] p-3">

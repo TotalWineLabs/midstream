@@ -340,7 +340,7 @@ The glossary: terms the console says differently from the system.
 | Pattern | Use it for | Shape |
 |---|---|---|
 | **Undo, not "Are you sure?"** | Reversible actions: stop, resume, pin | Act at once; a toast with Undo |
-| **A plan first** | Where data or time is at stake: create, change topics, delete, reprotect | A card listing what will exist, change or go, by SQL names, and what it costs ("pauses for about 5 minutes"); Cancel and the action |
+| **A plan first** | Where data or time is at stake: create, change topics, delete, reprotect | A card listing what will exist, change or go, by SQL names, and what it costs ("pauses for about 5 minutes"); Cancel and the action. The create page is the model: the composer leads, the plan sits beside it (`CreateMaterializationPage.tsx`) |
 | **Consequences named** | Destructive actions | The dialog lists each table and its rows |
 | **⌘K** | Going anywhere, doing anything | One field: places, tables, actions with their target named |
 | **Properties column** | A selected thing's details | A right column, closable, keys in Silt, values in Foam |
