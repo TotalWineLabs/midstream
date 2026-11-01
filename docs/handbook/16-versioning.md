@@ -418,3 +418,25 @@ account (14).
 | Console statements may not call `duckdb_secrets()`, `which_secret()`, `query()`, `json_execute_serialized_sql()` or `enable_logging()`, nor read DuckDB's log (`duckdb_logs`, `duckdb_logs_parsed()`, `duckdb_log_contexts`): each could show a storage profile's key id or run SQL from a string (console 07) | people writing console statements |
 | The Connect panel's DuckDB, PyIceberg, Spark and Trino snippets follow the table's backend and its profile's endpoint and addressing | console users |
 | CI's Object stores job runs the conformance suite against SeaweedFS, moto, Azurite and fake-gcs-server (13) | contributors |
+
+## 16.18 What 1.2.0 changed: the console in Current
+
+1.2.0 rebuilds the console in its design language, Current (console 10): each screen answers one
+question and leads with its answer, status reads as six states, each a shape, a colour and a word,
+and what is about to happen is shown before it runs. The lake, the control plane's API and the
+chart's values are as in 1.1.0; the control plane's settings now say workers where they said
+replicas. **A 1.1.0 installation upgrades in place**: `helm upgrade` with the same values (02); the
+console's two new settings take their defaults.
+
+| Change | Who must care |
+|---|---|
+| **The console in Current**: the Overview leads with the fleet's readout, the river and what needs someone; materializations are grouped by state; a materialization's page leads with its state's number and chart, four facts, its tables and its properties, with Diagnostics apart; ⌘K goes anywhere; a phone gets a bottom bar; light and dark follow the system (console 10, 11) | console users |
+| **A plan before anything consequential**: creating and editing a materialization are pages, each beside a plan of the tables it adds, writes again, keeps or drops, what changes and what it costs; deleting a materialization or a dataset shows the same plan; **Stop** acts at once, with **Undo** (console 11 §11.4) | console users |
+| **A table has a page**, `/d/<domain>/datasets/<dataset>/tables/<table>`, with **Data**, **Schema**, **History** and **Connect**; a materialization's Data, Schema and Table tabs redirect there. In **Data**: the live tail's rows above a waterline, **Streaming** (was Live) without flicker, a row's every field in a properties column beside the grid, masked values veiled, and a changed time range, filter or order that runs by itself when it reads little (console 11 §11.4a, §11.8) | console users; links to the old tabs keep working |
+| **A dataset is shared like a document**: its page leads with its tables, and **Share** replaces the Access tab; `/datasets/<name>/access` opens it (console 11 §11.11) | dataset owners |
+| **Settings are searchable**: `/` focuses a search over every setting of the page, edited where it is found; a setting at its default is quiet, and an unsaved edit is marked in its margin (console 11 §11.8b) | administrators |
+| **The control plane's settings say workers**: their labels (*Default workers*, *Maximum workers*, *Add workers when far behind*, *Storage per worker*, …), units (`workers` for `replicas`), descriptions and one validation message. Keys, environment variables and values are unchanged; this console reads an older control plane's `replicas` as workers (17) | scripts that read a setting's label or unit |
+| **Caught up is the floor**: a lag no larger than what arrived on the source topics in the last 630 s reads as caught up, counted from the topics' end offsets; above it a backlog shows its end, *Caught up around 4:30 PM*, and its chart a dotted line to zero (console 11 §11.5, §11.6) | operators reading lag |
+| New console settings: *Run as you edit, up to* (`CONSOLE_AUTO_RUN_MAX_BYTES`, 256 MiB; `0` waits for Run) and *Throughput history* (`CONSOLE_SERIES_HISTORY_MS`, 24 h, kept in memory, for the charts' 1h, 6h and 24h windows) (console 03) | console deployers |
+| Console API, additive: `GET /api/d/<domain>/materializations/:id/throughput`; a fleet item's `lagState`, `lagEtaMs` and `catchUp`; a browse page's `live` and `waterline`; `autoRunMaxBytes` in `GET /api/config` (console 08) | clients of the console's API |
+| **The design check**: `console/src/design.test.ts`, run with `npm test` and in CI, fails on a literal colour, a palette class, a pre-Current token, motion outside the vocabulary, all caps, a state's colour on a badge, or a live dot on a page; its baseline of older screens only goes down. A change to the interface starts from `.claude/skills/console-design/SKILL.md` (console 10 §10.13) | contributors |
