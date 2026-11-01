@@ -11,6 +11,12 @@ export { pageQueryKey, pageStage } from './live.ts';
 export interface RunController {
   /** The run on screen, kept current from its event stream. */
   run: RunSnapshot | null;
+  /**
+   * The run Live replaced when a commit moved the question to a new snapshot: the same question, so
+   * its rows and its status stand in while the new run counts, and nothing on screen flickers.
+   * Null once a person asks a new question.
+   */
+  carried: RunSnapshot | null;
   /** A run is being created. */
   starting: boolean;
   /** Why the last run could not be created — a bad statement, a filter on a missing column. */
@@ -38,6 +44,7 @@ export interface RunController {
 export function useRun(materializationId: string): RunController {
   const api = useApi();
   const [run, setRun] = useState<RunSnapshot | null>(null);
+  const [carried, setCarried] = useState<RunSnapshot | null>(null);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<ApiError | null>(null);
   const current = useRef<RunSnapshot | null>(null);
@@ -102,6 +109,7 @@ export function useRun(materializationId: string): RunController {
       if (previous && previous.state === 'running') void api.cancelRun(previous.id).catch(() => undefined);
       stopFollowing();
       current.current = null;
+      setCarried(null);
       setStarting(true);
       setStartError(null);
       try {
@@ -135,6 +143,7 @@ export function useRun(materializationId: string): RunController {
       try {
         const snapshot = await api.run(runId);
         if (snapshot.materializationId !== materializationId) return false;
+        setCarried(null);
         follow(snapshot);
         return true;
       } catch {
@@ -151,8 +160,12 @@ export function useRun(materializationId: string): RunController {
       const answer = await api.refreshRun(active.id, range);
       // The run on screen may have changed while the refresh was out; it decides, not this answer.
       if (current.current?.id !== active.id) return answer;
-      if (answer.replaced) follow(answer.run);
-      else show(answer.run);
+      if (answer.replaced) {
+        setCarried(active);
+        follow(answer.run);
+      } else {
+        show(answer.run);
+      }
       return answer;
     },
     [follow, show],
@@ -160,7 +173,7 @@ export function useRun(materializationId: string): RunController {
 
   useEffect(() => stopFollowing, [stopFollowing]);
 
-  return { run, starting, startError, start, cancel, attach, refresh };
+  return { run, carried, starting, startError, start, cancel, attach, refresh };
 }
 
 /**
@@ -173,7 +186,7 @@ export function useRun(materializationId: string): RunController {
  * appends the live tail's newest records changes a finished run's rows, and it bumps the run's
  * `revision`, which is part of every page's key.
  */
-export function useRunPage(run: RunSnapshot | null, offset: number, limit: number) {
+export function useRunPage(run: RunSnapshot | null, offset: number, limit: number, carriedId: string | null = null) {
   const api = useApi();
   const queryClient = useQueryClient();
   const terminal = run !== null && run.state !== 'running';
@@ -187,10 +200,10 @@ export function useRunPage(run: RunSnapshot | null, offset: number, limit: numbe
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: 5 * 60_000,
     retry: 0,
-    // Within one run, keep showing the rows on screen while the next read lands; never carry one
-    // run's rows into another's.
+    // Within one run — or from the run Live replaced, the same question at a newer snapshot — keep
+    // showing the rows on screen while the next read lands; never carry another question's rows.
     placeholderData: (previous, previousQuery) =>
-      previousQuery?.queryKey[1] === runId ? keepPreviousData(previous) : undefined,
+      previousQuery?.queryKey[1] === runId || (carriedId !== null && previousQuery?.queryKey[1] === carriedId) ? keepPreviousData(previous) : undefined,
   });
 
   const nextOffset = offset + limit;

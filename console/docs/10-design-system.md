@@ -237,11 +237,11 @@ shimmer Claude and ChatGPT put on text while they work.
 |---|---|---|---|---|
 | **Roll** | A live number changed, and which way | Readouts, live counts, rates, lag | `--duration-roll` 520 ms, ease-out | `Ticker` |
 | **Shimmer** | Work is under way | "Running…", "Creating tables", a pending step | 2.2 s sweep, linear | `Shimmer` |
-| **Heartbeat** | A live frame just arrived | The live indicator | 900 ms, once per frame | `.heartbeat` |
 | **Value flash** | A value changed that doesn't roll | Cells in a list | 1.2 s fade | `.value-flash` |
+| **Row arrives** | A live row just came into a table's grid | The Data tab, streaming | 1.2 s, from a stronger Current to the live ground | `.row-arrive` |
 | **Mark draws in** | The console opened | The sidebar mark, once a page load | `--duration-draw` 900 ms | `Mark` |
 | **Mark flows** | The console itself is waiting | Sign-in, first load | 1.8 s loop | `Mark working` |
-| **Wave drifts** | This is flowing now | The one status a page is about, never a list | 2.4 s loop, linear | `StatusGlyph animate` |
+| **Wave drifts** | This is flowing now | The one status a page is about, never a list; **Streaming** while rows stream in | 2.4 s loop, linear | `StatusGlyph animate` |
 | **Ring turns** | On its way somewhere | Starting, Updating, Resuming, Stopping, Deleting | 8 s loop | `StatusGlyph` |
 | **Ring fills** | How far a catch-up has come | Catching up | 900 ms | `StatusGlyph progress` |
 | **Slide** | A panel came from the side | Properties column, sheets | `--duration-panel` 220 ms | `.slide-in-right` |
@@ -256,6 +256,12 @@ Rules:
   render.
 - **One moving thing per region.** A list of drifting waves is noise, so lists are still.
 - **Nothing loops at rest** except to say live or working, and those loops are slow and small.
+- **Live is shown by what moves, not by a dot.** The river flows, numbers roll, rows stream in: a
+  dot that only ever says "fine" is one more thing to read. A page has no live dot; the shell shows
+  one only while the link to a control plane is down, and a domain its dot only when it needs
+  saying.
+- **A refresh never flickers.** What is on screen stays, at full strength, until what replaces it
+  has arrived; only a new question may dim the old answer.
 - **No bounce, no overshoot, no parallax.** Easing is `--ease-out` for arrivals, `--ease-in-out`
   for loops.
 - **Reduced motion stops all of it** (`prefers-reduced-motion`; `usePrefersReducedMotion` for motion
@@ -274,6 +280,9 @@ Rules:
 - **Formats** (`lib/format.ts`): `formatCount` compacts at 10,000 (`1.2M`); `formatExact` for
   anything someone compares or copies. Rates read "75,312 a second" in a readout and `/s` in dense
   rows. Bytes use `formatBytes` (SI).
+- **A distribution over time is columns on a true time axis** — empty stretches left empty — binned
+  as finely as the width allows, with the line above it reading out the whole or the column pointed
+  at (a table's partitions, §11.10). What matters is emphasised by strength, not by a state's colour.
 - **Charts are line-first:** a 2 px line, a faint area, no gridlines where the axis labels
   suffice, a crosshair to scrub any moment, the value first in the readout. Throughput and lag are
   Current. A state's colour never paints a series.
@@ -385,7 +394,7 @@ The glossary: terms the console says differently from the system.
 | `CommandMenu` | `components/CommandMenu.tsx` | ⌘K (§10.10) |
 | `River` | `features/overview/River.tsx` | The fleet as strands from Kafka to the lake (§10.8) |
 | `MaterializationRow` | `features/materializations/MaterializationRow.tsx` | A materialization in a list: glyph, name, state, one fact |
-| `LiveIndicator` | `components/AppShell.tsx` | A dot that beats once per frame, and the words |
+| `LiveIndicator` | `components/AppShell.tsx` | The link to a control plane, said only while it is down: a Buoy dot and the words |
 | `Button` | `components/ui/primitives.tsx` | `primary` (ink, one per screen), `secondary`, `ghost`, `danger` |
 | `Panel`, `PanelHeader`, `Badge`, `Input`, `Field`, `SegmentedControl`, `EmptyState`, `Skeleton`, `KeyValue` | `components/ui/primitives.tsx` | Building blocks |
 | `Dialog`, `Popover`, `ToastProvider` | `components/ui/` | Floating surfaces |

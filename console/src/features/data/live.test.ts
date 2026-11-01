@@ -89,7 +89,7 @@ describe('when Live asks for the tail', () => {
     assert.equal(liveHold({ ...following, run: run({ state: 'cancelled' }) }), 'stopped');
   });
 
-  it('stops when the tail is off for good, when the session is refused, or when Live is off', () => {
+  it('stops when the tail is off for good, when the session is refused, or when Streaming is off', () => {
     assert.equal(liveHold({ ...following, run: run({ tail: tail({ status: 'off', reason: 'not_configured' }) }) }), 'tail_off');
     assert.equal(liveHold({ ...following, run: run(), authRefused: true }), 'signed_out');
     assert.equal(liveHold({ ...following, run: run(), enabled: false }), 'off');
@@ -193,13 +193,13 @@ describe('what the Data tab says of the tail', () => {
 
   it('says nothing while Live follows, and why it is not following otherwise', () => {
     assert.equal(tailNotice(tail(), live), null, 'the toggle’s pulsing dot says it');
-    assert.equal(tailNotice(tail(), { ...live, hold: 'hidden' })?.text, 'Live paused while this tab is hidden');
-    assert.equal(tailNotice(tail(), { ...live, hold: 'inspecting' })?.text, 'Live paused while a row is open');
-    assert.equal(tailNotice(tail(), { ...live, hold: 'paged' })?.text, 'Live paused past the first page');
+    assert.equal(tailNotice(tail(), { ...live, hold: 'hidden' })?.text, 'Streaming paused while this tab is hidden');
+    assert.equal(tailNotice(tail(), { ...live, hold: 'inspecting' })?.text, 'Streaming paused while a row is open');
+    assert.equal(tailNotice(tail(), { ...live, hold: 'paged' })?.text, 'Streaming paused past the first page');
     assert.equal(tailNotice(tail(), { ...live, hold: 'range_ended' })?.text, 'This time range has ended');
     assert.deepEqual(tailNotice(tail(), { ...live, hold: 'signed_out' }), {
       tone: 'warning',
-      text: 'Live stopped: sign in again to follow new records',
+      text: 'Streaming stopped: sign in again to follow new records',
       detail: null,
       peek: false,
     });
@@ -208,15 +208,15 @@ describe('what the Data tab says of the tail', () => {
   });
 
   it('tells each reason Live is short apart, in plain words', () => {
-    assert.deepEqual([tailNotice(tail({ status: 'unavailable', reason: 'not_ready', rows: 0 }), live)?.tone, tailNotice(tail({ status: 'unavailable', reason: 'not_ready', rows: 0 }), live)?.text], ['muted', 'Live is starting']);
-    assert.equal(tailNotice(tail({ status: 'unavailable', reason: 'rebalancing', rows: 0 }), live)?.text, 'Live is reconnecting');
+    assert.deepEqual([tailNotice(tail({ status: 'unavailable', reason: 'not_ready', rows: 0 }), live)?.tone, tailNotice(tail({ status: 'unavailable', reason: 'not_ready', rows: 0 }), live)?.text], ['muted', 'Streaming is starting']);
+    assert.equal(tailNotice(tail({ status: 'unavailable', reason: 'rebalancing', rows: 0 }), live)?.text, 'Streaming is reconnecting');
     const unreachable = tailNotice(tail({ status: 'unavailable', reason: 'unreachable', rows: 0 }), live);
-    assert.deepEqual([unreachable?.tone, unreachable?.text], ['warning', 'Live is unavailable']);
+    assert.deepEqual([unreachable?.tone, unreachable?.text], ['warning', 'Streaming is unavailable']);
     const truncated = tailNotice(tail({ status: 'truncated', behind: 4_000, rows: 1_000 }), live);
     assert.deepEqual([truncated?.tone, truncated?.text], ['warning', '4,000 records behind'], 'the records not shown');
     assert.equal(tailNotice(tail({ settling: 2 }), live)?.text, '2 rows have new fields');
     assert.equal(tailNotice(tail({ settling: 1 }), live)?.text, '1 row has new fields');
-    assert.equal(tailNotice(tail({ lagMs: 7_400 }), live)?.text, 'Live is 7 s behind');
+    assert.equal(tailNotice(tail({ lagMs: 7_400 }), live)?.text, 'Streaming is 7 s behind');
   });
 
   it('never names the parts of the system', () => {
@@ -260,8 +260,8 @@ describe('what the Data tab says of the tail', () => {
     assert.equal(tailNotice(tail({ status: 'off', reason: 'not_configured' }), live), null);
     assert.equal(tailNotice(tail({ status: 'off', reason: 'materialization' }), { ...live, live: false }), null);
     const switched = tailNotice(tail({ status: 'off', reason: 'control_plane', message: 'Live tail is off for every materialization (Settings › Live tail).' }), live);
-    assert.deepEqual([switched?.tone, switched?.text, switched?.detail], ['muted', 'Live is off', 'Live tail is off for every materialization (Settings › Live tail).']);
+    assert.deepEqual([switched?.tone, switched?.text, switched?.detail], ['muted', 'Streaming is off', 'Live tail is off for every materialization (Settings › Live tail).']);
     const notTailed = tailNotice(tail({ status: 'unavailable', reason: 'not_tailed', rows: 0 }), live);
-    assert.deepEqual([notTailed?.tone, notTailed?.text], ['muted', 'Live is starting']);
+    assert.deepEqual([notTailed?.tone, notTailed?.text], ['muted', 'Streaming is starting']);
   });
 });

@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, Database, Info, LayoutGrid, Layers, LogIn, LogOut, PanelLeftClose, PanelLeftOpen, Search, Settings, UserRound, Waves, X } from 'lucide-react';
+import { Box, Check, ChevronsUpDown, Database, Info, Layers, LayoutGrid, LogIn, LogOut, PanelLeftClose, PanelLeftOpen, Search, Settings, UserRound, Waves, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 
@@ -420,10 +420,16 @@ function PinnedItems({ collapsed }: { collapsed: boolean }): ReactNode {
   );
 }
 
-/** The fleet's own liveness, in the shell, for every page. */
+/**
+ * The console's link to its control planes, in the shell — said only when something is wrong.
+ * While it is live there is nothing to say: the pages' own numbers and the streaming rows say it,
+ * and a dot that only ever said "fine" was one more green dot among too many.
+ */
 function ShellLive({ compact }: { compact: boolean }): ReactNode {
   const { data, status } = useFleet(null);
-  return <LiveIndicator status={status} generatedAt={data?.generatedAt ?? null} error={data?.controlPlaneError ?? null} compact={compact} />;
+  const error = data?.controlPlaneError ?? null;
+  if (status === 'live' && !error) return null;
+  return <LiveIndicator status={status} generatedAt={data?.generatedAt ?? null} error={error} compact={compact} />;
 }
 
 /** On a phone: the mark, and the account, with the page beneath. */
@@ -529,7 +535,14 @@ function DomainSwitcher({ domains, scope, collapsed }: { domains: ConsoleDomain[
               collapsed ? 'justify-center px-0' : 'px-2.5',
             )}
           >
-            {current ? <DomainDot domain={current} /> : <Layers className="size-4 shrink-0 text-[var(--color-ink-muted)]" />}
+            {/* A domain's dot only when it needs saying: unreachable, reconnecting, or not usable. */}
+            {!current ? (
+              <Layers className="size-4 shrink-0 text-[var(--color-ink-muted)]" />
+            ) : current.status === 'ok' && current.connected ? (
+              <Box className="size-4 shrink-0 text-[var(--color-ink-muted)]" />
+            ) : (
+              <DomainDot domain={current} />
+            )}
             {collapsed ? null : <span className="min-w-0 flex-1 truncate text-left">{current?.name ?? 'All domains'}</span>}
             {collapsed ? null : <ChevronsUpDown className="size-3.5 shrink-0 text-[var(--color-ink-faint)]" />}
           </button>

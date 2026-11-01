@@ -65,7 +65,7 @@ where they were going, and shows a signed-in person without the permission an **
 page naming the domain. Settings checks each section's own permission instead (§9.7). An unknown
 domain in the path shows a page saying so; a misconfigured one, why it is not available.
 
-The shell's **domain switcher** (*All domains*, then each domain with its live dot) keeps the section
+The shell's **domain switcher** (*All domains*, then each domain, with a dot only when it is not live) keeps the section
 open: from `/d/domain_a/datasets` to `/datasets` or `/d/domain_b/datasets`; search is always the
 console's own. ⌘K or Ctrl+K opens search from anywhere.
 
@@ -234,7 +234,7 @@ so the UI never renders `NaN` or `undefined`.
 | Time range, filters, order, statement, page, page size, visible and pinned columns, the run on screen | `DataTab` state, mirrored to the query string | Survives reload — a reload re-attaches to the same run — and is shareable as a link |
 | The run's snapshot | `useRun`, fed by the run's event stream (polling if it drops) | Lost on navigation; the run itself keeps going server-side until it finishes |
 | Pages of a run | TanStack Query, keyed by run, offset and readiness | Complete pages never change, so they are cached for good and the next one is prefetched |
-| SQL editor height, column rail width | `localStorage` (`console.data.sqlHeight`, `console.data.railWidth`) | Survives reload; guarded for private browsing |
+| SQL editor height, column rail width, column rail open | `localStorage` (`console.data.sqlHeight`, `console.data.railWidth`, `console.data.columnsOpen`) | Survives reload; guarded for private browsing |
 | JSON layout for exports and the row drawer's copy | `localStorage` (`console.data.jsonShape`: `nested` or `flat`) | Survives reload; nested when unset |
 | Consumer-lag window, throughput metric | `StateReadout` and `DiagnosticsPanels` local state | Lost on navigation |
 | Search text, recently deleted | `MaterializationsPage` local state | Lost on navigation |
@@ -266,6 +266,8 @@ features/
   overview/OverviewPage.tsx                 Is everything flowing? The readout, the river, what needs you, the rows
   overview/River.tsx                        The fleet as strands from Kafka through Midstream to the lake
   tables/TablePage.tsx                      A table: its Data, Schema, History and Connect tabs, under its dataset
+  tables/TableConnect.tsx                   A table's Connect tab: the connection, its partitions, its properties
+  tables/PartitionsPanel.tsx                Its partitions as columns on a time axis (partitions.ts bins them)
   overview/riverEngine.ts                   The river's particles, how they move, and its bed (2D canvas)
   overview/riverLake.ts                     The lake: its current, settled rows and moving surface
   overview/riverWater.ts                    The river's water: every particle a comet, drawn with WebGL 2

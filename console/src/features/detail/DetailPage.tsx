@@ -7,7 +7,7 @@ import { DetailOverviewTab } from './MaterializationOverview';
 import { RuntimeTab } from './RuntimeTab';
 import { canDelete, canEdit, canResume, canStop, useLifecycleActions } from '../materializations/actions';
 import { ProtectionTab } from '../protection/ProtectionTab';
-import { LiveIndicator, PageBody, PageHeader } from '@/components/AppShell';
+import { PageBody, PageHeader } from '@/components/AppShell';
 import { StatusPill } from '@/components/Status';
 import { Popover } from '@/components/ui/Popover';
 import { Dialog } from '@/components/ui/Dialog';
@@ -49,7 +49,7 @@ export function DetailPage(): ReactNode {
   const { materializationId, tab } = useParams<{ materializationId: string; tab?: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { data, status } = useDetailStream(materializationId ?? '');
+  const { data } = useDetailStream(materializationId ?? '');
   const { run, pending } = useLifecycleActions();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -101,10 +101,7 @@ export function DetailPage(): ReactNode {
         title={detail ? displayName(detail.materialization) : materializationId}
         meta={
           detail && activeTab !== '' ? (
-            <>
-              <StatusPill status={headerStatus(detail)} animate={false} />
-              <LiveIndicator status={status} generatedAt={data?.generatedAt} error={data?.error ?? null} compact />
-            </>
+            <StatusPill status={headerStatus(detail)} animate={false} />
           ) : null
         }
         actions={

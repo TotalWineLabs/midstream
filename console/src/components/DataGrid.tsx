@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, Maximize2 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { ColumnLabelText } from '@/features/data/ColumnLabelText';
 import { ProtectedMark } from '@/features/protection/ProtectionSummary';
@@ -43,6 +43,13 @@ export interface DataGridProps {
   live?: ReadonlySet<number>;
   /** The waterline: drawn before row `at` (`rows.length` for after the last), saying where commits reach. */
   waterline?: { at: number; label: ReactNode; title?: string } | null;
+  /**
+   * A row's own identity, when it has one — a record's Kafka partition and offset. Rows keyed by it
+   * keep their place on screen when newer ones arrive above them, and only `fresh` ones are new.
+   */
+  rowKey?: (row: Record<string, unknown>) => string | null;
+  /** Rows, by `rowKey`, that just arrived: they settle in with Current, once. */
+  fresh?: ReadonlySet<string>;
 }
 
 /**
@@ -73,9 +80,18 @@ export function DataGrid({
   height,
   live,
   waterline,
+  rowKey,
+  fresh,
 }: DataGridProps): ReactNode {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [scroll, setScroll] = useState({ top: 0, left: 0 });
+  const keys = useMemo(() => (rowKey ? rows.map(rowKey) : []), [rows, rowKey]);
+  // The waterline takes its own strip: every row past it sits that much lower.
+  const line = waterline && waterline.at >= 0 && waterline.at <= rows.length ? waterline.at : null;
+  const rowTop = useCallback((index: number) => index * ROW_HEIGHT + (line !== null && index >= line ? WATERLINE_HEIGHT : 0), [line]);
+  // The row at the top of the view, and how far into it the view starts: where to hold it when
+  // rows arrive above it.
+  const anchor = useRef<{ key: string; delta: number } | null>(null);
   // Instants render in the reader's zone, named once in their column header.
   const zone = useMemo(() => localZone(), []);
   const [measured, setMeasured] = useState({ width: 0, height: 0 });
@@ -85,6 +101,35 @@ export function DataGrid({
     const element = viewportRef.current;
     if (element) setScroll({ top: element.scrollTop, left: element.scrollLeft });
   }, []);
+
+  // Remember which row is at the top of the view whenever the view or the rows move.
+  useEffect(() => {
+    const element = viewportRef.current;
+    if (!element || keys.length === 0) return;
+    const top = element.scrollTop;
+    let index = Math.min(keys.length - 1, Math.max(0, Math.floor(top / ROW_HEIGHT)));
+    while (index > 0 && rowTop(index) > top) index -= 1;
+    const key = keys[index];
+    anchor.current = key ? { key, delta: top - rowTop(index) } : null;
+  }, [scroll.top, keys, rowTop]);
+
+  /*
+   * Newer rows arriving above the view push it down unless it is held: scrolled into the rows, the
+   * row someone is reading stays where it is, and the new ones wait above it. At the very top, the
+   * view stays at the top and the new rows come into it.
+   */
+  useLayoutEffect(() => {
+    const element = viewportRef.current;
+    const held = anchor.current;
+    if (!element || !held || element.scrollTop === 0) return;
+    const index = keys.indexOf(held.key);
+    if (index < 0) return;
+    const top = rowTop(index) + held.delta;
+    if (Math.abs(top - element.scrollTop) >= 1) {
+      element.scrollTop = top;
+      setScroll({ top: element.scrollTop, left: element.scrollLeft });
+    }
+  }, [keys, rowTop]);
 
   useEffect(() => {
     const element = viewportRef.current;
@@ -177,8 +222,6 @@ export function DataGrid({
 
   const isPinned = (index: number): boolean => index === pinnedIndex;
   const spacer = (key: string): ReactNode => <div key={key} aria-hidden />;
-  // The waterline takes its own strip: every row past it sits that much lower.
-  const line = waterline && waterline.at >= 0 && waterline.at <= rows.length ? waterline.at : null;
   const waterlineStrip =
     line !== null && waterline ? (
       <div
@@ -287,12 +330,14 @@ export function DataGrid({
                 {rows.slice(start, end).map((row, offset) => {
                   const index = start + offset;
                   const isLive = live?.has(index) ?? false;
+                  const key = keys[index] ?? null;
                   const shown = (
                     <div
-                      key={index}
+                      key={key ?? index}
                       className={cn(
                         'group/row grid border-b border-[var(--color-line)] last:border-b-0 hover:bg-[var(--color-raised)]',
                         isLive && LIVE_GROUND,
+                        key !== null && fresh?.has(key) && 'row-arrive',
                       )}
                       style={{ gridTemplateColumns: layout.template, height: ROW_HEIGHT }}
                     >

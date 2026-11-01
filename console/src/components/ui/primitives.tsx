@@ -235,7 +235,8 @@ export function SegmentedControl<T extends string>({
     <div
       role="tablist"
       className={cn(
-        'inline-flex items-center gap-0.5 rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-raised)] p-0.5',
+        // Never wraps a label: narrower than its options, it scrolls sideways instead.
+        'inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-raised)] p-0.5',
         className,
       )}
     >
@@ -247,7 +248,7 @@ export function SegmentedControl<T extends string>({
           aria-selected={option.value === value}
           onClick={() => onChange(option.value)}
           className={cn(
-            'rounded-[6px] px-2.5 py-1 text-[12px] font-medium transition-colors',
+            'shrink-0 rounded-[6px] px-2.5 py-1 text-[12px] font-medium whitespace-nowrap transition-colors',
             option.value === value
               ? 'bg-[var(--color-shelf)] text-[var(--color-ink)] shadow-sm'
               : 'text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]',

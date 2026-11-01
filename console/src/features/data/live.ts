@@ -100,7 +100,7 @@ export function rangeEnded(range: TimeRange, now: number = Date.now()): boolean 
 
 /** Why Live is not asking for the tail just now, or null when it is. */
 export type LiveHold =
-  /** Live is off, or the materialization has no live tail. */
+  /** Streaming is off, or the materialization has no live tail. */
   | 'off'
   /** The tab is hidden: Live waits until it is seen again. */
   | 'hidden'
@@ -195,7 +195,7 @@ export interface TailNotice {
 export const LAG_NOTICE_MS = 5_000;
 
 /**
- * What the Data tab says of a run's tail under Live, or of its tail alone when Live is off.
+ * What the Data tab says of a run's tail under Live, or of its tail alone when Streaming is off.
  *
  * Nothing while Live simply follows: the toggle's pulsing dot says so. The words are the reader's,
  * never the system's: how far behind the view is, not which part of the system is behind.
@@ -212,7 +212,7 @@ export function tailNotice(
   const { live, hold } = options;
   if (!tail || tail.status === 'off') {
     // Switched off while Live follows it: said until the toggle goes too (the config is read again each minute).
-    if (live && switchedOff(tail)) return { tone: 'muted', text: 'Live is off', detail: tail?.message ?? null, peek: false };
+    if (live && switchedOff(tail)) return { tone: 'muted', text: 'Streaming is off', detail: tail?.message ?? null, peek: false };
     return null;
   }
   switch (tail.status) {
@@ -226,10 +226,10 @@ export function tailNotice(
       };
     case 'unavailable':
       if (tail.reason === 'not_tailed' || tail.reason === 'not_ready') {
-        return { tone: 'muted', text: 'Live is starting', detail: tail.message ?? null, peek: false };
+        return { tone: 'muted', text: 'Streaming is starting', detail: tail.message ?? null, peek: false };
       }
-      if (tail.reason === 'rebalancing') return { tone: 'muted', text: 'Live is reconnecting', detail: tail.message ?? null, peek: false };
-      return { tone: 'warning', text: 'Live is unavailable', detail: tail.message ?? 'Showing the rows saved so far.', peek: false };
+      if (tail.reason === 'rebalancing') return { tone: 'muted', text: 'Streaming is reconnecting', detail: tail.message ?? null, peek: false };
+      return { tone: 'warning', text: 'Streaming is unavailable', detail: tail.message ?? 'Showing the rows saved so far.', peek: false };
     case 'truncated':
       return {
         tone: 'warning',
@@ -249,14 +249,14 @@ export function tailNotice(
         };
       }
       if (tail.lagMs !== null && tail.lagMs >= LAG_NOTICE_MS) {
-        return { tone: 'muted', text: `Live is ${Math.round(tail.lagMs / 1000)} s behind`, detail: null, peek: false };
+        return { tone: 'muted', text: `Streaming is ${Math.round(tail.lagMs / 1000)} s behind`, detail: null, peek: false };
       }
       if (!live) return null;
       if (hold === 'range_ended') return { tone: 'muted', text: 'This time range has ended', detail: 'Nothing new can arrive in it.', peek: false };
-      if (hold === 'hidden') return { tone: 'muted', text: 'Live paused while this tab is hidden', detail: null, peek: false };
-      if (hold === 'inspecting') return { tone: 'muted', text: 'Live paused while a row is open', detail: null, peek: false };
-      if (hold === 'paged') return { tone: 'muted', text: 'Live paused past the first page', detail: 'Go back to the first page to follow new records.', peek: false };
-      if (hold === 'signed_out') return { tone: 'warning', text: 'Live stopped: sign in again to follow new records', detail: null, peek: false };
+      if (hold === 'hidden') return { tone: 'muted', text: 'Streaming paused while this tab is hidden', detail: null, peek: false };
+      if (hold === 'inspecting') return { tone: 'muted', text: 'Streaming paused while a row is open', detail: null, peek: false };
+      if (hold === 'paged') return { tone: 'muted', text: 'Streaming paused past the first page', detail: 'Go back to the first page to follow new records.', peek: false };
+      if (hold === 'signed_out') return { tone: 'warning', text: 'Streaming stopped: sign in again to follow new records', detail: null, peek: false };
       return null;
     }
   }

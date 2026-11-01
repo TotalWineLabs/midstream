@@ -47,6 +47,7 @@ export function StatusGlyph({
   progress,
   animate = false,
   size = 12,
+  color: tint,
   className,
 }: {
   status: Pick<Status, 'kind' | 'moving'>;
@@ -54,10 +55,12 @@ export function StatusGlyph({
   progress?: number | null;
   animate?: boolean;
   size?: number;
+  /** Another colour for the shape — a quieter one, for a switch that is off. */
+  color?: string;
   className?: string;
 }): ReactNode {
   const fade = useId();
-  const color = COLOR[status.kind];
+  const color = tint ?? COLOR[status.kind];
   const box = { width: size, height: size, viewBox: '0 0 12 12', className: cn('shrink-0', className), 'aria-hidden': true } as const;
 
   if (status.kind === 'flowing') {

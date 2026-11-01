@@ -1,36 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronDown, Copy, Loader2, Play, TriangleAlert } from 'lucide-react';
+import { ChevronDown, Loader2, Play, TriangleAlert } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 import { reprotectCounts } from '../protection/protection';
-import { ENGINES, snippet, type Engine } from './connect';
 import { PageBody } from '@/components/AppShell';
 import { RelativeTime } from '@/components/Inline';
 import { StatCard } from '@/components/StatCard';
 import { useToast } from '@/components/ui/Toast';
-import { Badge, Button, EmptyState, KeyValue, Panel, PanelHeader, SegmentedControl, Skeleton } from '@/components/ui/primitives';
+import { Badge, Button, EmptyState, Panel, PanelHeader, Skeleton } from '@/components/ui/primitives';
 import { ApiError } from '@/lib/api';
-import { useAuth, useCan } from '@/lib/auth';
+import { useCan } from '@/lib/auth';
 import { cn } from '@/lib/cn';
-import { formatBytes, formatCount, formatDuration, formatExact, formatTimestamp, humanize, shortSnapshotId } from '@/lib/format';
+import { formatBytes, formatDuration, formatExact, formatTimestamp, humanize } from '@/lib/format';
 import { useApi, useDomainPath } from '@/lib/domains';
 import { tablePath } from '@/lib/paths';
-import type {
-  CatalogConnection,
-  CpMaintenanceRun,
-  CpTable,
-  CpTableSpec,
-  DetailSnapshot,
-  MaintenanceJob,
-  TableMetadataView,
-  TablePartitionRow,
-  TableSnapshotRow,
-  TableStorage,
-} from '@shared/types';
+import type { CpMaintenanceRun, CpTable, CpTableSpec, DetailSnapshot, MaintenanceJob, TableMetadataView, TableSnapshotRow } from '@shared/types';
 
 /** A table's record and its metadata, read from the control plane and from the table itself. */
-function useTableDetail(materializationId: string, table: string) {
+export function useTableDetail(materializationId: string, table: string) {
   const api = useApi();
   return useQuery({
     queryKey: ['table', materializationId, table],
@@ -40,7 +28,7 @@ function useTableDetail(materializationId: string, table: string) {
 }
 
 /** What a tab says while its table is read, when it cannot be, and before it exists; null once it can show it. */
-function readState(query: ReturnType<typeof useTableDetail>, table: CpTableSpec): ReactNode | null {
+export function readState(query: ReturnType<typeof useTableDetail>, table: CpTableSpec): ReactNode | null {
   if (query.isPending) {
     return (
       <PageBody className="space-y-4">
@@ -106,23 +94,6 @@ export function TableHistoryTab({ snapshot, table }: { snapshot: DetailSnapshot;
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <SnapshotsPanel table={table} metadata={metadata} />
         <MaintenancePanel materializationId={materializationId} table={table.name} several={several} record={record} />
-      </div>
-    </PageBody>
-  );
-}
-
-/** How to read a table from another engine, and how it is laid out: its partitions and its properties. */
-export function TableConnectTab({ snapshot, table }: { snapshot: DetailSnapshot; table: CpTableSpec }): ReactNode {
-  const query = useTableDetail(snapshot.materializationId, table.name);
-  const state = readState(query, table);
-  if (state || !query.data) return state;
-  const { record, metadata, connection, storage } = query.data;
-  return (
-    <PageBody className="space-y-6">
-      <ConnectPanel connection={connection} record={record} metadata={metadata} table={table} storage={storage} />
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <PartitionsPanel metadata={metadata} />
-        <PropertiesPanel record={record} metadata={metadata} />
       </div>
     </PageBody>
   );
@@ -442,205 +413,4 @@ function countsText(run: CpMaintenanceRun): string {
     parts.push(...reprotectCounts(run));
   }
   return parts.join(' · ');
-}
-
-function PartitionsPanel({ metadata }: { metadata: TableMetadataView | null }): ReactNode {
-  const [measure, setMeasure] = useState<'files' | 'bytes'>('files');
-  const partitions = metadata?.partitions ?? [];
-  const peak = Math.max(1, ...partitions.map((row) => (measure === 'files' ? row.files : row.bytes)));
-  const due = partitions.filter((row) => row.compactionDue).length;
-  return (
-    <Panel className="overflow-hidden">
-      <PanelHeader
-        title="Files by partition"
-        description={
-          metadata
-            ? `${formatExact(partitions.length)} ${partitions.length === 1 ? 'partition' : 'partitions'} · files under ${formatBytes(metadata.smallFileBytes)} count as small${due > 0 ? ` · ${due} due for compaction` : ''}`
-            : 'Read from the table itself, which this console cannot reach right now.'
-        }
-        actions={
-          <SegmentedControl
-            value={measure}
-            onChange={setMeasure}
-            options={[
-              { value: 'files', label: 'Files' },
-              { value: 'bytes', label: 'Bytes' },
-            ]}
-          />
-        }
-      />
-      {partitions.length === 0 ? (
-        <EmptyState title="No data files" description="Partitions appear with the first commit." />
-      ) : (
-        <ul className="max-h-[360px] space-y-1.5 overflow-y-auto px-5 py-4">
-          {partitions.map((row) => (
-            <PartitionBar key={row.key ?? 'none'} row={row} measure={measure} peak={peak} />
-          ))}
-        </ul>
-      )}
-    </Panel>
-  );
-}
-
-function PartitionBar({ row, measure, peak }: { row: TablePartitionRow; measure: 'files' | 'bytes'; peak: number }): ReactNode {
-  const value = measure === 'files' ? row.files : row.bytes;
-  const smallShare = row.files > 0 ? row.smallFiles / row.files : 0;
-  return (
-    <li className="grid grid-cols-[110px_minmax(0,1fr)_120px] items-center gap-3 text-[12px]">
-      <span className="numeric truncate text-[var(--color-ink-muted)]">
-        {row.key === null ? 'unpartitioned' : row.key === '__null__' ? 'no timestamp' : row.key}
-      </span>
-      <span
-        className="relative h-3 overflow-hidden rounded-sm bg-[var(--color-raised)]"
-        title={`${formatExact(row.files)} files (${formatExact(row.smallFiles)} small) · ${formatBytes(row.bytes)} · ${formatExact(row.records)} rows`}
-      >
-        <span className="absolute inset-y-0 left-0 rounded-sm bg-[var(--color-accent)]" style={{ width: `${Math.max(2, (value / peak) * 100)}%`, opacity: 0.35 + 0.65 * (1 - smallShare) }} />
-      </span>
-      <span className="numeric flex items-center justify-end gap-1.5 text-right">
-        {measure === 'files' ? formatCount(row.files) : formatBytes(row.bytes)}
-        {row.compactionDue ? (
-          <Badge tone="paused" title="Enough small files that the next compaction pass takes this partition.">
-            compact
-          </Badge>
-        ) : null}
-      </span>
-    </li>
-  );
-}
-
-function PropertiesPanel({ record, metadata }: { record: CpTable | null; metadata: TableMetadataView | null }): ReactNode {
-  const [showAll, setShowAll] = useState(false);
-  const properties = Object.entries(metadata?.properties ?? {});
-  const shown = showAll ? properties : properties.filter(([key]) => !key.startsWith('commit.') && !key.startsWith('write.metadata'));
-  return (
-    <Panel className="overflow-hidden">
-      <PanelHeader title="Properties" description="How the table is defined, as engines read it." />
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-4 p-5">
-        <KeyValue label="Identifier" mono className="col-span-2">
-          {record?.identifier ?? '—'}
-        </KeyValue>
-        <KeyValue label="Location" mono className="col-span-2">
-          <span className="block break-all whitespace-normal">{metadata?.location ?? record?.location ?? '—'}</span>
-        </KeyValue>
-        <KeyValue label="Metadata file" mono className="col-span-2">
-          <span className="block break-all whitespace-normal">{metadata?.metadataLocation ?? record?.metadata_location ?? '—'}</span>
-        </KeyValue>
-        <KeyValue label="Format">{metadata ? `Iceberg v${metadata.formatVersion}` : '—'}</KeyValue>
-        <KeyValue label="Schema">{metadata ? `schema ${metadata.currentSchemaId}` : record?.schema_id != null ? `schema ${record.schema_id}` : '—'}</KeyValue>
-        <KeyValue label="Partition spec" mono>
-          {metadata?.partitionSpec ?? '—'}
-        </KeyValue>
-        <KeyValue label="Sort order" mono>
-          {metadata?.sortOrder ?? '—'}
-        </KeyValue>
-        <KeyValue label="Current snapshot" mono>
-          <span title={metadata?.currentSnapshotId ?? undefined}>{metadata?.currentSnapshotId ? shortSnapshotId(metadata.currentSnapshotId) : '—'}</span>
-        </KeyValue>
-        <KeyValue label="Table UUID" mono>
-          {metadata?.tableUuid ?? record?.table_uuid ?? '—'}
-        </KeyValue>
-      </dl>
-      {properties.length > 0 ? (
-        <div className="border-t border-[var(--color-line)]">
-          <ul className="divide-y divide-[var(--color-line)]">
-            {shown.map(([key, value]) => (
-              <li key={key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-3 px-5 py-1.5 text-[12px]">
-                <span className="numeric truncate text-[var(--color-ink-muted)]" title={key}>
-                  {key}
-                </span>
-                <span className="numeric truncate" title={value}>
-                  {value}
-                </span>
-              </li>
-            ))}
-          </ul>
-          {shown.length < properties.length || showAll ? (
-            <button
-              type="button"
-              onClick={() => setShowAll((current) => !current)}
-              className="w-full border-t border-[var(--color-line)] py-2 text-[12px] text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]"
-            >
-              {showAll ? 'Hide commit and metadata settings' : `Show all ${properties.length} properties`}
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-    </Panel>
-  );
-}
-
-function ConnectPanel({
-  connection,
-  record,
-  metadata,
-  table,
-  storage,
-}: {
-  connection: CatalogConnection | null;
-  record: CpTable | null;
-  metadata: TableMetadataView | null;
-  /** The table, in its dataset: its namespace on the catalog. */
-  table: CpTableSpec;
-  /** The console's storage profile for its location: what the data-file half of a snippet says. */
-  storage: TableStorage | null;
-}): ReactNode {
-  const { can } = useAuth();
-  const [engine, setEngine] = useState<Engine>('duckdb');
-  const [copied, setCopied] = useState(false);
-  // The catalog lists a dataset's tables to those who may read them through it.
-  if (!can('catalog.read', table.dataset_id) || !connection) return null;
-  const location = metadata?.location ?? record?.location ?? '<table location>';
-  const text = snippet(engine, connection, table.dataset, table.name, location, storage);
-  return (
-    <Panel className="overflow-hidden">
-      <PanelHeader
-        title="Connect"
-        description={
-          <>
-            Read <code className="numeric">lake.{table.dataset}.{table.name}</code> from another engine through the Iceberg REST
-            catalog at <code className="numeric">{connection.uri}</code>, and join it with any table you may read, in any dataset.
-            Make an access token under{' '}
-            <Link to="/settings/account" className="text-[var(--color-accent)] hover:underline">
-              Your account
-            </Link>
-            .
-          </>
-        }
-        actions={<SegmentedControl value={engine} onChange={setEngine} options={ENGINES} />}
-      />
-      {!connection.enabled ? (
-        <p className="border-b border-[var(--color-line)] px-5 py-2.5 text-[12px] text-[var(--color-phase-paused)]">
-          The REST catalog is turned off (Settings › Iceberg catalog); engines can still read the table by path.
-        </p>
-      ) : null}
-      {storage === null ? (
-        <p className="border-b border-[var(--color-line)] px-5 py-2.5 text-[12px] text-[var(--color-ink-muted)]">
-          This console has no storage profile for the table’s location, so the snippet names no endpoint, region or account
-          of its own: add your storage’s where it needs them.
-        </p>
-      ) : null}
-      {!connection.configured ? (
-        <p className="border-b border-[var(--color-line)] px-5 py-2.5 text-[12px] text-[var(--color-ink-muted)]">
-          This is the address the console reaches the control plane at. Engines outside the cluster need the one set in
-          CONTROL_PLANE_CATALOG_BASE_URL.
-        </p>
-      ) : null}
-      <div className="relative">
-        <pre className="numeric overflow-x-auto bg-[var(--color-raised)] px-5 py-4 text-[12px] leading-relaxed">{text}</pre>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="absolute top-2 right-2"
-          onClick={() => {
-            void navigator.clipboard.writeText(text);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1_500);
-          }}
-        >
-          {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-          {copied ? 'Copied' : 'Copy'}
-        </Button>
-      </div>
-    </Panel>
-  );
 }
