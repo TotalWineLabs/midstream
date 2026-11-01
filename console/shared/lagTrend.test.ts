@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { catchUpProgress, formatEta, lagTrend } from './lagTrend.ts';
+import { backlogProgress, catchUpProgress, formatEta, lagTrend } from './lagTrend.ts';
 
 const minute = 60_000;
 const series = (lags: number[], every = minute) => lags.map((lag, index) => ({ t: index * every, lag }));
@@ -88,6 +88,19 @@ describe('catchUpProgress', () => {
       { t: 3 * minute, lag: 100_000, arrived: 30 },
     ];
     assert.equal(catchUpProgress(history), 0.5);
+  });
+
+  it('does not guess a peak it never saw', () => {
+    // A console started mid-backfill: every measurement is above the floor.
+    const history = [
+      { t: 0, lag: 62_500_000, arrived: 0 },
+      { t: minute, lag: 61_300_000, arrived: 60 },
+      { t: 2 * minute, lag: 60_100_000, arrived: 120 },
+    ];
+    assert.equal(catchUpProgress(history), null);
+    // Then the rows say it: 51.6M in the table of the 108.6M the topic holds.
+    assert.ok(Math.abs((backlogProgress(history, 51_600_000, 57_000_000) as number) - 0.475) < 0.001);
+    assert.equal(backlogProgress(history, null, 57_000_000), null);
   });
 
   it('has nothing to say without a backlog', () => {

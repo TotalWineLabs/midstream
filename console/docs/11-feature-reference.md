@@ -108,7 +108,7 @@ datasets, and one fact in the state's tint (`rowFact`):
 | State | Fact |
 |---|---|
 | Flowing | Rows a second, `0.1/s`, `6,240/s` |
-| Catching up | How far it has come from the backlog's peak and the time left, `62% · 1h 50m left` (`catchUp`, `lagEtaMs` from `shared/lagTrend.ts`) |
+| Catching up | How far it has come and the time left, `62% · 1h 50m left` (`catchUp`, `lagEtaMs` from `shared/lagTrend.ts`: from the backlog's peak, or by rows when the history began mid-backlog) |
 | Stopped | Rows committed |
 | Others | None: the reason beside the word says it |
 
@@ -327,7 +327,7 @@ leads; everything about how it runs is in Diagnostics (§11.6).
 | State | Leads with | Context | Chart |
 |---|---|---|---|
 | Flowing | Rows a second, rolling as it changes | **Complete through** the earliest of the tables' `validThrough`, or the last commit | Rows a second, the last 30 minutes |
-| Catching up | Records behind | *Caught up around 4:30 PM · 62% there · falling 5,914 a second*: the drain's end at its current pace, how far from the backlog's peak (`catchUpProgress`), and the rate | Records behind over **15m / 1h / 6h**, on an axis fitted to the values |
+| Catching up | Records behind | *Caught up around 4:30 PM · 62% there · falling 5,914 a second*: the drain's end at its current pace; how far it has come — from the backlog's peak when the console's lag history saw the backlog begin, otherwise rows committed out of rows committed and records behind (`backlogProgress`), so a console started mid-backfill does not mistake the lag it first saw for the start; and the rate | Records behind over **15m / 1h / 6h**, on an axis fitted to the values |
 | Stopped | *Stopped 5 minutes ago* | *Its tables stay readable, and Resume picks up where it left off.* (Stopping: *Shutting down its workers*, shimmering; Deleting: *Removing its runtime and tables*) | **Resume**, with the permission |
 | Starting, Updating, Resuming | What it is doing, shimmering: *Waiting for its workers* | — | — |
 | Needs attention, Failed | The reason in words, or the control plane's message | The message, where it says more | **Open Diagnostics** |

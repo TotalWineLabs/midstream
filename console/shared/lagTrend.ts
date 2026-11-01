@@ -81,14 +81,17 @@ function arrivedWithin(history: LagSample[], latest: LagSample, floorMs: number)
 
 /**
  * How far a falling backlog has come, 0 to 1: from its peak since the lag last sat at its floor to
- * now. Null without a backlog. One pass from the newest measurement back, the floor's window
- * following it, so a long history costs no more than its length.
+ * now. Null without a backlog, and null when the history does not reach back to where the backlog
+ * began — a console started mid-backlog has seen only part of it, so its peak would overstate the
+ * start; `backlogProgress` then measures by rows instead. One pass from the newest measurement
+ * back, the floor's window following it, so a long history costs no more than its length.
  */
 export function catchUpProgress(history: LagSample[], floorMs = LAG_FLOOR_MS): number | null {
   const latest = history.at(-1);
   if (!latest || latest.lag <= 0) return null;
   let peak = latest.lag;
   let start = history.length - 1;
+  let began = false;
   for (let index = history.length - 2; index >= 0; index -= 1) {
     const point = history[index] as LagSample;
     // The earliest measurement inside this one's floor window: it only moves back as this one does.
@@ -99,10 +102,26 @@ export function catchUpProgress(history: LagSample[], floorMs = LAG_FLOOR_MS): n
       point.arrived !== undefined && from.arrived !== undefined && point.t > from.t
         ? ((point.arrived - from.arrived) * floorMs) / (point.t - from.t)
         : null;
-    if (point.lag === 0 || (arrived !== null && point.lag <= arrived)) break;
+    if (point.lag === 0 || (arrived !== null && point.lag <= arrived)) {
+      began = true;
+      break;
+    }
     peak = Math.max(peak, point.lag);
   }
+  if (!began) return null;
   return peak > 0 ? Math.min(1, Math.max(0, (peak - latest.lag) / peak)) : null;
+}
+
+/**
+ * How far a catch-up has come, as best it can be told: from the backlog's peak when the history saw
+ * it begin, otherwise the share of what the topics hold that is in the tables — rows committed out of
+ * rows committed and records behind. Null when neither can be told.
+ */
+export function backlogProgress(history: LagSample[], rowsCommitted: number | null, behind: number | null): number | null {
+  const fromPeak = catchUpProgress(history);
+  if (fromPeak !== null) return fromPeak;
+  if (rowsCommitted === null || behind === null || rowsCommitted + behind <= 0) return null;
+  return Math.min(1, Math.max(0, rowsCommitted / (rowsCommitted + behind)));
 }
 
 /** `3h 10m`, `12m`, `45s`: a duration to read at a glance, to the nearest sensible unit. */

@@ -21,7 +21,7 @@ import { useApi, useDomainPath } from '@/lib/domains';
 import { displayName, formatBytes, formatCount, formatExact, formatTimestamp } from '@/lib/format';
 import { statusOf, type Status } from '@/lib/status';
 import { withFieldNames } from '@shared/fieldPaths';
-import { catchUpProgress, formatEta, lagTrend, type LagTrend } from '@shared/lagTrend';
+import { backlogProgress, formatEta, lagTrend, type LagTrend } from '@shared/lagTrend';
 import { readableTables, type CpDetail, type DataSummary, type DetailSnapshot } from '@shared/types';
 
 /** What every table of a materialization holds together, from their snapshots' manifests. */
@@ -145,10 +145,11 @@ function StateReadout({
   const lag = detail.status.consumer_lag?.total_lag ?? null;
   const rowSeries = useMemo<ChartPoint[]>(() => snapshot.series.map((point) => ({ t: point.t, value: point.rowsPerSecond })), [snapshot.series]);
   const lagSeries = useMemo<ChartPoint[]>(() => snapshot.lagHistory.map((point) => ({ t: point.t, value: point.lag })), [snapshot.lagHistory]);
-  const pill = <StatusPill status={status} progress={status.kind === 'catching-up' ? catchUpProgress(snapshot.lagHistory) : null} />;
+  const committed = summary?.rows ?? null;
+  const progress = status.kind === 'catching-up' ? backlogProgress(snapshot.lagHistory, committed, lag) : null;
+  const pill = <StatusPill status={status} progress={progress} />;
 
   if (status.kind === 'catching-up') {
-    const progress = catchUpProgress(snapshot.lagHistory);
     const pieces = [
       trend.etaMs !== null ? `Caught up around ${clockTime(now + trend.etaMs, now)}` : null,
       progress !== null ? `${Math.round(progress * 100)}% there` : null,

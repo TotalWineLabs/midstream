@@ -4,7 +4,7 @@ import { ConsoleError } from '../errors.ts';
 import { logger, type Logger } from '../logger.ts';
 import { RateTracker, type CurrentRates } from './rates.ts';
 import { can } from '../../shared/access.ts';
-import { catchUpProgress, lagTrend } from '../../shared/lagTrend.ts';
+import { backlogProgress, lagTrend } from '../../shared/lagTrend.ts';
 import { isDeletedPhase, readableTables } from '../../shared/types.ts';
 import type {
   CpConsumerLag,
@@ -247,7 +247,10 @@ export class LiveStore {
       runtimeHealth: detail?.status.runtime_health.level ?? 'unknown',
       lagState: trend.state,
       lagEtaMs: trend.etaMs,
-      catchUp: trend.state === 'draining' ? catchUpProgress(history) : null,
+      catchUp:
+        trend.state === 'draining'
+          ? backlogProgress(history, committedTotals(progress)?.rows ?? null, detail?.status.consumer_lag?.total_lag ?? item.consumer_lag ?? null)
+          : null,
       lastHeartbeat: detail?.status.last_heartbeat ?? null,
       ...committedColumns(committedTotals(progress)),
       rowsWritten: progress?.cumulative_rows_written ?? progress?.rows_written ?? null,
