@@ -1,267 +1,378 @@
-# 10 — Design System
+# 10 — Design language
 
-Sources: `src/styles.css`, `src/components/`.
+The console's design language is **Current**. This document defines it: the principles every screen
+answers to, the identity, colour, type, status, motion, numbers, writing, patterns and components.
+Any change to the console's interface follows it. A change that needs something it doesn't cover
+adds that here first.
 
-## 10.1 Design principles
+Sources: `src/styles.css` (tokens, motion), `src/components/` (`Logo.tsx`, `Status.tsx`,
+`motion/`, `ui/`), `src/lib/status.ts`, `src/lib/ticker.ts`, `design/mark/mark.py`.
 
-The visual language targets the register of Apple and OpenAI product surfaces: quiet, dense where
-it matters, and never decorative for its own sake.
+## 10.1 Principles
 
-1. **Data is the interface.** Chrome recedes; numbers, phases, and field paths are the only things
-   with visual weight.
-2. **One accent colour.** Blue is used for links, focus, and the current selection — nothing else.
-   Status colour is reserved for status.
-3. **Borders, not shadows.** Elevation appears only on genuinely floating surfaces (dialogs,
-   toasts, dropdown affordances).
-4. **Tabular numbers everywhere.** Live values change constantly; proportional digits would make
-   the layout jitter.
-5. **Small type, generous space.** Body text is 12–13 px with comfortable line height and padding,
-   which is what makes a dense operational tool feel calm.
-6. **Motion only to signal liveness.** One 2-second pulse on live indicators, one 180 ms fade for
-   entering surfaces. Both disabled under `prefers-reduced-motion`.
+Apple's eight design principles (Human Interface Guidelines, reintroduced June 2026) are the guide.
+Midstream follows Apple's principles but not its look: no Liquid Glass, no SF Pro, no system
+colours, no iOS patterns. Linear, ChatGPT, Claude and Robinhood show the method: one colour that
+belongs to the product, a typographic voice, one signature interaction, a metaphor from the
+product's own world, and restraint. Midstream's metaphor is water: a stream carried into a lake.
 
-## 10.2 Tokens
-
-All tokens are CSS custom properties declared in an `@theme` block, with dark values overridden
-under `.dark`. Tailwind 4 consumes them directly.
-
-### Colour
-
-| Token | Light | Dark | Use |
-|-------|-------|------|-----|
-| `--color-canvas` | `#ffffff` | `#08080a` | Page background |
-| `--color-surface` | `#ffffff` | `#0f0f12` | Panels, sidebar, header |
-| `--color-raised` | `#fafafa` | `#151519` | Table headers, hover, chips |
-| `--color-line` | `rgba(9,9,11,.08)` | `rgba(255,255,255,.09)` | Default border |
-| `--color-line-strong` | `rgba(9,9,11,.14)` | `rgba(255,255,255,.16)` | Inputs, scrollbar thumb |
-| `--color-ink` | `#09090b` | `#f4f4f5` | Primary text |
-| `--color-ink-muted` | `#6b7280` | `#9ca3af` | Secondary text |
-| `--color-ink-faint` | `#9ca3af` | `#6b7280` | Labels, placeholders, null values |
-| `--color-accent` | `#0a6cff` | `#3b8cff` | Links, focus, selection |
-| `--color-accent-soft` | 10% accent | 14% accent | Selection background |
-
-### Phase colour
-
-| Token | Light | Dark | Phases |
-|-------|-------|------|--------|
-| `--color-phase-running` | `#059669` | `#34d399` | `running`, healthy |
-| `--color-phase-pending` | `#2563eb` | `#60a5fa` | `requested`, `discovering`, `discovered`, `deploying` |
-| `--color-phase-paused` | `#b45309` | `#fbbf24` | `stopped`, `paused`, `deleting`, degraded health |
-| `--color-phase-failed` | `#dc2626` | `#f87171` | `failed`, `degraded`, `unreachable` |
-| `--color-phase-idle` | `#6b7280` | `#9ca3af` | `deleted`, unknown |
-
-Backgrounds are derived with `color-mix(in srgb, <token> 12%, transparent)`, so a tone stays
-consistent across themes without a second token.
-
-### Typography, radius, motion
-
-```css
---font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Inter, system-ui, sans-serif;
---font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
---radius-control: 0.5rem;    /* buttons, inputs, chips */
---radius-panel:  0.875rem;   /* panels, cards */
-```
-
-System fonts mean zero webfont payload and native rendering on every platform. `font-feature-settings: 'cv02','cv03','cv04','ss01'` refines digit and letter shapes where the platform font supports it.
-
-Type scale in practice: `20px/600` page titles, `15px/600` dialog titles, `13px/600` panel titles,
-`13px` body, `12px` secondary, `11px/uppercase/tracked` labels, `22px/600` stat values.
-
-Three animations, all respecting `prefers-reduced-motion`:
-
-| Class | Effect |
-|-------|--------|
-| `.live-dot` | `console-pulse` — 2 s opacity 1 → 0.35 → 1 |
-| `.fade-in` | `console-fade-in` — 180 ms opacity + 4 px rise |
-| `.run-ring` | `run-travel` — a 5 s beam around the perimeter of whatever is being filled |
-
-### `.run-ring` — the running indicator
-
-An overlay on the panel being filled, not on the control that started it: the grid is where the eye
-already is. It is drawn **above** the content so nothing opaque inside the panel — a header row, the
-column rail — can sit on top of the edge it runs along.
-
-The beam rides a **motion path**, not a rotating conic gradient:
-
-```css
-offset-path: inset(1px round calc(var(--radius-panel) - 1px));
-offset-rotate: auto;
-animation: run-travel 5s linear infinite;
-```
-
-A conic gradient turns at a constant *angular* rate, which on anything but a square traces the
-perimeter at a wildly varying *linear* rate — the head crawls along the long edges and snaps through
-the corners. On a grid twice as wide as it is tall that reads as a stutter rather than as motion.
-`offset-path` is uniform: measured at **39 px per 1% of the lap on all four edges**.
-
-| | Before | After |
+| Principle | Apple's words | What it means here |
 |---|---|---|
-| Lap | 1.6 s (~2,500 px/s on a full-width grid) | 5 s (~800 px/s) |
-| Speed around the perimeter | varies by edge | constant |
-| Shape | hard-edged wedge, seam at 0° | soft gradient tail, brightest at the leading edge |
-| Between passes | nothing | a faint constant accent ring |
+| Purpose | "Make something meaningful." | Every screen answers the question people come with: is my data flowing, and what does it say? |
+| Agency | "Let people do things their own way." | Reversible actions act at once and offer Undo. A plan comes first only where data or time is at stake. ⌘K reaches anything from anywhere. |
+| Responsibility | "Act in people's best interest." | Protection is always in view. A delete names what it removes, table by table. The waterline says which rows other engines can read yet. |
+| Familiarity | "Build on what people know." | Web patterns people use every day: a sidebar, a command menu, a properties column, popovers, a share dialog like a document's. |
+| Flexibility | "Adapt to diverse contexts and needs." | Desktop and phone layouts, both themes, keyboard and touch, reduced motion, larger text. |
+| Simplicity | "Be clear and direct." | One question per screen, answered in its first line. Six status states. How a number is measured goes behind (i). |
+| Craft | "Care about every detail." | Three faces, each with one job. One signal colour with one meaning. Numbers that line up and roll as they change. |
+| Delight | "Make it human." | Delight comes from calm and clarity, never decoration. Motion carries meaning: a number rolls the way it moved, a backlog shows when it ends. |
 
-Two details that are easy to get wrong:
+Rules that follow from them:
 
-- **Inset by half the beam's thickness.** `inset(0 …)` centres the beam *on* the border line, which
-  the panel's own `overflow: hidden` then cuts in half. One pixel in, the whole beam is visible.
-- **The fallback still needs its mask.** Browsers without basic shapes on `offset-path` get the
-  original conic sweep, slowed to 4 s and softened, reduced to a ring by the two-layer XOR mask.
-  Drop that mask and the fallback renders a rotating gradient over the *whole panel*. The mask lives
-  on the base rule and is removed inside `@supports (offset-path: inset(0 round 1px))`.
+- **Lead with the answer.** The first line of a screen, panel or row says what matters for its state.
+  Everything else is a click away.
+- **One question per screen** (§10.5). What doesn't serve the screen's question moves to properties,
+  a popover, an (i) or Settings.
+- **Hide zero counts.** "0 failing" is noise. Say nothing, or say it once ("All flowing").
+- **No method captions in view.** "Rows per second, measured per runtime member between its own
+  heartbeats" goes behind an (i) beside the number.
+- **Every number keeps its source.** Exactness isn't lost, only moved: the (i) says how it is
+  measured, and Diagnostics shows the raw state.
 
-Under `prefers-reduced-motion` there is **no travel at all** — slowing a lap down still sends a
-bright object across the screen. The ring breathes in place instead, which carries the same "still
-working" meaning without moving.
+## 10.2 Identity
 
-### Utility classes
+**Concept: the waterline.** Midstream works between a moving stream (Kafka) and a settled lake
+(Iceberg). Data above the line is live in the console within seconds. Data below it is committed and
+readable by every engine. The identity takes its parts from there: deep-water neutrals, one aqua
+signal for anything flowing or live, and a line between moving and settled data.
 
-| Class | Definition |
-|-------|-----------|
-| `.panel` | `--color-surface` background, `--color-line` border, `--radius-panel` |
-| `.numeric` | Monospace + `font-variant-numeric: tabular-nums` + `-0.01em` tracking |
+### The mark
 
-## 10.3 Theming
+One stream, drawn with a pen. It rises twice, the second rise lower, and settles into a line.
 
-The theme is applied **before first paint** by an inline script in `index.html`:
+| Property | Value |
+|---|---|
+| Construction | A round nib swept along a centreline (`design/mark/mark.py::CENTRELINE`); the outline is the union of the nib's hull between samples |
+| Pressure | Heavier on the way down, lighter on the way up (`light`), touching down a little light, easing off along the tail (`tail`); smoothed along the stroke so it never steps |
+| Cuts | `display` for 48 px and up: full contrast. `text` for 32 px and under: radius ×1.22, upstrokes at 0.72 rather than 0.56, the tail to 0.24, so the thin strokes hold beside text and in a tab |
+| Colour | One colour, flat. No gradients, glows, outlines, dots or ripples |
+| App icon | Ink `#07090C` on a Current `#3EF0C5` tile, corner radius 15/64 (14/64 for the favicon) |
+| In the interface | The mark alone, in `--color-current`, beside the wordmark |
+| Clear space | Half the mark's height on every side |
+| Smallest size | 16 px, always the text cut |
 
-```js
-const stored = localStorage.getItem('console.theme');
-const dark = stored === 'dark' || (stored === null && matchMedia('(prefers-color-scheme: dark)').matches);
-document.documentElement.classList.toggle('dark', dark);
-```
+- **Generated, not drawn by hand.** Change `design/mark/mark.py` and run it. It writes
+  `src/components/markPaths.ts`, `public/favicon.svg`, `public/icons/mark.svg`,
+  `public/icons/mark-maskable.svg` and `design/mark/apple-touch-icon.svg`, and its docstring lists
+  the PNG renders: `icon-192.png`, `icon-512.png`, `maskable-512.png` and `apple-touch-icon.png`.
+- **Use `Mark` and `Lockup`** (`components/Logo.tsx`), never an `<img>` of the SVG: the component
+  picks the cut, takes the text colour, and draws itself in.
+- **Don't** recolour the tile, add effects, rotate or stretch the mark, set it in two colours, or put
+  it on a busy background.
 
-Unset follows the OS; an explicit choice wins and persists. `<meta name="color-scheme" content="light dark">` makes native form controls and scrollbars match.
+### The wordmark
 
-Dark mode is wired with `@custom-variant dark (&:where(.dark, .dark *))`, so `dark:` variants work
-against the class rather than a media query.
+"Midstream" in Bricolage Grotesque, weight 600, tracking −0.022em, beside the mark at a gap of a
+third of the mark's size (`Lockup`). Always one word with a capital M.
 
-## 10.4 Primitives (`components/ui/primitives.tsx`)
+### The web app
 
-### `Button`
+`index.html` and `public/manifest.webmanifest` make the console installable. Theme colours
+`#07090C` (Deep) and `#EDF1F3` (Shallows), the maskable icon with the mark inside the safe circle,
+and a square touch icon that iOS rounds itself.
 
-| Variant | Appearance |
-|---------|------------|
-| `primary` | Inverted — ink background, canvas text. The single strongest action on a screen |
-| `secondary` | Surface with a strong border. Default |
-| `ghost` | Text only until hover |
-| `danger` | Filled with `--color-phase-failed` |
+## 10.3 Colour
 
-Sizes: `sm` (h-8, 13 px) and `md` (h-9, 14 px). `loading` renders a `Spinner` before the children
-and disables the button; `disabled` drops opacity to 40%.
+Neutrals do the work, so the signal can speak. Tokens live in `src/styles.css`: Shallows (light) in
+`@theme`, Deep (dark) under `.dark`. Use tokens, never literal colours.
 
-### Other primitives
+### Neutrals
 
-| Component | Notes |
-|-----------|-------|
-| `Spinner` | Inline SVG, `animate-spin`, `currentColor` |
-| `Panel` / `PanelHeader` | The standard content container; header takes `title`, `description`, `actions` |
-| `Badge` | Tones `neutral`, `accent`, `running`, `pending`, `paused`, `failed`; optional `title` for a native tooltip |
-| `Input` / `Textarea` / `Select` | Shared `FIELD_BASE`; `Select` embeds an inline SVG chevron as a data-URI background so no wrapper element is needed |
-| `Field` | Label + control + hint/error. Error replaces hint when present |
-| `SegmentedControl` | Generic over the value union; `role="tablist"` with `aria-selected` |
-| `EmptyState` | Icon, title, description, action |
-| `Skeleton` | Pulsing block for loading layouts |
-| `KeyValue` | Uppercase micro-label over a value; `mono` switches to `.numeric` |
+| Token | Name | Shallows | Deep | Use |
+|---|---|---|---|---|
+| `--color-abyss` / `--color-canvas` | Abyss | `#edf1f3` | `#07090c` | The page ground |
+| `--color-surface` | Deep | `#fbfcfc` | `#0d1116` | Sidebar, bars |
+| `--color-shelf` | Shelf | `#ffffff` | `#12171e` | Panels (`.panel`) |
+| `--color-raised` | Ridge, low | `#f1f4f6` | `#141a21` | Hover, table headers, chips |
+| `--color-ridge` | Ridge | `#e5ebee` | `#1a212a` | Stopped pill, quiet fills |
+| `--color-pop` | Pop | `#ffffff` | `#161c24` | Menus, popovers, dialogs |
+| `--color-line` / `--color-line-strong` | — | 8% / 15% ink | 10% / 18% mist | Borders, inputs |
+| `--color-ink` | Foam | `#0a1218` | `#e7eef5` | Text |
+| `--color-ink-muted` | Mist | `#46525e` | `#8e9bac` | Context |
+| `--color-ink-faint` | Silt | `#5f6973` | `#7f8a97` | Labels, placeholders, nulls |
 
-`Dialog` (`components/ui/Dialog.tsx`) portals to `document.body`, closes on `Escape`, locks body
-scroll, and offers `md` (max-w-lg) and `lg` (max-w-3xl) widths.
+### The signal and the states
 
-`ToastProvider` (`components/ui/Toast.tsx`) exposes `useToast()` with `success` and `error`. It
-keeps at most four toasts; success dismisses after 4.5 s, error after 8 s.
+| Token | Name | Shallows | Deep | Means |
+|---|---|---|---|---|
+| `--color-current` | Current | `#009e76` | `#3ef0c5` | Flowing, live. Shapes and lines |
+| `--color-current-ink` | Current, as text | `#007a5c` | `#4ff5ce` | Its words |
+| `--color-dawn` / `-ink` | Dawn | `#6d5ae6` / `#5643d1` | `#a799ff` / `#b9aeff` | Starting, on its way |
+| `--color-buoy` / `-ink` | Buoy | `#bf7c00` / `#9a5800` | `#ffb224` / `#ffc14d` | Needs attention |
+| `--color-flare` / `-ink` | Flare | `#e5484d` / `#c2252b` | `#ff6369` / `#ff8086` | Failed |
+| `--color-slate` | Slate | `#808c99` | `#6f7c8c` | Stopped |
+| `--color-*-wash` | Wash | 11–13% of the colour | 12–14% | A state's pill, selection |
+| `--color-veil` | Veil | 7% ink | 8% mist | A masked column |
 
-## 10.5 Display components
+Rules:
 
-| Component | Purpose |
-|-----------|---------|
-| `PhaseBadge` | Phase with a tone dot; pulses for `running` and pending phases; `title` carries the reason |
-| `PhaseDot` | Just the dot, for dense rows |
-| `HealthBadge` | Runtime health with its own tone map |
-| `DriftIndicator` | Renders only when `desired !== observed` |
-| `RelativeTime` | Live-updating relative timestamp with an absolute `title` |
-| `Identifier` | Monospace id with a copy button that appears on hover |
-| `CopyButton` | Clipboard write with a 1.4 s check-mark confirmation |
-| `StatCard` | Label, large value, optional unit, hint, and an optional sparkline flush to the bottom edge |
-| `Sparkline` | Dependency-free SVG area glyph for stat cards |
-| `TimeSeriesChart` | A series to read: value and time axes, crosshair readout, keyboard steps |
-| `DistributionBar` | Proportional segments for phase distribution |
-| `DataGrid` | Virtualized result grid |
+- **Current means flowing or live, and nothing else.** Not links, not buttons, not selection, not
+  decoration. A link is ink with an underline (`.link`); the primary button is ink
+  (`--color-primary`).
+- **Status colour is for status.** A state's colour never paints a chart series, a heading or a button.
+- **Never colour alone.** Every state has a shape and a word (§10.6).
+- **Ink for words, base for shapes.** Text in a state's colour uses its `-ink` token. Glyphs and
+  lines use the base token.
+- **Contrast, measured** on canvas, surface, shelf, raised and pop in both themes: Foam 14.6:1 or
+  more, Mist 6.1:1, Silt 4.9:1, each state's ink 4.7:1, and each state's ink on its own wash 4.7:1.
+  Every shape colour reads at 3:1 or more (Current 3.0, Slate 3.0, Buoy 3.0, Flare 3.4, Dawn 4.3 in
+  Shallows; far more in Deep). Ridge carries only Mist text. A new token passes the same test before
+  it ships.
+- The pre-Current names (`--color-accent`, `--color-phase-*`) still resolve, to Current's values,
+  for screens not yet rebuilt. New code uses the names above.
 
-### `TimeSeriesChart`
+### Themes
 
-For a series someone will read rather than glance at: the Overview's throughput and consumer lag,
-and the fleet throughput. Rendered at the container's real pixel size (a `ResizeObserver`), so text
-and markers are never stretched; given no `height` it fills its container.
+Deep (dark) and Shallows (light) are equally finished. The operating system chooses, unless the person
+picks one in the account menu (`console.theme` in local storage: `system`, `light` or `dark`). The
+choice is applied before first paint (`index.html`), and a change in the system's setting applies
+at once while the console follows it. Dark variants use the `.dark` class
+(`@custom-variant dark`).
 
-| Part | Spec |
-|------|------|
-| Line | 2 px, round joins, in the series colour; nulls break it |
-| Area | the series colour at 14% fading to 2% |
-| Value axis | 3–5 round ticks (`ticks.ts::valueAxis`), hairline solid gridlines in `--color-line`, labels in `--color-ink-faint`. `baseline="zero"` keeps zero on the axis (rates); `"auto"` fits the axis to values that stay well clear of zero (a large lag) |
-| Time axis | clock times at round local steps (`ticks.ts::timeTicks`), seconds only for spans under a few minutes |
-| Readout | a crosshair snapped to the nearest point, and a tooltip with the value first and the series, clock time and age after it; `←` `→` `Home` `End` step through points when the chart has focus |
-| End marker | 3.5 px dot ringed in `--color-surface` |
-| Empty | below two values in the window, a "Collecting…" message at the same height, so nothing jumps |
+## 10.4 Type
 
-Status colours never paint a series: consumer lag is a line in the accent colour, and its state
-(**Catching up**, **Falling behind**, **Caught up**) is a badge with an icon and a label.
+Three faces, each with one job, all open source and self-hosted (`@fontsource-variable`, imported in
+`main.tsx`).
 
-### `Sparkline`
+| Face | Token | Job |
+|---|---|---|
+| Bricolage Grotesque | `--font-display`, `.display` | The number that leads a screen, page titles, the wordmark. Optical size 96 at display sizes |
+| Instrument Sans | `--font-sans` | The interface: everything else |
+| Spline Sans Mono | `--font-mono`, `.ident` | Machine strings: table and column names, ids, SQL, code |
 
-```
-viewBox = "0 0 240 <height>"   preserveAspectRatio="none"
-```
+| Role | Size / weight | Notes |
+|---|---|---|
+| Readout number | 44–64 px / 600, display | Tracking −0.035em; tabular |
+| Page title | 22–24 px / 600, display | One per page |
+| Section title | 15 px / 600 | |
+| Panel title | 13 px / 600 | |
+| Body | 13–14 px / 400 | 14 px on phones |
+| Secondary | 12 px / 400, Mist | |
+| Label | 11–12 px / 500, Silt | Sentence case: no all-caps labels |
 
-A fixed 240-unit viewBox stretched to the container means the path never needs recomputing on
-resize. With fewer than two non-null points it renders the text "Collecting…" instead of a
-misleading flat line. The area fill is a `linearGradient` from 18% to 0% opacity; the stroke uses
-`vectorEffect="non-scaling-stroke"` so it stays 1.5 px regardless of the horizontal stretch.
+- **Numbers are tabular** (`.numeric`, or `font-variant-numeric: tabular-nums`) so they line up and
+  don't jitter as they change. They stay in the interface or display face, never the code face.
+- **Machine strings are mono** (`.ident`): `sales.orders`, `order_id`, `mat-0a26…`. Prose is never mono.
+- **Sentence case** for every label, title and button.
 
-## 10.6 Layout
+## 10.5 Structure and layout
 
-```
-┌──────────┬──────────────────────────────────────────┐
-│ Sidebar  │ PageHeader   (title, subtitle, meta,     │
-│ 216px    │               actions, optional slot)    │
-│ (≥768px) ├──────────────────────────────────────────┤
-│          │ PageBody     (max-w-[1400px], px-6 py-6) │
-└──────────┴──────────────────────────────────────────┘
-```
+### One question per screen
 
-- Below 768 px the sidebar is replaced by a horizontal nav strip; the account menu and theme
-  move out of view (a known gap), and a guest gets **Sign in** in the strip.
-- `Avatar` (`components/Avatar.tsx`) shows initials on a hue derived from the person's email
-  (`--avatar-hue`): a pale tint with dark initials in the light theme, a deep one with light
-  initials in the dark theme; greyed for a deactivated person.
-- `PageHeader` has a `children` slot used by the list page (search + filters) and the detail page
-  (tab bar), so those controls sit inside the header's surface rather than floating in the body.
-- Content is capped at 1400 px and centred — wider viewports get margin, not stretched tables.
+| Screen | Its question | Leads with | Moves out |
+|---|---|---|---|
+| Overview | Is everything flowing? | The readout, what needs you, the river | Method captions, a stat card per counter |
+| Materializations | Which one needs me? | Groups by state, one fact per row | Size and last change, into a row's properties |
+| A materialization | Is it healthy, and what does it write? | Its state's number, one chart, its tables | Reconciliation, specification and runtime state, into properties and Diagnostics |
+| A table | What's in it? | Rows, newest first, with the waterline | Snapshots and maintenance, into History |
+| Query | What does the data say? | A thread of statements and answers | — |
+| Datasets | What data is there, and who can use it? | Datasets, their tables, your access | Access management, into a Share popover |
+| Settings | How should this domain behave? | A page per area, searchable | Provenance on unchanged values |
 
-Grid templates are declared once per table and shared between header and rows, which is what keeps
-columns aligned without a table element:
+### The shell
 
-```ts
-const GRID = 'grid grid-cols-[minmax(0,2.4fr)_150px_110px_100px_100px_80px_120px] items-center gap-4';
-```
+- **Desktop:** a sidebar (mark and name, domain switcher, search, navigation, pinned items,
+  Settings, account) beside the content. A page has a header with one title, its state and at most
+  one primary action. Details live in a properties column on the right, which closes.
+- **Phone (under 768 px):** the sidebar becomes a bottom bar of four places: Overview, Datasets,
+  Activity, Search. Secondary actions wait in a ⋯ menu. The phone is for checking and acting: status,
+  stop and resume, rows, search.
+- **Width:** content is capped at 1400 px and centred.
+- **Spacing:** a 4 px grid. Panels 20 px inside, 16 px on phones. Rows 40–48 px tall on desktop,
+  48 px or more on touch.
+- **Radius:** `--radius-control` 8 px for controls, `--radius-panel` 12 px for panels,
+  `--radius-pill` for pills.
+- **Elevation:** borders, not shadows. Only what floats (menus, popovers, dialogs, toasts) gets a
+  shadow, on `--color-pop`.
 
-## 10.7 Conventions to follow
+## 10.6 Status
 
-| Rule | Reason |
-|------|--------|
-| Numbers use `.numeric` | Prevents layout jitter as live values change |
-| Ids and column names are `<code>` in `.numeric` | Distinguishes machine strings from prose |
-| Status is never colour-only | Accessibility; every tone is paired with a label |
-| One `primary` button per screen | Keeps the primary action obvious |
-| Panels own their padding | Callers pass content, not spacing |
-| Empty states explain *why* | "No data to query yet" plus the reason beats a bare "No results" |
-| Destructive actions confirm | Delete opens a dialog that states what is and is not removed |
-| Timestamps are relative with absolute `title` | Scannable at a glance, precise on hover |
+Eleven lifecycle phases, four health levels and the drift between desired and observed read as
+**six states**, each a shape, a colour and a word. One function decides (`lib/status.ts::statusOf`)
+and one component draws it (`components/Status.tsx`), everywhere: lists, page headers, search,
+the phone, the sidebar badge.
 
-## 10.8 Adding a component
+| State | Shape | Colour | From | Says with it |
+|---|---|---|---|---|
+| **Flowing** | A wave | Current | `running`, healthy, lag at its floor | Complete through 2:41 PM |
+| **Catching up** | A filling ring | Current | `running`, healthy, a backlog above the floor clearly falling | 62% · 1 h 50 min left |
+| **Starting** | A dotted ring, turning | Dawn | `requested`, `discovering`, `discovered`, `deploying` | Creating tables, 2 of 3 |
+| **Needs attention** | A diamond | Buoy | `degraded`, or an unhealthy runtime | The control plane's own message |
+| **Failed** | An octagon | Flare | `failed`: never clears on its own | What failed, and the way out |
+| **Stopped** | A hollow square | Slate | `stopped`, `paused` | Who stopped it, and when |
 
-1. Is it generic? Add it to `components/ui/primitives.tsx`. Feature-specific? Keep it in the
+- **Transitions are named by what is happening**, with the dotted ring in the colour of where they
+  lead: **Starting**, **Updating** (a running materialization taking a change), **Resuming** (Dawn),
+  and **Stopping**, **Deleting** (Slate).
+- **Reasons are words.** `reasonWords()` turns the control plane's reason codes into a short phrase
+  ("Its workers keep restarting"). The control plane's message wins where there is one. Codes stay
+  in Diagnostics.
+- **The lag floor is normal.** Offsets commit only once their rows are in the table, so a caught-up
+  runtime always trails its topics by what arrived in the last batch ceiling and commit interval
+  (630 s). A lag at or under that floor is Flowing (`features/detail/lagTrend.ts`). Catching up
+  appears only for a backlog clearly falling, with an end time that means something.
+- **Groups**, for lists: Needs you (failed, needs attention), In progress (starting, catching up,
+  stopping, deleting), Flowing, Stopped (`statusGroup`).
+- **Components:** `StatusGlyph` (the shape, 12 px), `StatusLabel` (shape and word in the state's ink,
+  optionally the reason), `StatusPill` (on its wash, for a header or readout).
+
+## 10.7 Motion
+
+Motion is never decoration. Each movement says something about the data: it changed, it's live,
+something is under way. The models are Robinhood's numbers, which roll as they change, and the
+shimmer Claude and ChatGPT put on text while they work.
+
+| Movement | Means | Where | Timing | Use |
+|---|---|---|---|---|
+| **Roll** | A live number changed, and which way | Readouts, live counts, rates, lag | `--duration-roll` 520 ms, ease-out | `Ticker` |
+| **Shimmer** | Work is under way | "Running…", "Creating tables", a pending step | 2.2 s sweep, linear | `Shimmer` |
+| **Heartbeat** | A live frame just arrived | The live indicator | 900 ms, once per frame | `.heartbeat` |
+| **Value flash** | A value changed that doesn't roll | Cells in a list | 1.2 s fade | `.value-flash` |
+| **Mark draws in** | The console opened | The sidebar mark, once a page load | `--duration-draw` 900 ms | `Mark` |
+| **Mark flows** | The console itself is waiting | Sign-in, first load | 1.8 s loop | `Mark working` |
+| **Wave drifts** | This is flowing now | The one status a page is about, never a list | 2.4 s loop, linear | `StatusGlyph animate` |
+| **Ring turns** | On its way somewhere | Starting, Updating, Resuming, Stopping, Deleting | 8 s loop | `StatusGlyph` |
+| **Ring fills** | How far a catch-up has come | Catching up | 900 ms | `StatusGlyph progress` |
+| **Slide** | A panel came from the side | Properties column, sheets | `--duration-panel` 220 ms | `.slide-in-right` |
+| **Fade up** | Content arrived | New surfaces | 180 ms | `.fade-in` |
+| **Run ring** | A query is filling this panel | The grid a run streams into | 5 s lap | `.run-ring` |
+
+Rules:
+
+- **A number rolls the way it moved.** Up as it grows, down as it shrinks, digits matched from the right
+  (`lib/ticker.ts`). A digit or separator the number gains rises into place. Nothing rolls on first
+  render.
+- **One moving thing per region.** A list of drifting waves is noise, so lists are still.
+- **Nothing loops at rest** except to say live or working, and those loops are slow and small.
+- **No bounce, no overshoot, no parallax.** Easing is `--ease-out` for arrivals, `--ease-in-out`
+  for loops.
+- **Reduced motion stops all of it** (`prefers-reduced-motion`; `usePrefersReducedMotion` for motion
+  driven from script). Every state still reads: the words and shapes carry it, and a ticker shows
+  the new number at once.
+
+## 10.8 Numbers and charts
+
+- **The readout leads a screen:** one large number (display face) with one line of context, then a
+  line chart. The number is the state's own: rows a second when flowing, records behind and the end
+  time when catching up, what failed when failed.
+- **Live numbers roll** (`Ticker`). Static figures don't.
+- **Formats** (`lib/format.ts`): `formatCount` compacts at 10,000 (`1.2M`); `formatExact` for
+  anything someone compares or copies. Rates read "75,312 a second" in a readout and `/s` in dense
+  rows. Bytes use `formatBytes` (SI).
+- **Charts are line-first:** a 2 px line, a faint area, no gridlines where the axis labels
+  suffice, a crosshair to scrub any moment, the value first in the readout. Throughput and lag are
+  Current. A state's colour never paints a series.
+- **The waterline** sits wherever live and committed meet: between a table's live rows and its
+  committed ones, and at zero on a backlog chart. Live rows above it, "Committed through 2:41:04 PM" on
+  it, committed rows below.
+- **A backlog shows its end:** while catching up, the chart projects the drain rate to zero as a
+  dotted line, and the readout says when.
+
+## 10.9 Writing
+
+Fewer, plainer words. Every sentence on screen asks for attention.
+
+- **Say what it is, then what to do.** "Kafka has no topic payments. Resume or delete."
+- **Plain status words** (§10.6), never phase names, reason codes or Kubernetes terms in view.
+- **Act, then offer the way back:** "Inventory stopped. Nothing is lost. Undo", not a dialog
+  that asks first.
+- **Name consequences before they happen:** "This permanently deletes 2 tables and their data."
+- **No zero counts, no method captions, no exclamation marks.** Sentence case everywhere.
+- **Numbers before words** where a number is the answer.
+
+The glossary: terms the console says differently from the system.
+
+| The system says | The console says | Where |
+|---|---|---|
+| desired / observed phase | Target / Status | Together only while they differ |
+| reconciling, deploying | Starting, Stopping, Updating | Named by what is happening |
+| degraded | Needs attention | Always with the control plane's message |
+| consumer lag | Behind | In records, or in time where it's known |
+| valid_through | Complete through | Every record before that time is in the table |
+| runtime, members, replicas | Workers | Kubernetes names stay in Diagnostics |
+| committer | Commit worker | Properties only |
+| compaction | Merge small files | Settings and History |
+| snapshot expiry | Prune old versions | "Snapshot" stays in History and Connect, where Iceberg readers expect it |
+| orphan cleanup | Remove unused files | |
+| reprotect, purge | Mask existing rows, erase old versions | The consequence named before it runs |
+| tombstones | Null records | |
+| `_unmapped` | Overflow | Explained where it appears |
+| KasprApp, binding, spec hash, generation | — | Diagnostics, for support |
+
+"Materialization" stays: it is the product's term, in the API and the docs. The empty state defines it once.
+
+## 10.10 Patterns
+
+| Pattern | Use it for | Shape |
+|---|---|---|
+| **Undo, not "Are you sure?"** | Reversible actions: stop, resume, pin | Act at once; a toast with Undo |
+| **A plan first** | Where data or time is at stake: create, change topics, delete, reprotect | A card listing what will exist, change or go, by SQL names, and what it costs ("pauses for about 5 minutes"); Cancel and the action |
+| **Consequences named** | Destructive actions | The dialog lists each table and its rows |
+| **⌘K** | Going anywhere, doing anything | One field: places, tables, actions with their target named |
+| **Properties column** | A selected thing's details | A right column, closable, keys in Silt, values in Foam |
+| **(i)** | How a number is measured | A popover beside the number |
+| **Activity** | Changes in flight and what just happened | Real steps with estimates; a refusal that arrives later lands here too |
+| **Query thread** | Asking the data | Each statement and its answer in turn, kept in the browser by day |
+| **Share** | Who can use a dataset | A popover like a document's: people, roles in one sentence each, what access doesn't cover |
+| **Empty state** | Nothing here yet | What this is, in one sentence, and the one action that fills it |
+
+## 10.11 Components
+
+| Component | File | Use |
+|---|---|---|
+| `Mark`, `Lockup` | `components/Logo.tsx` | The mark, the mark with the name (§10.2) |
+| `StatusGlyph`, `StatusLabel`, `StatusPill` | `components/Status.tsx` | Status, everywhere (§10.6) |
+| `Ticker` | `components/motion/Ticker.tsx` | A live number (§10.7) |
+| `Shimmer` | `components/motion/Shimmer.tsx` | Words for work under way |
+| `Button` | `components/ui/primitives.tsx` | `primary` (ink, one per screen), `secondary`, `ghost`, `danger` |
+| `Panel`, `PanelHeader`, `Badge`, `Input`, `Field`, `SegmentedControl`, `EmptyState`, `Skeleton`, `KeyValue` | `components/ui/primitives.tsx` | Building blocks |
+| `Dialog`, `Popover`, `ToastProvider` | `components/ui/` | Floating surfaces |
+| `TimeSeriesChart`, `Sparkline` | `components/` | Charts (§10.8) |
+| `DataGrid` | `components/DataGrid.tsx` | Rows |
+| `Avatar`, `RelativeTime`, `Identifier`, `CopyButton` | `components/` | People, times, ids |
+
+Building a component:
+
+1. Generic goes in `components/` (or `components/ui/` for primitives). Feature-specific stays in its
    feature folder.
-2. Use tokens, never literal colours. `text-[var(--color-ink-muted)]`, not `text-gray-500`.
-3. Compose `cn()` (clsx + tailwind-merge) so callers can override classes predictably.
-4. Return `ReactNode`, accept `className`, and forward refs for anything focusable.
-5. Verify both themes and the ≥768 px / <768 px breakpoints before considering it done.
+2. Tokens only. `text-[var(--color-ink-muted)]`, never `text-gray-500` or a hex value.
+3. Compose classes with `cn()`, accept `className`, return `ReactNode`, forward refs for anything
+   focusable.
+4. Motion through the classes and components in §10.7, each stopped under reduced motion.
+5. Check both themes, desktop and phone widths, keyboard use and reduced motion before it's done.
+
+## 10.12 Accessibility
+
+- **Contrast:** 4.5:1 for text and 3:1 for shapes, in both themes (§10.3).
+- **Never colour alone:** a shape and a word with every state.
+- **Keyboard first on desktop:** every action reachable, a visible focus ring (2 px ink), ⌘K,
+  arrow keys in lists and charts.
+- **Touch first on phones:** targets at least 44 px.
+- **Screen readers:** a ticker announces the formatted number once (its rolling digits are hidden);
+  the mark is decorative beside the name and labelled alone; status glyphs are hidden beside their
+  word.
+- **Reduced motion:** all motion stops, nothing is lost (§10.7).
+- **Larger text:** layouts use rem and wrap; nothing truncates a status word.
+
+## 10.13 Checklist
+
+Before a change to the interface is done:
+
+- [ ] The screen's question is answered in its first line, and nothing on it serves another question.
+- [ ] Current appears only for flowing or live things. No new colours outside the tokens.
+- [ ] Status goes through `statusOf` and `components/Status.tsx`.
+- [ ] Live numbers roll; static ones don't. Nothing moves without a meaning in §10.7.
+- [ ] Words follow §10.9: plain status, no codes, no zero counts, no method captions in view.
+- [ ] Both themes, desktop and phone, keyboard only, and reduced motion, checked.
+- [ ] Contrast measured for any new colour pairing.
+- [ ] This document updated if the change adds a pattern, a component or a rule.

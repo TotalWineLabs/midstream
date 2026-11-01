@@ -9,7 +9,7 @@ const STRIP = Array.from({ length: 30 }, (_, index) => index % 10);
 
 /**
  * A live number whose digits roll to their new values, up as it grows and down as it shrinks, so a
- * change reads as movement in a direction rather than a flicker (docs/10-design-system.md §Motion).
+ * change reads as movement in a direction rather than a flicker (docs/10-design-system.md §10.7).
  *
  * Digits are matched from the right, so the ones stay the ones as the number grows a digit; a digit
  * or separator the number gains rises into place. Screen readers get the formatted number once.

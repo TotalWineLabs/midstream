@@ -37,7 +37,7 @@ const WAVE = 'q1.7 -2.2 3.4 0 t3.4 0 t3.4 0 t3.4 0 t3.4 0 t3.4 0';
 
 /**
  * A state's shape: a wave, a filling ring, a dotted ring, a diamond, an octagon or a hollow square,
- * so status reads without colour and better with it (docs/10-design-system.md §Status).
+ * so status reads without colour and better with it (docs/10-design-system.md §10.6).
  *
  * A state on its way somewhere turns until it settles. A flowing wave drifts only where `animate`
  * asks — the one status a page is about — since a list of drifting waves is noise.

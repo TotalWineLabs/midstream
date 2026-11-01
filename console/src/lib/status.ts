@@ -4,7 +4,7 @@ import type { LifecyclePhase, RuntimeHealthLevel } from '@shared/types';
 /**
  * The six states a materialization is in, each a shape, a colour and a word: eleven phases, four
  * health levels and the drift between desired and observed read as one (docs/10-design-system.md
- * §Status).
+ * §10.6).
  */
 export type StatusKind = 'flowing' | 'catching-up' | 'starting' | 'attention' | 'failed' | 'stopped';
 

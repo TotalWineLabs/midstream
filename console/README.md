@@ -14,7 +14,7 @@ repository without changes beyond its domain registry (`CONSOLE_DOMAINS`).
 
 > **Full reference:** [`docs/`](./docs/README.md) is a 17-document handbook covering architecture,
 > configuration, server internals, the real-time model, reading Iceberg tables, DuckDB data access,
-> the HTTP API, the client, the design system, sign-in and security, operations, testing, and
+> the HTTP API, the client, the design language, sign-in and security, operations, testing, and
 > extension recipes.
 > Start at [docs/README.md](./docs/README.md).
 

@@ -11,6 +11,9 @@
  *
  * The token names before Current (`canvas`, `ink`, `accent`, `phase-*`) keep working and now point
  * at Current's values, so every screen adopts it without a rewrite.
+ *
+ * Contrast is part of each value: every text colour reads at 4.5:1 or more on every surface of its
+ * theme, and every colour a shape is drawn in at 3:1 (docs/10-design-system.md §10.3).
  */
 @theme { /* NOSONAR: Tailwind v4 directive */
   --font-sans: 'Instrument Sans Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -39,10 +42,10 @@
   --color-line: rgba(16, 36, 56, 0.08);
   --color-line-strong: rgba(16, 36, 56, 0.15);
   --color-ink: #0a1218;
-  --color-ink-muted: #55626f;
-  --color-ink-faint: #8b96a2;
+  --color-ink-muted: #46525e;
+  --color-ink-faint: #5f6973;
 
-  --color-current: #00b386;
+  --color-current: #009e76;
   --color-current-ink: #007a5c;
   --color-current-wash: rgba(0, 179, 134, 0.12);
   --color-current-wash-2: rgba(0, 179, 134, 0.06);
@@ -50,13 +53,13 @@
   --color-dawn: #6d5ae6;
   --color-dawn-ink: #5643d1;
   --color-dawn-wash: rgba(109, 90, 230, 0.12);
-  --color-buoy: #f2a100;
+  --color-buoy: #bf7c00;
   --color-buoy-ink: #9a5800;
   --color-buoy-wash: rgba(242, 161, 0, 0.13);
   --color-flare: #e5484d;
   --color-flare-ink: #c2252b;
   --color-flare-wash: rgba(229, 72, 77, 0.11);
-  --color-slate: #8a96a3;
+  --color-slate: #808c99;
   --color-primary: #0a1218;
   --color-on-primary: #ffffff;
   --color-veil: rgba(16, 36, 56, 0.07);
@@ -84,7 +87,7 @@
   --color-line-strong: rgba(150, 172, 198, 0.18);
   --color-ink: #e7eef5;
   --color-ink-muted: #8e9bac;
-  --color-ink-faint: #5c6878;
+  --color-ink-faint: #7f8a97;
 
   --color-current: #3ef0c5;
   --color-current-ink: #4ff5ce;
@@ -201,7 +204,7 @@
 }
 
 /* ---------------------------------------------------------------------------------------------
- * Motion. Every animation here says something about the data; docs/10-design-system.md §Motion.
+ * Motion. Every animation here says something about the data; docs/10-design-system.md §10.7.
  * ------------------------------------------------------------------------------------------- */
 
 /* Heartbeat: one soft pulse each time live data arrives, so the dot moves with the data. */

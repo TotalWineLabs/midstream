@@ -23,7 +23,7 @@ Load the document you need. Each one is self-contained and cross-links the other
 | 07 | [Data access and DuckDB](./07-data-access-and-duckdb.md) | Understand runs over a snapshot, time pruning, paging, statements and their sandbox, exports, and how each storage profile reaches DuckDB |
 | 08 | [Console API reference](./08-console-api-reference.md) | Call the console's own HTTP API: settings, sign-in, users, groups, roles and the audit log included |
 | 09 | [Client architecture](./09-client-architecture.md) | Understand the React app, routing, state, data flow, and how pages follow permissions |
-| 10 | [Design system](./10-design-system.md) | Change styling, add a component, or match the visual language |
+| 10 | [Design language](./10-design-system.md) | Before any change to the interface: Current's principles, mark, colour, type, status, motion, writing, patterns and components |
 | 11 | [Feature reference](./11-feature-reference.md) | Understand exactly what every screen shows and does: the Table tab, sign-in, Settings, your account and access tokens, users, groups, roles |
 | 12 | [Security model](./12-security-model.md) | Review or extend sign-in, sessions, permission checks, trust boundaries, the SQL guard, and input validation |
 | 13 | [Operations runbook](./13-operations-runbook.md) | Deploy it, size it, or debug it in production |
