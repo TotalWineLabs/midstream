@@ -1,9 +1,11 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 
+import { RiverEngine, type RiverPalette, type RiverStrand } from './riverEngine';
+import { formatReadoutRate } from '@/components/Readout';
 import { cn } from '@/lib/cn';
 import { usePrefersReducedMotion } from '@/lib/motion';
-import type { Status, StatusKind } from '@/lib/status';
+import type { Status } from '@/lib/status';
 import { useElementSize } from '@/lib/useElementSize';
 
 export interface Strand {
@@ -12,34 +14,48 @@ export interface Strand {
   status: Status;
   /** Rows a second, or null before its workers have reported twice. */
   rate: number | null;
+  /** Rows committed: a commit landing ripples the lake. */
+  rows: number | null;
   /** Where the strand opens. */
   to: string;
 }
 
-const HEIGHT = 168;
-/** Strands drawn at most: the busiest; the rest are counted beside the river. */
-const MAX_STRANDS = 24;
+/** A token's colour, as the theme now has it. */
+function token(name: string): [number, number, number] {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const hex = /^#([0-9a-f]{6})$/i.exec(value)?.[1];
+  if (!hex) return [128, 128, 128];
+  return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)];
+}
 
-/** A strand's colour: Current while it moves, a state's colour only when something is wrong. */
-const STRAND: Record<StatusKind, string> = {
-  flowing: 'var(--color-current)',
-  'catching-up': 'var(--color-current)',
-  starting: 'var(--color-dawn)',
-  attention: 'var(--color-buoy)',
-  failed: 'var(--color-flare)',
-  stopped: 'var(--color-slate)',
-};
+function readPalette(): RiverPalette {
+  return {
+    dark: document.documentElement.classList.contains('dark'),
+    raw: token('--color-ink-muted'),
+    current: token('--color-current'),
+    dawn: token('--color-dawn'),
+    buoy: token('--color-buoy'),
+    flare: token('--color-flare'),
+    slate: token('--color-slate'),
+    ink: token('--color-ink'),
+  };
+}
 
-/** Dots move faster as more flows: a whole period in eight seconds when barely anything does, in about one at tens of thousands a second. */
-function flowSeconds(rate: number | null): number {
-  return Math.max(1.1, Math.min(8, 8 - 1.55 * Math.log10(1 + Math.max(0, rate ?? 0))));
+/** The theme's colours, read again whenever the theme changes. */
+function usePalette(): RiverPalette {
+  const [palette, setPalette] = useState(readPalette);
+  useEffect(() => {
+    const observer = new MutationObserver(() => setPalette(readPalette()));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+  return palette;
 }
 
 /**
- * The fleet as a river (docs/10-design-system.md §10.8): every materialization a strand from Kafka,
- * through Midstream, to the lake. A strand's width is its throughput and its dots move at its pace;
- * colour appears only where something is wrong; a stopped strand is still and dashed. Point at a
- * strand to name it, and open it with a click or Enter.
+ * The fleet as a river (docs/10-design-system.md §10.8): every materialization a channel from Kafka,
+ * through Midstream, into the lake, its records moving at its own pace (`riverEngine.ts`). Point at a
+ * channel to name it; click to open it. The same channels are links for a keyboard or screen reader.
  */
 export function River({
   strands,
@@ -56,48 +72,58 @@ export function River({
   className?: string;
 }): ReactNode {
   const box = useRef<HTMLDivElement>(null);
-  const { width } = useElementSize(box);
+  const bed = useRef<HTMLCanvasElement>(null);
+  const water = useRef<HTMLCanvasElement>(null);
+  const glow = useRef<HTMLCanvasElement>(null);
+  const engine = useRef<RiverEngine | null>(null);
+  const { width, height } = useElementSize(box);
   const reduced = usePrefersReducedMotion();
+  const palette = usePalette();
   const navigate = useNavigate();
-  const [hover, setHover] = useState<string | null>(null);
+  const [hover, setHover] = useState<{ key: string; x: number; y: number } | null>(null);
+  const [visible, setVisible] = useState(true);
 
-  const drawn = useMemo(() => {
-    const shown = [...strands].sort((left, right) => (right.rate ?? 0) - (left.rate ?? 0)).slice(0, MAX_STRANDS);
-    const peak = Math.max(1e-9, ...shown.map((strand) => strand.rate ?? 0));
-    // Problems ride on top, where the eye starts.
-    const order: StatusKind[] = ['failed', 'attention', 'starting', 'catching-up', 'flowing', 'stopped'];
-    shown.sort((left, right) => order.indexOf(left.status.kind) - order.indexOf(right.status.kind));
-    return shown.map((strand) => ({
-      ...strand,
-      width: strand.status.kind === 'stopped' ? 1.25 : 1.75 + 9 * Math.sqrt(Math.max(0, strand.rate ?? 0) / peak),
-    }));
-  }, [strands]);
+  const riverStrands = useMemo<RiverStrand[]>(
+    () => strands.map((strand) => ({ key: strand.key, label: strand.label, kind: strand.status.kind, rate: strand.rate, rows: strand.rows })),
+    [strands],
+  );
 
-  const paths = useMemo(() => {
-    if (width <= 0 || drawn.length === 0) return [];
-    const spread = (top: number, bottom: number): number[] => {
-      const total = drawn.reduce((sum, strand) => sum + strand.width, 0);
-      const gap = drawn.length > 1 ? Math.max(1.5, (bottom - top - total) / (drawn.length - 1)) : 0;
-      const used = total + gap * (drawn.length - 1);
-      let cursor = (top + bottom) / 2 - used / 2;
-      return drawn.map((strand) => {
-        const middle = cursor + strand.width / 2;
-        cursor += strand.width + gap;
-        return middle;
-      });
+  useEffect(() => {
+    if (!bed.current || !water.current) return;
+    engine.current = new RiverEngine(bed.current, water.current, glow.current, readPalette());
+    return () => {
+      engine.current?.destroy();
+      engine.current = null;
     };
-    const left = spread(26, HEIGHT - 18);
-    // Through Midstream the strands run close: one service carrying them all.
-    const pinch = spread(HEIGHT / 2 - Math.min(26, 4 + drawn.length * 3), HEIGHT / 2 + Math.min(26, 4 + drawn.length * 3));
-    const right = spread(34, HEIGHT - 26);
-    const mid = width / 2;
-    return drawn.map((strand, index) => ({
-      strand,
-      d: `M0 ${left[index]} C${width * 0.24} ${left[index]} ${width * 0.3} ${pinch[index]} ${mid} ${pinch[index]} S${width * 0.76} ${right[index]} ${width} ${right[index]}`,
-    }));
-  }, [drawn, width]);
+  }, []);
 
-  const hovered = paths.find((path) => path.strand.key === hover)?.strand ?? null;
+  useEffect(() => engine.current?.setPalette(palette), [palette]);
+  useEffect(() => {
+    if (width > 0 && height > 0) engine.current?.resize(width, height, window.devicePixelRatio || 1);
+  }, [width, height]);
+  useEffect(() => engine.current?.setStrands(riverStrands), [riverStrands]);
+  useEffect(() => engine.current?.setHover(hover?.key ?? null), [hover?.key]);
+
+  // Running only while on screen, in a tab that is showing, and when motion is welcome.
+  useEffect(() => {
+    const element = box.current;
+    if (!element) return;
+    const observer = new IntersectionObserver(([entry]) => setVisible(entry?.isIntersecting ?? true));
+    observer.observe(element);
+    const onVisibility = (): void => setVisible(document.visibilityState === 'visible');
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      observer.disconnect();
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
+  useEffect(() => {
+    if (!engine.current) return;
+    if (visible && !reduced) engine.current.start();
+    else engine.current.stop();
+  }, [visible, reduced]);
+
+  const hovered = hover ? strands.find((strand) => strand.key === hover.key) : undefined;
 
   return (
     <div className={cn('relative', className)}>
@@ -106,81 +132,50 @@ export function River({
         <span className="min-w-0 truncate text-center">{midstream}</span>
         <span className="min-w-0 truncate text-right">{lake}</span>
       </div>
-      <div ref={box} className="relative mt-2" style={{ height: HEIGHT }}>
-        {width > 0 ? (
-          <svg width={width} height={HEIGHT} className="block overflow-visible" role="list" aria-label="Materializations, as strands from Kafka to the lake">
-            <defs>
-              {/* The river comes out of its source and runs into its lake: both ends fade. */}
-              <linearGradient id="river-fade">
-                <stop offset="0" stopColor="#fff" stopOpacity="0" />
-                <stop offset="0.08" stopColor="#fff" />
-                <stop offset="0.92" stopColor="#fff" />
-                <stop offset="1" stopColor="#fff" stopOpacity="0" />
-              </linearGradient>
-              <mask id="river-ends">
-                <rect width={width} height={HEIGHT} fill="url(#river-fade)" />
-              </mask>
-            </defs>
-            <line x1={width / 2} x2={width / 2} y1={8} y2={HEIGHT - 8} stroke="var(--color-line-strong)" strokeDasharray="2 4" />
-            <g mask="url(#river-ends)">
-              {paths.map(({ strand, d }) => {
-                const color = STRAND[strand.status.kind];
-                const stopped = strand.status.kind === 'stopped';
-                const faded = hover !== null && hover !== strand.key;
-                const moving = !stopped && strand.status.kind !== 'failed' && (strand.rate ?? 0) > 0 && !reduced;
-                return (
-                  <g
-                    key={strand.key}
-                    role="listitem"
-                    tabIndex={0}
-                    aria-label={`${strand.label}: ${strand.status.label}`}
-                    className="cursor-pointer outline-none"
-                    style={{ opacity: faded ? 0.25 : 1, transition: 'opacity var(--duration-quick) var(--ease-out)' }}
-                    onMouseEnter={() => setHover(strand.key)}
-                    onMouseLeave={() => setHover(null)}
-                    onFocus={() => setHover(strand.key)}
-                    onBlur={() => setHover(null)}
-                    onClick={() => void navigate(strand.to)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') void navigate(strand.to);
-                    }}
-                  >
-                    {/* A wide, invisible path: a thin strand is still easy to point at. */}
-                    <path d={d} fill="none" stroke="transparent" strokeWidth={Math.max(12, strand.width + 8)} />
-                    <path
-                      d={d}
-                      fill="none"
-                      stroke={color}
-                      strokeOpacity={stopped ? 0.7 : 0.38}
-                      strokeWidth={strand.width}
-                      strokeLinecap="round"
-                      strokeDasharray={stopped ? '3 5' : undefined}
-                    />
-                    {moving ? (
-                      <path
-                        d={d}
-                        fill="none"
-                        stroke={color}
-                        strokeWidth={Math.max(1.5, strand.width * 0.55)}
-                        strokeLinecap="round"
-                        strokeDasharray="0 18"
-                        className="river-flow"
-                        style={{ animationDuration: `${flowSeconds(strand.rate)}s` }}
-                      />
-                    ) : null}
-                  </g>
-                );
-              })}
-            </g>
-          </svg>
-        ) : null}
-        {hovered ? (
-          <p className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 rounded-[var(--radius-control)] border border-[var(--color-line-strong)] bg-[var(--color-pop)] px-2.5 py-1 text-[12px] whitespace-nowrap shadow-sm">
+      <div
+        ref={box}
+        className="relative mt-2 h-[200px] cursor-pointer sm:h-[250px]"
+        onMouseMove={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect();
+          const x = event.clientX - rect.left;
+          const y = event.clientY - rect.top;
+          const key = engine.current?.hit(x, y) ?? null;
+          setHover(key ? { key, x, y } : null);
+        }}
+        onMouseLeave={() => setHover(null)}
+        onClick={() => {
+          const target = hover ? strands.find((strand) => strand.key === hover.key) : undefined;
+          if (target) void navigate(target.to);
+        }}
+      >
+        <canvas ref={bed} aria-hidden className="absolute inset-0 h-full w-full" />
+        {/* The bloom: the water again, blurred and screened beneath it, in the dark theme only. */}
+        <canvas ref={glow} aria-hidden className="absolute inset-0 hidden h-full w-full opacity-80 mix-blend-screen blur-[7px] saturate-150 dark:block" />
+        <canvas ref={water} aria-hidden className="absolute inset-0 h-full w-full" />
+        {hovered && hover ? (
+          <p
+            className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-[var(--radius-control)] border border-[var(--color-line-strong)] bg-[var(--color-pop)] px-2.5 py-1 text-[12px] whitespace-nowrap shadow-sm"
+            style={{ left: Math.min(Math.max(hover.x, 90), width - 90), top: Math.max(hover.y - 10, 24) }}
+          >
             <span className="font-medium">{hovered.label}</span>
-            <span className="text-[var(--color-ink-muted)]"> · {hovered.status.label}</span>
+            <span className="text-[var(--color-ink-muted)]">
+              {' '}
+              · {hovered.status.label}
+              {hovered.rate !== null && hovered.status.kind !== 'stopped' ? ` · ${formatReadoutRate(hovered.rate)} rows a second` : ''}
+            </span>
           </p>
         ) : null}
       </div>
+      <ul className="sr-only">
+        {strands.map((strand) => (
+          <li key={strand.key}>
+            <Link to={strand.to}>
+              {strand.label}: {strand.status.label}
+              {strand.rate !== null ? `, ${formatReadoutRate(strand.rate)} rows a second` : ''}
+            </Link>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

@@ -246,6 +246,7 @@ shimmer Claude and ChatGPT put on text while they work.
 | **Slide** | A panel came from the side | Properties column, sheets | `--duration-panel` 220 ms | `.slide-in-right` |
 | **Fade up** | Content arrived | New surfaces | 180 ms | `.fade-in` |
 | **Run ring** | A query is filling this panel | The grid a run streams into | 5 s lap | `.run-ring` |
+| **The river** | Each materialization's throughput, as velocity | The Overview | Particles at 22–270 px/s by rate; trails fading with a ~0.1 s half-life | `River` (§10.8) |
 
 Rules:
 
@@ -281,9 +282,25 @@ Rules:
 - **A backlog shows its end:** while catching up, the readout says when it will be done at the
   current pace (*Caught up around 4:30 PM · 62% there*); the chart's dotted projection to zero is to
   come.
-- **The river** leads the Overview: each materialization a strand from Kafka through Midstream to the
-  lake, its width its throughput and its dots moving at its pace; colour only where something is
-  wrong; a stopped strand still and dashed (`River.tsx`).
+- **The river** leads the Overview: each materialization a channel from Kafka, through the Midstream
+  gate, into the lake (`River.tsx`, `riverEngine.ts`, a particle system on canvases). Every visual
+  property is a fact:
+
+  | What you see | What it is |
+  |---|---|
+  | A channel's width | Its rows a second, against the fleet's busiest |
+  | Its particles' speed, and the length of their trails | Its rows a second: a slow drift when barely anything flows, a rush at tens of thousands |
+  | Faster in the middle of a channel than at its edges | Nothing more than water: a laminar profile, so it reads as a stream |
+  | Grey mist turning Current at the gate, with a spark | Records becoming rows |
+  | Rows pouring into the lake and dissolving; a ring on its surface | Rows committed; each commit ripples |
+  | A crowded channel | A backlog being worked through (catching up) |
+  | Records piling at the gate, in Flare or Dawn | Failed, or starting: nothing becomes a row yet |
+  | Amber after the gate, slower | Needs attention |
+  | A still, dashed channel | Stopped |
+
+  It runs only on screen, in a visible tab; under reduced motion it is one still frame. Pointing at a
+  channel names it and its rate; clicking opens it; the same channels are links for a keyboard or a
+  screen reader. In the dark theme a blurred copy of the water glows beneath it.
 
 ## 10.9 Writing
 
