@@ -17,7 +17,7 @@ const dataDir = await mkdtemp(join(tmpdir(), 'console-rates-'));
 process.env.CONSOLE_DATA_DIR = dataDir;
 
 const { RateTracker, windowRate, windowSlope } = await import('./rates.ts');
-const { appendLag, appendSample, countArrivals } = await import('./store.ts');
+const { HISTORY_SPACING_MS, appendLag, appendSample, countArrivals } = await import('./store.ts');
 
 import type { CpMemberProgress, CpRuntimeProgress, LagSample, ThroughputSample } from '../../shared/types.ts';
 
@@ -191,6 +191,16 @@ describe('series', () => {
     for (let index = 1; index < times.length - 1; index += 1) {
       assert.ok((times[index] as number) - (times[index - 1] as number) >= 4_500);
     }
+  });
+
+  it('keeps a day of throughput a minute apart, for the charts’ longer windows', () => {
+    let history: ThroughputSample[] = [];
+    // A poll every 6 seconds for 25 hours, kept for 24.
+    const retention = Math.ceil((24 * 3_600_000) / HISTORY_SPACING_MS);
+    for (let t = 0; t <= 25 * 3_600_000; t += 6_000) history = appendSample(history, sample(t), HISTORY_SPACING_MS, retention);
+    assert.equal(history.length, 1_440);
+    assert.equal(history.at(-1)?.t, 25 * 3_600_000, 'the newest point follows the last poll');
+    assert.ok((history[0]?.t ?? 0) >= 3_600_000 - HISTORY_SPACING_MS, 'and the oldest hour has gone');
   });
 
   it('keeps every lag measurement for the last hour and thins older ones', () => {

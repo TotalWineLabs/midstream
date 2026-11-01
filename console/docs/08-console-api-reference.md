@@ -44,6 +44,7 @@ Outside `/api`: the federated Iceberg REST catalog at `/catalog` and each domain
 | `POST` | `/api/materializations/:id/stop` | `materializations.stop` | control plane | 202 pass-through |
 | `POST` | `/api/materializations/:id/resume` | `materializations.resume` | control plane | 202 pass-through |
 | `PATCH` | `/api/materializations/:id` | `materializations.edit`; the control plane checks `dataset.protect` for `protection`, and `materializations.maintain` for `protection.reprotect` | control plane | 202; `name`, `replicas`, `autoscaling`, `tables`, `removed_tables`, `protection` only; a change adding tables answers once their names are claimed |
+| `GET` | `/api/materializations/:id/throughput` | `materializations.view_details` | live store | Its throughput a point a minute, for the charts' wider windows: `{ spacingMs, series }`, kept for `CONSOLE_SERIES_HISTORY_MS` |
 | `GET` | `/api/materializations/:id/protection` | `materializations.view_details`; the control plane leaves out tables whose schemas the caller may not see | control plane, as the person | The protection review (control-plane handbook 22 §22.11) |
 | `DELETE` | `/api/materializations/:id` | `materializations.delete` | control plane | 202 pass-through |
 | `GET` | `/api/materializations/:id/tables/:table/schema` | `materializations.view_details`; `dataset.view_schema` on the table's dataset | live store | One table's current projection; the store notices a new `schema_id` |
@@ -187,6 +188,7 @@ This endpoint does **not** trigger a refresh, so it is safe to probe frequently.
   "pageRowLimit": 1000,
   "exportRowLimit": 1000000,
   "resultRowLimit": 1000000,
+  "autoRunMaxBytes": 268435456,
   "pollIntervalMs": 2000,
   "version": "1.0.0"
 }

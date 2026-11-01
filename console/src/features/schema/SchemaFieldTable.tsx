@@ -8,34 +8,25 @@ import { cn } from '@/lib/cn';
 import { useMaterializationDefaults } from '@/lib/defaults';
 import type { CpSchemaField, SchemaTimeline } from '@shared/types';
 
-/** Iceberg types by family, so a column of them reads at a glance. */
-function typeTone(type: string): string {
-  if (type === 'string') return 'var(--color-phase-pending)';
-  if (['int', 'long', 'float', 'double'].includes(type) || type.startsWith('decimal')) return 'var(--color-phase-running)';
-  if (type === 'boolean') return 'var(--color-phase-paused)';
-  if (type.startsWith('timestamp') || type === 'date' || type === 'time') return 'var(--color-accent)';
-  return 'var(--color-ink-faint)';
-}
-
 const GRID = 'grid grid-cols-[minmax(0,1fr)_150px_84px_120px_64px] items-center gap-4';
 
-/** A field's name, its leading segments dimmed so deep paths stay scannable. */
+/** A field's path in the fixed-width face, its leading segments dimmed so deep paths stay scannable. */
 export function FieldName({ name }: { name: string }): ReactNode {
   const head = name.slice(0, name.lastIndexOf('.') + 1);
   return (
-    <span className="numeric truncate text-[12px]">
+    <span className="ident truncate text-[12px]">
       {head ? <span className="text-[var(--color-ink-faint)]">{head}</span> : null}
       <span className="text-[var(--color-ink)]">{name.slice(head.length)}</span>
     </span>
   );
 }
 
+/** An Iceberg type as engines spell it: a machine string, in the fixed-width face. */
 export function TypeChip({ type, json = false }: { type: string | null; json?: boolean }): ReactNode {
   const text = type ?? 'unknown';
   return (
-    <span className="numeric inline-flex min-w-0 items-center gap-1.5 text-[12px] text-[var(--color-ink-muted)]" title={text}>
-      <span className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: json ? 'var(--color-ink-faint)' : typeTone(text) }} />
-      <span className="truncate">{json && text === 'string' ? 'json' : text}</span>
+    <span className="ident min-w-0 truncate text-[12px] text-[var(--color-ink-muted)]" title={text}>
+      {json && text === 'string' ? 'json' : text}
     </span>
   );
 }
@@ -44,8 +35,8 @@ export function TypeChip({ type, json = false }: { type: string | null; json?: b
 export function FieldState({ field }: { field: CpSchemaField }): ReactNode {
   if (field.kind === 'metadata') return <Badge>Kafka</Badge>;
   if (field.state === 'superseded') return <Badge>superseded</Badge>;
-  if (field.kind === 'json') return <Badge tone="paused">JSON</Badge>;
-  if (field.fork_version > 1) return <Badge tone="accent">fork v{field.fork_version}</Badge>;
+  if (field.kind === 'json') return <Badge>JSON</Badge>;
+  if (field.fork_version > 1) return <Badge>fork v{field.fork_version}</Badge>;
   return <span className="text-[12px] text-[var(--color-ink-faint)]">—</span>;
 }
 
@@ -94,11 +85,11 @@ export function SchemaFieldTable({ fields, timeline = null }: { fields: CpSchema
           const note = physicalNote(field);
           const dates = fieldDates(field, timeline);
           const parts = [
-            note ? `written to ${note}` : null,
             (field.since_schema_id ?? 0) > 0 ? `since schema ${field.since_schema_id}` : null,
             field.protection ? `masked: ${fieldProtectionText(field.protection, catalog)}` : null,
             dates,
           ].filter((part): part is string => part !== null);
+          const title = [note ? `written to ${note}` : null, ...parts].filter(Boolean).join(' · ');
           return (
             <li key={field.field_id} className={cn(GRID, 'px-5 py-2.5', field.state === 'superseded' && 'opacity-55')}>
               <span className="flex min-w-0 flex-col">
@@ -106,8 +97,14 @@ export function SchemaFieldTable({ fields, timeline = null }: { fields: CpSchema
                   <FieldName name={field.name} />
                   <ProtectedMark protection={field.protection} />
                 </span>
-                {parts.length > 0 ? (
-                  <span className="numeric truncate text-[11px] text-[var(--color-ink-faint)]" title={`${parts.join(' · ')}${dates ? ' (UTC)' : ''}`}>
+                {note || parts.length > 0 ? (
+                  <span className="numeric truncate text-[11px] text-[var(--color-ink-faint)]" title={`${title}${dates ? ' (UTC)' : ''}`}>
+                    {note ? (
+                      <>
+                        written to <span className="ident">{note}</span>
+                        {parts.length > 0 ? ' · ' : ''}
+                      </>
+                    ) : null}
                     {parts.join(' · ')}
                   </span>
                 ) : null}

@@ -116,7 +116,7 @@ export type LiveHold =
   | 'tail_off'
   /** The run's range has ended: nothing new can arrive in it. */
   | 'range_ended'
-  /** A row is open in the drawer: new rows would move it from under the reader. */
+  /** A row is open in the properties column: new rows would move it from under the reader. */
   | 'inspecting'
   /** Past the first page, newest first: new rows would shift every page being read. */
   | 'paged'
@@ -130,7 +130,7 @@ export interface LiveInput {
   run: RunSnapshot | null;
   /** A refresh was refused for the person's session or access. */
   authRefused: boolean;
-  /** A row of the grid is open in the drawer. */
+  /** A row of the grid is open in the properties column. */
   inspecting?: boolean;
   /** Which page is on screen, 0 for the first. */
   page?: number;

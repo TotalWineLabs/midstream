@@ -112,7 +112,7 @@ Neutrals do the work, so the signal can speak. Tokens live in `src/styles.css`: 
 | `--color-flare` / `-ink` | Flare | `#e5484d` / `#c2252b` | `#ff6369` / `#ff8086` | Failed |
 | `--color-slate` | Slate | `#808c99` | `#6f7c8c` | Stopped |
 | `--color-*-wash` | Wash | 11–13% of the colour | 12–14% | A state's pill, selection |
-| `--color-veil` | Veil | 7% ink | 8% mist | A masked column |
+| `--color-veil` | Veil | 7% ink | 8% mist | A masked column: a fine 135° hatch behind its values (`.veil`), which are quieter and fixed-width |
 
 Rules:
 
@@ -293,8 +293,9 @@ Rules:
   months behind its newest rows; committed rows below. It is a 26 px strip of its own, the line
   fading in at the left and out at the right, its label held in view as the grid scrolls sideways.
 - **A backlog shows its end:** while catching up, the readout says when it will be done at the
-  current pace (*Caught up around 4:30 PM · 62% there*); the chart's dotted projection to zero is to
-  come.
+  current pace (*Caught up around 4:30 PM · 62% there*), and its chart draws the rest as dots from
+  the latest measurement to zero, on an axis that runs ahead of now by up to the window's length.
+  What is measured is a line; what is expected is dotted (`TimeSeriesChart`'s `projection`).
 - **The river** leads the Overview: each materialization a channel from Kafka, through the Midstream
   gate, into the lake. `riverEngine.ts` moves the channels' particles and draws their bed;
   `riverLake.ts` is the lake's own water; `riverWater.ts` draws every particle as a comet on the GPU
@@ -374,7 +375,7 @@ The glossary: terms the console says differently from the system.
 | **A plan first** | Where data or time is at stake: create, edit, change topics, delete, reprotect | A card listing what will exist, change or go, by SQL names, what stays, and what it costs ("its workers stop for about two minutes"); Cancel and the action. Creating and editing a materialization are the model: the composer leads, the plan sits beside it, kept current as anything changes (`CreateMaterializationPage.tsx`, `EditMaterializationPage.tsx`). Deleting a materialization or a dataset shows the plan in the dialog that asks. The action says what it does — *Save, dropping 2 tables*, *Delete it and 2 tables* — as a danger button when data is destroyed, and what stops it is said beside it, once. Its parts: `components/Plan.tsx` |
 | **Consequences named** | Destructive actions | The plan lists each table that goes, with its rows and size, under a heading that says it cannot be undone |
 | **⌘K** | Going anywhere, doing anything | One field: places, tables, actions with their target named |
-| **Properties column** | A selected thing's details | A right column, closable, keys in Silt, values in Foam |
+| **Properties column** | A selected thing's details | A right column, closable, keys in Silt, values in Foam; on a phone, a sheet. The materialization's properties, and a row of a table's Data tab (`RowProperties.tsx`), whose grid marks the open row with an ink bar |
 | **(i)** | How a number is measured | A popover beside the number |
 | **Activity** | Changes in flight and what just happened | Real steps with estimates; a refusal that arrives later lands here too |
 | **Query thread** | Asking the data | Each statement and its answer in turn, kept in the browser by day |

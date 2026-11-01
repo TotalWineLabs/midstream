@@ -440,7 +440,7 @@ class ApplySettingsChangeTests(unittest.TestCase):
         document = get_settings_document(self.table, "control-plane")
         self.assertEqual(document.revision, 1)
         self.assertEqual(document.last_rejection.reason, "invalid_setting")
-        self.assertIn("cannot exceed maximum replicas", document.last_rejection.message)
+        self.assertIn("cannot exceed maximum workers", document.last_rejection.message)
 
     def test_reset_returns_a_setting_to_its_deployment_value(self) -> None:
         self.apply(change(values={"max_runtime_replicas": 32}))

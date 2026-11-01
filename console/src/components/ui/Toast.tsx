@@ -59,10 +59,12 @@ export function ToastProvider({ children }: { children: ReactNode }): ReactNode 
   return (
     <ToastContext.Provider value={api}>
       {children}
-      {/* A page with a sticky bottom bar sets --toast-offset so toasts stack above it. */}
+      {/* Above the phone's navigation bar; a page with a sticky bottom bar sets --toast-offset so toasts stack above it too. */}
       <div
-        className="pointer-events-none fixed right-4 z-[60] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2"
-        style={{ bottom: 'calc(1rem + var(--toast-offset, 0px))' }}
+        className={cn(
+          'pointer-events-none fixed right-4 z-[60] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2',
+          'bottom-[calc(4.75rem+env(safe-area-inset-bottom)+var(--toast-offset,0px))] md:bottom-[calc(1rem+var(--toast-offset,0px))]',
+        )}
       >
         {toasts.map((toast) => (
           <div

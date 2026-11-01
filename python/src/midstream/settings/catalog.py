@@ -153,24 +153,24 @@ CONTROL_PLANE_SETTINGS: tuple[SettingDefinition, ...] = (
     _cp(
         "default_runtime_replicas",
         section="materializations",
-        label="Default replicas",
+        label="Default workers",
         kind="integer",
-        unit="replicas",
+        unit="workers",
         minimum=1,
         maximum=1024,
-        description="Runtime members a new materialization starts with when its request names none.",
+        description="Workers a new materialization starts with when its request names none.",
         effect="new materializations",
     ),
     _cp(
         "max_runtime_replicas",
         section="materializations",
-        label="Maximum replicas",
+        label="Maximum workers",
         kind="integer",
-        unit="replicas",
+        unit="workers",
         minimum=1,
         maximum=1024,
         description=(
-            "The most replicas a create or an edit may ask for. Lowering it does not scale down "
+            "The most workers a create or an edit may ask for. Lowering it does not scale down "
             "materializations that already run more."
         ),
         effect="new creates and edits",
@@ -178,26 +178,26 @@ CONTROL_PLANE_SETTINGS: tuple[SettingDefinition, ...] = (
     _cp(
         "runtime_autoscaling_enabled",
         section="materializations",
-        label="Autoscale runtimes",
+        label="Add workers when far behind",
         kind="boolean",
         description=(
-            "Give a runtime that is far behind its topics more members, so it catches up within the "
-            "catch-up target, and return it to its own replica count once it has. Each materialization "
-            "can turn it off for itself. Off, scaled runtimes go back to their own count within a minute."
+            "Give a materialization that is far behind its topics more workers, so it catches up within "
+            "the catch-up target, and return it to its own count once it has. Each materialization can "
+            "turn it off for itself. Off, those with more go back to their own count within a minute."
         ),
         effect="the next lag measurement, within a minute",
     ),
     _cp(
         "runtime_autoscale_max_replicas",
         section="materializations",
-        label="Autoscaling maximum replicas",
+        label="Most workers when behind",
         kind="integer",
-        unit="replicas",
+        unit="workers",
         minimum=1,
         maximum=1024,
         description=(
-            "The most members autoscaling gives a runtime. It never gives more than its topics' "
-            "partitions keep busy, and never takes a runtime below its own replica count."
+            "The most workers a materialization far behind is given. Never more than its topics' "
+            "partitions keep busy, and never fewer than its own count."
         ),
         effect="the next scaling decision",
     ),
@@ -210,23 +210,23 @@ CONTROL_PLANE_SETTINGS: tuple[SettingDefinition, ...] = (
         minimum=1,
         maximum=1440,
         description=(
-            "How soon a runtime should catch up with its topics. One that would take longer at its pace "
-            "gets members enough to make it, up to the maximum."
+            "How soon a materialization should catch up with its topics. One that would take longer at "
+            "its pace gets workers enough to make it, up to the maximum."
         ),
         effect="the next scaling decision",
     ),
     _cp(
         "runtime_autoscale_min_lag_records",
         section="materializations",
-        label="Lag worth scaling for",
+        label="Behind enough to add workers",
         kind="integer",
         unit="records",
         minimum=1,
         maximum=1_000_000_000,
         advanced=True,
         description=(
-            "Fewer records behind than this, a runtime is caught up: it is not scaled up, and one that "
-            "was goes back to its own replica count after three measurements under it."
+            "Fewer records behind than this, a materialization is caught up: it gets no more workers, "
+            "and one that had more goes back to its own count after three measurements under it."
         ),
         effect="the next scaling decision",
     ),
@@ -240,8 +240,8 @@ CONTROL_PLANE_SETTINGS: tuple[SettingDefinition, ...] = (
         maximum=3600,
         advanced=True,
         description=(
-            "How long after a change of members before autoscaling adds more: each change moves the "
-            "runtime's partitions between its members, and its new pace needs time to show."
+            "How long after a change of workers before more are added: each change moves the "
+            "materialization's partitions between its workers, and its new pace needs time to show."
         ),
         effect="the next scaling decision",
     ),
@@ -264,13 +264,12 @@ CONTROL_PLANE_SETTINGS: tuple[SettingDefinition, ...] = (
     _cp(
         "default_runtime_storage_size",
         section="materializations",
-        label="Storage per replica",
+        label="Storage per worker",
         kind="quantity",
         description=(
-            "The persistent volume each runtime member of a new materialization gets, as a "
-            "Kubernetes quantity such as 64Mi. It holds only the runtime's state table: the "
-            "batches a member stages are on its node's disk. Fixed once a materialization is "
-            "created."
+            "The persistent volume each worker of a new materialization gets, as a Kubernetes "
+            "quantity such as 64Mi. It holds only the worker's state table: the batches a worker "
+            "stages are on its node's disk. Fixed once a materialization is created."
         ),
         effect="new materializations",
     ),
@@ -1399,10 +1398,10 @@ DEPLOYMENT_SETTINGS: tuple[DeploymentSetting, ...] = (
     DeploymentSetting(
         "resources",
         "runtime",
-        "Resources per replica",
+        "Resources per worker",
         "CONTROL_PLANE_RUNTIME_APP_SPEC",
-        "CPU and memory each runtime member requests and is limited to. A request that vertical "
-        "autoscaling controls is only where a member starts.",
+        "CPU and memory each worker requests and is limited to. A request that vertical "
+        "autoscaling controls is only where a worker starts.",
     ),
     DeploymentSetting(
         "vertical_autoscaling",
@@ -1530,7 +1529,7 @@ def validate_scope_values(scope: str, values: dict[str, Any]) -> None:
         maximum = values.get("max_runtime_replicas")
         if isinstance(default, int) and isinstance(maximum, int) and default > maximum:
             raise SettingValueError(
-                f"Default replicas ({default}) cannot exceed maximum replicas ({maximum})",
+                f"Default workers ({default}) cannot exceed maximum workers ({maximum})",
                 key="default_runtime_replicas",
             )
         idle = values.get("session_idle_timeout_minutes")

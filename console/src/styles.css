@@ -204,6 +204,15 @@
   .link:hover {
     text-decoration-color: currentColor;
   }
+
+  /* A masked value (§10.3): a fine hatch in Veil behind it, the value quieter and fixed-width, so a
+     hash or a partial reads as what the protection left, never as the data. */
+  .veil {
+    color: var(--color-ink-muted);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    background-image: repeating-linear-gradient(135deg, transparent 0 5px, var(--color-veil) 5px 6px);
+  }
 }
 
 /* ---------------------------------------------------------------------------------------------

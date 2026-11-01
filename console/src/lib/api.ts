@@ -53,6 +53,7 @@ import type {
   SettingsOverview,
   SettingsSaveResult,
   TableView,
+  ThroughputSample,
   TimeRange,
   TopicCatalogResponse,
   SsoOutcome,
@@ -210,6 +211,9 @@ export function domainApi(domain: string) {
     ...api,
     fleet: () => request<FleetSnapshot>(`${base}/materializations`),
     detail: (id: string) => request<DetailSnapshot>(`${base}/materializations/${encodeURIComponent(id)}`),
+    /** Its throughput a minute apart, for a chart's window wider than the stream's points cover. */
+    throughputHistory: (id: string) =>
+      request<{ spacingMs: number; series: ThroughputSample[] }>(`${base}/materializations/${encodeURIComponent(id)}/throughput`),
 
     /** Every topic in the cluster. `refresh` asks for a reload, which the server spaces out. */
     topics: (refresh = false) => request<TopicCatalogResponse>(refresh ? `${base}/topics?refresh=1` : `${base}/topics`),

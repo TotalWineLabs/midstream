@@ -5,6 +5,8 @@ import { Link } from 'react-router-dom';
 
 import { materializationLocation, newestCommit, partitionLabel, RuntimeVersion } from './OverviewTab';
 import { TablesPanel } from './TablesPanel';
+import { THROUGHPUT_WINDOWS, type ThroughputWindow } from './throughputHistory';
+import { useThroughput } from './useThroughput';
 import { canResume, useLifecycleActions } from '../materializations/actions';
 import { ProtectionChips, ProtectionStateBadge } from '../protection/ProtectionSummary';
 import { PageBody } from '@/components/AppShell';
@@ -139,19 +141,26 @@ function StateReadout({
   now: number;
 }): ReactNode {
   const [lagWindow, setLagWindow] = useState<LagWindow>('1h');
+  const [rateWindow, setRateWindow] = useState<ThroughputWindow>('1h');
+  // Only the flowing readout charts throughput; the others need no history.
+  const throughput = useThroughput(snapshot.materializationId, snapshot.series, rateWindow, status.kind === 'flowing');
   const { can } = useAuth();
   const { run, pending } = useLifecycleActions();
   const domainPath = useDomainPath();
   const lag = detail.status.consumer_lag?.total_lag ?? null;
-  const rowSeries = useMemo<ChartPoint[]>(() => snapshot.series.map((point) => ({ t: point.t, value: point.rowsPerSecond })), [snapshot.series]);
+  const rowSeries = useMemo<ChartPoint[]>(() => throughput.map((point) => ({ t: point.t, value: point.rowsPerSecond })), [throughput]);
   const lagSeries = useMemo<ChartPoint[]>(() => snapshot.lagHistory.map((point) => ({ t: point.t, value: point.lag })), [snapshot.lagHistory]);
   const committed = summary?.rows ?? null;
   const progress = status.kind === 'catching-up' ? backlogProgress(snapshot.lagHistory, committed, lag) : null;
   const pill = <StatusPill status={status} progress={progress} />;
 
   if (status.kind === 'catching-up') {
+    // The trend's time to go counts from its latest measurement, where the chart's line ends.
+    const latest = snapshot.lagHistory.at(-1) ?? null;
+    const zeroAt = trend.etaMs !== null && latest !== null ? latest.t + trend.etaMs : null;
+    const chartEnd = Math.max(now, latest?.t ?? now);
     const pieces = [
-      trend.etaMs !== null ? `Caught up around ${clockTime(now + trend.etaMs, now)}` : null,
+      zeroAt !== null ? `Caught up around ${clockTime(zeroAt, now)}` : null,
       progress !== null ? `${Math.round(progress * 100)}% there` : null,
       trend.perSecond !== null ? `falling ${formatCount(Math.round(-trend.perSecond))} a second` : null,
     ].filter(Boolean);
@@ -163,7 +172,9 @@ function StateReadout({
         <TimeSeriesChart
           points={lagSeries}
           from={now - LAG_WINDOWS[lagWindow]}
-          to={Math.max(now, snapshot.lagHistory.at(-1)?.t ?? now)}
+          // Room ahead for the projection to reach zero, at most as much as the window looks back.
+          to={zeroAt !== null ? Math.max(chartEnd, Math.min(zeroAt, chartEnd + LAG_WINDOWS[lagWindow])) : chartEnd}
+          projection={latest !== null && zeroAt !== null ? { t: zeroAt, value: 0, label: `reaching zero around ${clockTime(zeroAt, now)} at this pace` } : null}
           height={200}
           baseline="auto"
           formatValue={(value) => `${formatExact(value)} records behind`}
@@ -196,9 +207,16 @@ function StateReadout({
           )
         }
       >
+        <div className="flex justify-end pb-1">
+          <SegmentedControl
+            value={rateWindow}
+            onChange={setRateWindow}
+            options={(Object.keys(THROUGHPUT_WINDOWS) as ThroughputWindow[]).map((value) => ({ value, label: value }))}
+          />
+        </div>
         <TimeSeriesChart
           points={rowSeries}
-          from={Math.max(snapshot.series[0]?.t ?? now, now - 30 * 60_000)}
+          from={now - THROUGHPUT_WINDOWS[rateWindow]}
           to={now}
           height={180}
           formatValue={(value) => `${formatReadoutRate(value)} rows a second`}

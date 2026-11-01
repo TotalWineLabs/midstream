@@ -178,7 +178,7 @@ function TableSchema({
                     ? 'The console could not read the table’s schema from the control plane.'
                     : `The table is at schema ${reportedVersion}, but the console could not read it.`}
                   {schemaError ? (
-                    <span className="mt-2 block text-[var(--color-phase-failed)]">{schemaError}</span>
+                    <span className="mt-2 block text-[var(--color-flare-ink)]">{schemaError}</span>
                   ) : null}
                 </>
               }
@@ -459,19 +459,19 @@ function SchemaCallouts({ schema }: { schema: CpSchema }): ReactNode {
   return (
     <div className="grid gap-2">
       {collapsed > 0 ? (
-        <Callout icon={<Braces className="size-4" />} tone="var(--color-phase-paused)">
+        <Callout icon={<Braces className="size-4" />}>
           {collapsed === 1 ? '1 field is' : `${formatCount(collapsed)} fields are`} kept as JSON text: their values changed
           type too often, or their objects grew too wide, for columns of their own. They read as JSON in the Data tab.
         </Callout>
       ) : null}
       {rejected > 0 ? (
-        <Callout icon={<OctagonAlert className="size-4" />} tone="var(--color-phase-failed)">
+        <Callout icon={<OctagonAlert className="size-4" />} attention>
           The schema is at its field limit: new fields are not added, and their values go to <code>_unmapped</code>. Raise
           the limit under Settings › Schema evolution.
         </Callout>
       ) : null}
       {unmappedRecently ? (
-        <Callout icon={<Inbox className="size-4" />} tone="var(--color-phase-pending)">
+        <Callout icon={<Inbox className="size-4" />}>
           Values went to <code>_unmapped</code> in the last hour ({formatCount(schema.unmapped?.total_values ?? 0)} in
           all, last <RelativeTime value={schema.unmapped?.last_seen_at ?? null} />). They are kept as JSON on their rows.
         </Callout>
@@ -480,15 +480,16 @@ function SchemaCallouts({ schema }: { schema: CpSchema }): ReactNode {
   );
 }
 
-function Callout({ icon, tone, children }: { icon: ReactNode; tone: string; children: ReactNode }): ReactNode {
+/** A note above the fields: neutral, or in Buoy when someone needs to act, as at the field limit. */
+function Callout({ icon, attention = false, children }: { icon: ReactNode; attention?: boolean; children: ReactNode }): ReactNode {
   return (
     <div
-      className="flex items-start gap-3 rounded-lg border px-4 py-3 text-[12px] text-[var(--color-ink-muted)]"
-      style={{ borderColor: `color-mix(in srgb, ${tone} 35%, transparent)`, backgroundColor: `color-mix(in srgb, ${tone} 7%, transparent)` }}
+      className={cn(
+        'flex items-start gap-3 rounded-[var(--radius-panel)] px-4 py-3 text-[12px] leading-relaxed text-[var(--color-ink)]',
+        attention ? 'bg-[var(--color-buoy-wash)]' : 'bg-[var(--color-raised)]',
+      )}
     >
-      <span className="mt-0.5 shrink-0" style={{ color: tone }}>
-        {icon}
-      </span>
+      <span className={cn('mt-0.5 shrink-0', attention ? 'text-[var(--color-buoy-ink)]' : 'text-[var(--color-ink-muted)]')}>{icon}</span>
       <p>{children}</p>
     </div>
   );

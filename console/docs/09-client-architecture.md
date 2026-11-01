@@ -237,7 +237,7 @@ so the UI never renders `NaN` or `undefined`.
 | The run's snapshot | `useRun`, fed by the run's event stream (polling if it drops) | Lost on navigation; the run itself keeps going server-side until it finishes |
 | Pages of a run | TanStack Query, keyed by run, offset and readiness | Complete pages never change, so they are cached for good and the next one is prefetched |
 | SQL editor height, column rail width, column rail open | `localStorage` (`console.data.sqlHeight`, `console.data.railWidth`, `console.data.columnsOpen`) | Survives reload; guarded for private browsing |
-| JSON layout for exports and the row drawer's copy | `localStorage` (`console.data.jsonShape`: `nested` or `flat`) | Survives reload; nested when unset |
+| JSON layout for exports and the row properties' copy | `localStorage` (`console.data.jsonShape`: `nested` or `flat`) | Survives reload; nested when unset |
 | Consumer-lag window, throughput metric | `StateReadout` and `DiagnosticsPanels` local state | Lost on navigation |
 | Search text, recently deleted | `MaterializationsPage` local state | Lost on navigation |
 | Selected schema version, compare version, field filter | `SchemaTab` local state | Lost on navigation |
@@ -282,6 +282,7 @@ features/
   detail/
     DetailPage.tsx                          Header, actions, tab shell, and the delete plan
     topicChange.ts                          No React: what a choice of topics does to the tables (planTopicChange), and keepOrder
+    throughputHistory.ts / useThroughput.ts A throughput chart's windows: the stream's recent points after the console's minute-by-minute history (tested)
     TablesPanel.tsx                         The Overview's tables: written, kept, being dropped; what runs on each
     TableTab.tsx                            One table: figures, snapshots, maintenance and Run now, partitions, properties, Connect
     connect.ts                              No React: the Connect snippets per engine, following the location's scheme and its storage profile (tested)
@@ -309,7 +310,8 @@ features/
     FilterChips.tsx                         Active filters and the builder: field search, then the value
     fieldSearch.ts                          Ranked, highlighted search over column names
     SqlPanel.tsx / QueryEditor.tsx          Statement editor (CodeMirror, lazy-loaded) with error markers
-    RowDrawer.tsx                           Single-row detail, including hidden columns
+    RowProperties.tsx                       One row's every field, hidden ones included: a column beside the grid, a sheet on a phone
+    autoRun.ts                              No React: whether a changed view runs by itself, or says its size and waits for Run (tested)
     columns.ts                              Column grouping, default visibility, labels, older names
     viewState.ts                            Read/write the view in the query string
   datasets/

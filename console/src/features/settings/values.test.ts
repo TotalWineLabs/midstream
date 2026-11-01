@@ -183,7 +183,9 @@ describe('formatting', () => {
 
   it('writes values with their unit, and absence as None', () => {
     assert.equal(formatValue({ kind: 'integer', unit: 'ms' }, 30_000), '30 s');
-    assert.equal(formatValue({ kind: 'integer', unit: 'replicas' }, 16), '16 replicas');
+    assert.equal(formatValue({ kind: 'integer', unit: 'workers' }, 16), '16 workers');
+    // An older control plane's unit, in the console's word.
+    assert.equal(formatValue({ kind: 'integer', unit: 'replicas' }, 16), '16 workers');
     assert.equal(formatValue({ kind: 'boolean', unit: null }, false), 'Off');
     assert.equal(formatValue({ kind: 'destination_uri', unit: null }, null), 'None');
     assert.equal(formatValue({ kind: 'integer', unit: 'hours' }, 168), '168 hours');

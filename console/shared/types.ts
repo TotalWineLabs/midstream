@@ -1525,6 +1525,8 @@ export interface ConsoleConfig {
   exportRowLimit: number;
   /** Rows a statement's result keeps for paging and export; its total is always counted in full. */
   resultRowLimit: number;
+  /** The most bytes a table's view scans to run by itself as it changes; 0 never (Settings › Data explorer). */
+  autoRunMaxBytes: number;
   pollIntervalMs: number;
   version: string;
 }
@@ -1607,6 +1609,7 @@ export type SettingUnit =
   | 'objects'
   | 'markers'
   | 'replicas'
+  | 'workers'
   | 'materializations'
   | 'versions'
   | 'topics';

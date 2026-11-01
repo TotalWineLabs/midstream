@@ -198,6 +198,13 @@ poll until it is far enough from the one before it, then kept. The series theref
 carries the cumulative counters and the rates as of that poll; rates are `null` until every
 member has reported twice.
 
+The same samples also go into a second series, at least a minute apart (`HISTORY_SPACING_MS`) and
+kept for `CONSOLE_SERIES_HISTORY_MS` (24 h, 1,440 points). The stream does not carry it, so its
+frames stay small: a chart whose window reaches past the stream's quarter hour reads it from
+`GET /api/d/<domain>/materializations/<id>/throughput` each minute and draws the stream's recent
+points after it (`features/detail/throughputHistory.ts`). Both live in memory and start again
+with the console.
+
 ### Fleet samples
 
 `recordFleetSample` runs once per refresh pass. Counters are summed over the cached details; rates

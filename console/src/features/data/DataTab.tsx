@@ -9,7 +9,7 @@ import { HeadPeek } from './HeadPeek';
 import { autoRerunDelay, liveHold, liveTailAvailable, peekDone, tableQueryable, tailNotice, type TailNotice } from './live';
 import { Pager } from './Pager';
 import { ResizeHandle } from './ResizeHandle';
-import { RowDrawer } from './RowDrawer';
+import { RowProperties } from './RowProperties';
 import { SqlPanel } from './SqlPanel';
 import { MoreActions } from './MoreActions';
 import { StatusBar } from './StatusBar';
@@ -25,6 +25,7 @@ import {
   type ColumnGroupId,
 } from './columns';
 import { ALL_TIME, describeInstants, rangeLabel, resolveRange, sameRange, type TimeRangeSpec } from './timeRange';
+import { runsByItself, waitsForRun } from './autoRun';
 import { useRun, useRunPage } from './useRun';
 import { readViewState, writeViewState } from './viewState';
 import { namedTable } from '../tables/selectedTable';
@@ -38,6 +39,7 @@ import { useAuth, useConsoleAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import { formatMoment, formatTimestamp } from '@/lib/format';
 import { useApi, useConsoleConfig, useDomain } from '@/lib/domains';
+import { useMinWidth } from '@/lib/media';
 import { rootQueryClient } from '@/lib/queryClient';
 import type {
   BrowseFilter,
@@ -195,6 +197,8 @@ export function DataTab({
   const [railWidth, setRailWidth] = useState(() => stored(RAIL_WIDTH_KEY, RAIL_MIN_WIDTH, RAIL_MAX_WIDTH, RAIL_MIN_WIDTH));
   const [sqlHeight, setSqlHeight] = useState(() => stored(SQL_HEIGHT_KEY, SQL_MIN_HEIGHT, SQL_MAX_HEIGHT, 220));
   const [detailIndex, setDetailIndex] = useState<number | null>(null);
+  // A row opens in a properties column beside the grid, or over it where the screen is too narrow.
+  const wide = useMinWidth(768);
   const [validation, setValidation] = useState<{ sql: string; message: string; position: StatementPosition | null } | null>(null);
   const [live, setLive] = useState(initial.live);
   const [autoRerun, setAutoRerun] = useState(false);
@@ -272,6 +276,28 @@ export function DataTab({
     },
     [sqlMode, range, sqlDraft, filters, order, tableName, start],
   );
+
+  // A changed view runs by itself when it reads little (Settings › Data explorer); a big one says how
+  // much it would read and waits for Run. A statement always waits: it is run deliberately.
+  const autoRunMaxBytes = configQuery.data?.autoRunMaxBytes ?? 0;
+  const browseChanged = dirty && !sqlMode;
+  const scopeQuery = useQuery({
+    queryKey: ['scope-estimate', materializationId, tableName, rangeLabel(range), summary?.asOf ?? null],
+    queryFn: () => api.dataEstimate(materializationId, tableName, [resolveRange(range)]),
+    enabled: browseChanged && autoRunMaxBytes > 0,
+    staleTime: 30_000,
+    retry: 0,
+  });
+  const scope = browseChanged ? (scopeQuery.data?.estimates[0] ?? null) : null;
+  const autoRun = browseChanged && runsByItself(scope, autoRunMaxBytes);
+  // While the size is being asked, the view is neither waiting nor running: say nothing yet.
+  const deciding = browseChanged && autoRunMaxBytes > 0 && scope === null && scopeQuery.isFetching;
+  useEffect(() => {
+    if (!autoRun) return;
+    // A moment's pause, so a burst of changes runs once.
+    const timer = window.setTimeout(() => execute(), 400);
+    return () => window.clearTimeout(timer);
+  }, [autoRun, draftKey, execute]);
 
   // Opening the tab: pick the run in the address bar back up, or run the view it describes.
   const opened = useRef(false);
@@ -401,6 +427,16 @@ export function DataTab({
 
   const pageQuery = useRunPage(run, page * pageSize, pageSize, carried?.id ?? null);
   const rows = useMemo(() => pageQuery.data?.rows ?? [], [pageQuery.data]);
+  const closeRow = useCallback(() => setDetailIndex(null), []);
+  const stepRow = useCallback(
+    (delta: number) =>
+      setDetailIndex((current) => {
+        if (current === null) return current;
+        const next = current + delta;
+        return next < 0 || next >= rows.length ? current : next;
+      }),
+    [rows.length],
+  );
   // Rows on screen may still be the previous page's while the next one lands; they keep their own
   // numbering and are shown muted, so a row is never labelled with a position it does not hold.
   const shownOffset = pageQuery.data?.offset ?? page * pageSize;
@@ -594,6 +630,28 @@ export function DataTab({
 
   const rowsOnPage = rows.length;
   const browseRun = run?.request.kind === 'browse';
+  const openRow = detailIndex !== null ? rows[detailIndex] : undefined;
+  const rowProperties = openRow ? (
+    <RowProperties
+      row={openRow}
+      columns={ordered}
+      schemaOrder={schemaOrder}
+      index={page * pageSize + (detailIndex ?? 0)}
+      total={run?.rows ?? rows.length}
+      live={detailIndex !== null && liveRows.has(detailIndex)}
+      sheet={!wide}
+      onClose={closeRow}
+      onStep={stepRow}
+      onFilter={
+        sqlMode
+          ? undefined
+          : (filter) => {
+              addFilter(filter);
+              setDetailIndex(null);
+            }
+      }
+    />
+  ) : null;
 
   return (
     <PageBody>
@@ -718,8 +776,8 @@ export function DataTab({
                 className={cn(
                   'relative inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[var(--radius-control)] px-3.5 text-[12px] font-medium text-[var(--color-on-primary)] transition-opacity',
                   'bg-[var(--color-primary)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60',
-                  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]',
-                  dirty && !running && 'ring-2 ring-[var(--color-accent-soft)] ring-offset-1 ring-offset-[var(--color-surface)]',
+                  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-ink)]',
+                  dirty && !running && !autoRun && 'ring-2 ring-[var(--color-line-strong)] ring-offset-1 ring-offset-[var(--color-surface)]',
                 )}
               >
                 {running ? <Square className="size-3 fill-current" /> : <Play className="size-3.5 fill-current" />}
@@ -739,7 +797,8 @@ export function DataTab({
             run={shownRun}
             starting={starting}
             summary={summary}
-            dirty={dirty}
+            dirty={dirty && !autoRun && !deciding}
+            waiting={waitsForRun(scope, autoRunMaxBytes)}
             onRerun={() => execute()}
             tailNotice={notice?.tone === 'muted' ? notice : null}
             warning={liveWarning}
@@ -819,6 +878,7 @@ export function DataTab({
                       : null
                   }
                   onExpand={setDetailIndex}
+                  selectedIndex={detailIndex}
                   onCopy={(column, value) => {
                     void navigator.clipboard.writeText(value === null || value === undefined ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value));
                     toast.success('Copied', labelFor(labels, column).display);
@@ -840,32 +900,12 @@ export function DataTab({
                 }}
               />
             </div>
+            {rowProperties && wide ? rowProperties : null}
           </div>
         </Panel>
       </div>
 
-      {detailIndex !== null && rows[detailIndex] ? (
-        <RowDrawer
-          row={rows[detailIndex] as Record<string, unknown>}
-          columns={ordered}
-          schemaOrder={schemaOrder}
-          index={page * pageSize + detailIndex}
-          total={run?.rows ?? rows.length}
-          onClose={() => setDetailIndex(null)}
-          onStep={(delta) =>
-            setDetailIndex((current) => {
-              if (current === null) return current;
-              const next = current + delta;
-              return next < 0 || next >= rows.length ? current : next;
-            })
-          }
-          onFilter={(filter) => {
-            if (sqlMode) return;
-            addFilter(filter);
-            setDetailIndex(null);
-          }}
-        />
-      ) : null}
+      {rowProperties && !wide ? rowProperties : null}
     </PageBody>
   );
 }
@@ -895,6 +935,7 @@ function GridArea({
   hasFilters,
   summarySpan,
   onExpand,
+  selectedIndex,
   onCopy,
   onSearchAllTime,
 }: {
@@ -916,6 +957,8 @@ function GridArea({
   hasFilters: boolean;
   summarySpan: string | null;
   onExpand: (index: number) => void;
+  /** The row open beside the grid, if any. */
+  selectedIndex: number | null;
   onCopy: (column: string, value: unknown) => void;
   onSearchAllTime: () => void;
 }): ReactNode {
@@ -987,6 +1030,7 @@ function GridArea({
       columns={columns}
       rows={rows}
       onRowExpand={onExpand}
+      selectedIndex={selectedIndex}
       rowNumberOffset={rowOffset}
       dimmed={stale}
       labels={labels}

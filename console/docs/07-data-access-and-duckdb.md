@@ -396,7 +396,7 @@ pages its committed rows alone and its tail says `lost`.
 
 The Data tab's browse view refreshes every `CONSOLE_LIVE_TAIL_REFRESH_MS` (1.5 s) while **Streaming** is on,
 the tab is visible, the run has succeeded, the page is the first (newest first) and no row is open
-in the drawer (`src/features/data/live.ts::liveHold`). A relative range ("Last 15 minutes") has an
+in the properties column (`src/features/data/live.ts::liveHold`). A relative range ("Last 15 minutes") has an
 open end, so the rows the tail appends are inside it, and is resolved again for the run that replaces
 the old one after a commit, so the window slides. A range whose end has passed polls nothing. A
 statement is never refreshed in place; its SQL panel's **Auto re-run** starts a new run five seconds

@@ -84,6 +84,7 @@ export async function registerSystemRoutes(app: FastifyInstance): Promise<void> 
       pageRowLimit: config.pageRowLimit,
       exportRowLimit: config.exportRowLimit,
       resultRowLimit: config.resultRowLimit,
+      autoRunMaxBytes: config.autoRunMaxBytes,
       pollIntervalMs: config.listPollIntervalMs,
       version: config.version,
     };

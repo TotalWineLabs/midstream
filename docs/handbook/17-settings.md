@@ -63,14 +63,14 @@ advanced sits behind the section's **Advanced** toggle.
 | Key | Env var | Default | Bounds | Label |
 |---|---|---|---|---|
 | `default_destination_uri` | `…DEFAULT_DESTINATION_URI` | none | a `gs://`, `s3://` or `abfss://` destination (`destination_uri`) | Destination — where every new materialization's tables are created; none, and no materialization can be created |
-| `default_runtime_replicas` | `…DEFAULT_RUNTIME_REPLICAS` | 1 | 1–1,024 | Default replicas |
-| `max_runtime_replicas` | `…MAX_RUNTIME_REPLICAS` | 64 | 1–1,024 | Maximum replicas |
-| `default_runtime_storage_size` | `…DEFAULT_RUNTIME_STORAGE_SIZE` | `64Mi` | a Kubernetes quantity | Storage per replica — every new runtime member's volume, which holds only its state table |
+| `default_runtime_replicas` | `…DEFAULT_RUNTIME_REPLICAS` | 1 | 1–1,024 | Default workers |
+| `max_runtime_replicas` | `…MAX_RUNTIME_REPLICAS` | 64 | 1–1,024 | Maximum workers |
+| `default_runtime_storage_size` | `…DEFAULT_RUNTIME_STORAGE_SIZE` | `64Mi` | a Kubernetes quantity | Storage per worker — every new worker's volume, which holds only its state table |
 | `default_partition_granularity` | `…DEFAULT_PARTITION_GRANULARITY` | `day` | `hour`, `day`, `month`, `none` | Default partitioning |
-| `runtime_autoscaling_enabled` | `…RUNTIME_AUTOSCALING_ENABLED` | on | — | Autoscale runtimes — more members for a runtime far behind its topics, its own count once caught up; off, scaled runtimes go back within a minute |
-| `runtime_autoscale_max_replicas` | `…RUNTIME_AUTOSCALE_MAX_REPLICAS` | 16 | 1–1,024 | Autoscaling maximum replicas — never more than the topics' partitions keep busy |
+| `runtime_autoscaling_enabled` | `…RUNTIME_AUTOSCALING_ENABLED` | on | — | Add workers when far behind — more workers for a materialization far behind its topics, its own count once caught up; off, those with more go back within a minute |
+| `runtime_autoscale_max_replicas` | `…RUNTIME_AUTOSCALE_MAX_REPLICAS` | 16 | 1–1,024 | Most workers when behind — never more than the topics' partitions keep busy |
 | `runtime_autoscale_target_minutes` | `…RUNTIME_AUTOSCALE_TARGET_MINUTES` | 30 | 1–1,440 | Catch-up target |
-| `runtime_autoscale_min_lag_records` | `…RUNTIME_AUTOSCALE_MIN_LAG_RECORDS` | 100,000 | 1–1,000,000,000 | Lag worth scaling for (advanced) |
+| `runtime_autoscale_min_lag_records` | `…RUNTIME_AUTOSCALE_MIN_LAG_RECORDS` | 100,000 | 1–1,000,000,000 | Behind enough to add workers (advanced) |
 | `runtime_autoscale_cooldown_seconds` | `…RUNTIME_AUTOSCALE_COOLDOWN_SECONDS` | 300 | 60–3,600 | Time between scaling steps (advanced) |
 | `max_materialization_topics` | `…MAX_MATERIALIZATION_TOPICS` | 20 | 1–100 | Topics per materialization — the most topics one materialization (one runtime, one table each) may read; applies to new materializations |
 
@@ -307,7 +307,7 @@ Reported read-only on the Settings page's **Deployment** section (`DEPLOYMENT_SE
 | `CONTROL_PLANE_CATALOG_BASE_URL` | The address engines reach the control plane at; the console's connection snippets show it |
 | `CONTROL_PLANE_DEFAULT_NAMESPACE` | A namespace needs the runtimes' role, service account and secrets |
 | `CONTROL_PLANE_RUNTIME_NAME_PREFIX` | Names every runtime and decides which topics a delete removes |
-| `CONTROL_PLANE_RUNTIME_TEMPLATE_VERSION`, `…_RUNTIME_APP_SPEC` | Shape of the rendered runtime; changing it re-applies — and restarts — every runtime. Shown as **Resources per replica**, **Storage class** and **Vertical autoscaling**; a change to the vertical autoscaling alone restarts none (02 §2.10c) |
+| `CONTROL_PLANE_RUNTIME_TEMPLATE_VERSION`, `…_RUNTIME_APP_SPEC` | Shape of the rendered runtime; changing it re-applies — and restarts — every runtime. Shown as **Resources per worker**, **Storage class** and **Vertical autoscaling**; a change to the vertical autoscaling alone restarts none (02 §2.10c) |
 | Credentials — each storage backend's (`GOOGLE_APPLICATION_CREDENTIALS`, `AWS_*`, `AZURE_*`), the session signing keys, the console's service token, the bootstrap administrator | Never through a UI. The page says only whether each identity secret is configured, and nothing of a storage credential |
 | The protection key (`PROTECTION_KEY`, the auth Secret's `protection-key`) | Hashing's key, for the lake's lifetime (22 §22.8). The page shows its id, or that none is configured |
 | The runtime's task intervals (heartbeat, pipeline, commit timer) | Rendered into the runtime's tasks; built in |

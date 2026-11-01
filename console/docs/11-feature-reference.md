@@ -379,8 +379,8 @@ leads; everything about how it runs is in Diagnostics (§11.6).
 
 | State | Leads with | Context | Chart |
 |---|---|---|---|
-| Flowing | Rows a second, rolling as it changes | **Complete through** the earliest of the tables' `validThrough`, or the last commit | Rows a second, the last 30 minutes |
-| Catching up | Records behind | *Caught up around 4:30 PM · 62% there · falling 5,914 a second*: the drain's end at its current pace; how far it has come — from the backlog's peak when the console's lag history saw the backlog begin, otherwise rows committed out of rows committed and records behind (`backlogProgress`), so a console started mid-backfill does not mistake the lag it first saw for the start; and the rate | Records behind over **15m / 1h / 6h**, on an axis fitted to the values |
+| Flowing | Rows a second, rolling as it changes | **Complete through** the earliest of the tables' `validThrough`, or the last commit | Rows a second over **15m / 1h / 6h / 24h** (1h first): the stream's points every few seconds, after the console's history a point a minute (`GET …/throughput`, read each minute while a wider window is shown) |
+| Catching up | Records behind | *Caught up around 4:30 PM · 62% there · falling 5,914 a second*: the drain's end at its current pace, counted from the latest measurement; how far it has come — from the backlog's peak when the console's lag history saw the backlog begin, otherwise rows committed out of rows committed and records behind (`backlogProgress`), so a console started mid-backfill does not mistake the lag it first saw for the start; and the rate | Records behind over **15m / 1h / 6h**, on an axis from zero, and a dotted line from the latest measurement to zero at the current pace: the axis runs ahead of now by up to the window's length, and a drain that ends later leaves the chart at its edge |
 | Stopped | *Stopped 5 minutes ago* | *Its tables stay readable, and Resume picks up where it left off.* (Stopping: *Shutting down its workers*, shimmering; Deleting: *Removing its runtime and tables*) | **Resume**, with the permission |
 | Starting, Updating, Resuming | What it is doing, shimmering: *Waiting for its workers* | — | — |
 | Needs attention, Failed | The reason in words, or the control plane's message | The message, where it says more | **Open Diagnostics** |
@@ -439,15 +439,16 @@ to a batch per partition plus a commit interval, and its lag falls in steps as c
 | Footer | When it was last measured and how often measurements arrive |
 
 **Specification** — the **Source topics**, the tables' **Location** (the directory each table's own
-sits under), **Replicas** (with "none running while stopped" when stopped, or "16 while catching up"
+sits under), **Workers** (with "none running while stopped" when stopped, or "16 while catching up"
 while autoscaling has it scaled up), **Autoscaling** (**On · up to 16**, **Off**, or **Off for every
-materialization**; absent before 4.4), storage per replica, `namespace`, `runtime_mode`,
+materialization**; absent before 4.4), storage per worker, `namespace`, `runtime_mode`,
 `resolved_runtime_name`, `resource_profile`, `spec_version` and **Data protection**, then label and
 annotation chips when non-empty. Its datasets, tables, partitioning, null records and creation are in
 the Overview's properties.
 
-**Throughput** — the last ~20 minutes as a chart with a value axis, clock times and a hover (or
-arrow-key) readout; **Rows / Bytes** switches the series.
+**Throughput** — a chart with a value axis, clock times and a hover (or arrow-key) readout over **15m /
+1h / 6h / 24h**, as on the Overview; **Rows / Bytes** switches the series. The console keeps the
+history in memory (*Throughput history*, 24 hours by default), so a restart starts it again.
 
 **Skipped records** — when any were: each reason with its count and where its latest is on the
 source topic.
@@ -501,7 +502,7 @@ Above the current schema, when they apply:
 | Callout | When |
 |---|---|
 | *N fields are kept as JSON text: their values changed type too often, or their objects grew too wide, for columns of their own.* | a family collapsed (handbook 09) |
-| *The schema is at its field limit: new fields are not added, and their values go to `_unmapped`.* | a change was rejected at `max_schema_fields`; it points to Settings › Schema evolution |
+| *The schema is at its field limit: new fields are not added, and their values go to `_unmapped`.* | a change was rejected at `max_schema_fields`; it points to Settings › Schema evolution. The one callout in Buoy, since someone needs to act; the others are neutral |
 | *Values went to `_unmapped` in the last hour (N in all, last …).* | the runtime reported unmapped values recently |
 
 ### Fields
@@ -510,8 +511,8 @@ Payload fields first, in schema order with each fork family together, then the K
 
 | Column | Content |
 |--------|---------|
-| Field | Its logical name, ancestors dimmed (`customer.` + **email**); below it, for a fork or a renamed key, `written to total__v2`, `since schema 3` for a field newer than schema 0, `first seen Sep 1, 2025` for a field that was not in the table's first records, and `last seen Feb 9, 2026` for one superseded or no longer arriving (its last value a day or more before the table's last record). Dates are UTC |
-| Type | The Iceberg type as a chip (`long`, `struct`, `list<string>`); a JSON field reads `json` |
+| Field | Its logical name in the fixed-width face, ancestors dimmed (`customer.` + **email**); below it, for a fork or a renamed key, `written to total__v2`, `since schema 3` for a field newer than schema 0, `first seen Sep 1, 2025` for a field that was not in the table's first records, and `last seen Feb 9, 2026` for one superseded or no longer arriving (its last value a day or more before the table's last record). Dates are UTC |
+| Type | The Iceberg type as engines spell it, fixed-width (`long`, `struct`, `list<string>`); a JSON field reads `json` |
 | Required | `required` when the field is |
 | State | `current`, `superseded` (a newer fork took over), `collapsed` |
 | Id | The Iceberg field id |
@@ -538,8 +539,9 @@ fields held values from the start*. Clicking a field name shows it in the Fields
 
 **Changes** diffs the selected schema against an earlier one (06 §6.4): each entry with its kind —
 added, forked, collapsed, type widened, required changed, superseded — its field and type, and for a
-changed field what changed. A short hint explains each kind; a fork, for example, says the older
-field keeps the values written before it.
+changed field what changed, from the old value, struck through, to the new. Each kind has its own
+shape and word, in neutral ink: none is a state (10 §10.3). A short hint explains each kind; a fork,
+for example, says the older field keeps the values written before it.
 
 ---
 
@@ -580,9 +582,14 @@ newest of all, first in newest-first order.
 | **Run** / **Stop** | The tab's only Run. While a run works it is **Stop**. `⌘↵` / `Ctrl+↵` anywhere on the tab |
 | **More actions** (⋮) | Right of **Run**: **Peek**, **Share** and **Export…** (below) |
 
-Changing the time range, a filter, the order or the statement **does not run anything**. The Run
-button gains a ring and the status line says **Changes not run yet**, so the screen never disagrees
-with the controls silently.
+**A small question runs as it is asked.** Changing the time range, a filter or the order asks first
+how much the range would read (`POST …/data/estimate`); within *Run as you edit, up to* (Settings ›
+Data explorer, 256 MiB by default) the view runs by itself a moment later, so a burst of changes runs
+once. A bigger one waits: the Run button gains a ring and the status line says how much it would
+read — *Not run yet: this range holds 102.6M rows in 18.8 GB, so it waits for Run* (`autoRun.ts`). A
+statement always waits for Run, as does every change while the setting is 0 or the size cannot be
+read: the status line then says **Changes not run yet**, so the screen never disagrees with the
+controls silently.
 
 ### Time range
 
@@ -695,8 +702,13 @@ moment's stronger Current (`row-arrive`, 1.2 s, none under reduced motion). Rows
 their record — Kafka partition and offset — so at the top of the grid the new rows come into view,
 and scrolled into it the row being read stays where it is while the new ones arrive above.
 
-Column headers do not sort. Clicking a cell copies it; the row gutter opens the row drawer (below).
-`null` renders as italic `null`.
+Column headers do not sort. Clicking a cell copies it; the row gutter opens the row in a properties
+column beside the grid (below), and marks it there. `null` renders as italic `null`.
+
+**A masked column is veiled** (10 §10.3): its cells sit on a fine diagonal hatch in Veil, their values
+quieter and fixed-width, so a hash or a partial reads as what the protection left, never as the data;
+a withheld value, absent from the record, reads *withheld* rather than *null*. Its header carries the
+shield, its tooltip naming the kind and the mask.
 
 Timestamps with a time zone — `_kafka_timestamp`, and any `TIMESTAMP WITH TIME ZONE` a statement
 returns — render in the reader's time zone as `2026-10-04 19:59:59.685`, the zone named in the
@@ -788,12 +800,18 @@ the run's columns are known. Reloading the page re-attaches to the
 same run if it still exists — a long query keeps going and the status picks up where it was — and
 otherwise runs the view again.
 
-### Row drawer
+### Row properties
 
-Every field of one row on one vertical axis, grouped like the rail and including hidden columns, with
-per-field copy, filter-to-this-value, whole-row JSON copy (in the JSON layout chosen under
-**Export…**), and `↑`/`↓` (or `j`/`k`) to step rows. A masked field carries the rail's shield. A timestamp shows its local time with the UTC
-value beneath it.
+The row gutter opens one row in a properties column at the grid's right (10 §10.10; on a phone, a
+sheet over it): **Row 1,204 of 5,000**, the record's partition and offset, *Live, not in the table
+yet* for a row past the last commit, then every field on one vertical axis, grouped like the column
+list and including hidden columns — the field's path in the fixed-width face, its value beside it —
+with per-field copy, filter-to-this-value (not for a statement's result), and whole-row JSON copy (in
+the JSON layout chosen under **Export…**). A masked field carries the shield and the veil. A timestamp
+shows its local time with the UTC value beneath it. The grid stays in use beside it: another row's
+gutter shows that row, and the open row is marked with an ink bar. `↑`/`↓` (or `j`/`k`) step rows and
+`Esc` closes it, except while typing in a field. Streaming waits while a row is open, so new rows
+never move it from under the reader (`RowProperties.tsx`).
 
 ---
 

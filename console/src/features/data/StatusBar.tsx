@@ -25,6 +25,7 @@ export function StatusBar({
   starting,
   summary,
   dirty,
+  waiting = null,
   onRerun,
   tailNotice = null,
   warning = null,
@@ -34,6 +35,8 @@ export function StatusBar({
   summary: DataSummary | null;
   /** The controls describe a different query than the one on screen. */
   dirty: boolean;
+  /** Why the changed view waits for Run, when its size is the reason. */
+  waiting?: string | null;
   onRerun: () => void;
   /** A muted word on Live (`live.ts::tailNotice`). */
   tailNotice?: TailNotice | null;
@@ -63,15 +66,15 @@ export function StatusBar({
             </span>
           ) : null}
           {dirty && !running ? (
-            <span className="rounded-full bg-[var(--color-accent-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-accent)]">
-              Changes not run yet
+            <span className="rounded-full bg-[var(--color-raised)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-ink)]">
+              {waiting ?? 'Changes not run yet'}
             </span>
           ) : null}
           {!dirty && run?.state === 'succeeded' && hasNewerData(run, summary) ? (
             <button
               type="button"
               onClick={onRerun}
-              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] text-[var(--color-accent)] hover:bg-[var(--color-accent-soft)]"
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] text-[var(--color-ink)] hover:bg-[var(--color-raised)]"
               title="New rows have arrived since this result was read. Run again to include them."
             >
               <RotateCw className="size-3" />
