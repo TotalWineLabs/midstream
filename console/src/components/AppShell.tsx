@@ -4,6 +4,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 
 import { Avatar } from './Avatar';
 import { DomainDot } from './DomainChip';
+import { Lockup, Mark } from './Logo';
 import { Dialog } from './ui/Dialog';
 import { Popover } from './ui/Popover';
 import { Button } from './ui/primitives';
@@ -172,12 +173,7 @@ export function AppShell({ children }: { children: ReactNode }): ReactNode {
         )}
       >
         <div className={cn('flex h-14 items-center gap-2.5', collapsed ? 'justify-center px-2' : 'px-5')}>
-          <span className="grid size-6 shrink-0 place-items-center rounded-[7px] bg-[var(--color-ink)]">
-            <span className="size-2 rounded-[2px] bg-[var(--color-canvas)]" />
-          </span>
-          {collapsed ? null : (
-            <span className="truncate text-[13px] font-semibold tracking-tight">Midstream</span>
-          )}
+          {collapsed ? <Mark size={24} label="Midstream" className="text-[var(--color-current)]" /> : <Lockup />}
         </div>
 
         {domains.length > 1 ? <DomainSwitcher domains={domains} scope={scope} collapsed={collapsed} /> : null}

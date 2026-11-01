@@ -4,14 +4,34 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#07090C" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#EDF1F3" />
     <meta name="description" content="The web console of Midstream: materializations, their tables, settings and access, live." />
-    <title>Midstream Console</title>
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Midstream" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>Midstream</title>
     <script>
-      // Applied before first paint so the theme never flashes.
+      // Applied before first paint so the theme never flashes. Unset or "system" follows the
+      // operating system, live; "light" or "dark" is the person's own choice and wins.
       (() => {
-        const stored = localStorage.getItem('console.theme');
-        const dark = stored === 'dark' || (stored === null && matchMedia('(prefers-color-scheme: dark)').matches);
-        document.documentElement.classList.toggle('dark', dark);
+        const media = matchMedia('(prefers-color-scheme: dark)');
+        const apply = () => {
+          let stored = null;
+          try {
+            stored = localStorage.getItem('console.theme');
+          } catch {
+            stored = null;
+          }
+          const dark = stored === 'dark' || ((stored === null || stored === 'system') && media.matches);
+          document.documentElement.classList.toggle('dark', dark);
+        };
+        apply();
+        media.addEventListener('change', apply);
+        window.__applyTheme = apply;
       })();
     </script>
   </head>

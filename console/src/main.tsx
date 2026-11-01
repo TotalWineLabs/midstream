@@ -7,6 +7,9 @@ import { App } from './App';
 import { ToastProvider } from './components/ui/Toast';
 import { AuthProvider } from './lib/auth';
 import { rootQueryClient } from './lib/queryClient';
+import '@fontsource-variable/bricolage-grotesque/opsz.css';
+import '@fontsource-variable/instrument-sans';
+import '@fontsource-variable/spline-sans-mono';
 import './styles.css';
 
 const container = document.getElementById('root');
