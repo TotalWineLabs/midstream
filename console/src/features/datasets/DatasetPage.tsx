@@ -1,31 +1,30 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Lock, Pencil, Trash2 } from 'lucide-react';
+import { Lock, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { PageBody, PageHeader } from '@/components/AppShell';
 import { RelativeTime } from '@/components/Inline';
+import { PlanBlocked, PlanGroup, PlanItem, PlanNote, PlanTable } from '@/components/Plan';
+import { StatusLabel } from '@/components/Status';
 import { Dialog } from '@/components/ui/Dialog';
+import { Popover } from '@/components/ui/Popover';
 import { useToast } from '@/components/ui/Toast';
-import { Badge, Button, EmptyState, Field, Input, Panel, PanelHeader, Skeleton } from '@/components/ui/primitives';
+import { Button, EmptyState, Field, Input, Panel, Skeleton } from '@/components/ui/primitives';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
-import { useApi, useDomainPath } from '@/lib/domains';
+import { useApi, useDomain, useDomainPath } from '@/lib/domains';
+import { useFleet } from '@/lib/fleet';
+import { formatCount } from '@/lib/format';
 import { tablePath } from '@/lib/paths';
-import type { CpDatasetDetail, CpDatasetTable, DatasetTableState } from '@shared/types';
+import { itemStatus } from '@/lib/status';
+import type { CpDatasetDetail, CpDatasetTable } from '@shared/types';
 
-import { ConfirmDialog } from '../access/ConfirmDialog';
-import { DatasetAccess } from './DatasetAccess';
-import { AccessBadge } from './DatasetsPage';
+import { tableStatus } from '../tables/TablePage';
+import { AccessWord } from './DatasetsPage';
+import { SharePopover } from './SharePopover';
 import { useRefreshDatasets } from './useDatasets';
-
-const TABS = [
-  { key: 'tables', label: 'Tables' },
-  { key: 'access', label: 'Access' },
-] as const;
-
-type Tab = (typeof TABS)[number]['key'];
 
 /** Read a dataset again: after a change to it, its access, or its tables. */
 export function datasetKey(name: string): readonly unknown[] {
@@ -33,111 +32,112 @@ export function datasetKey(name: string): readonly unknown[] {
 }
 
 /**
- * One dataset: what it is for, who owns it, and its tables with the materializations that write
- * them. Its owners edit its description, decide who may use it (Access), and delete it once it holds
- * no tables.
+ * One dataset: what is in it, and who can use it (docs/10-design-system.md §10.5). Its tables lead,
+ * each with the materialization that writes it and its state. Its owners share it — the people and
+ * groups with a role on it, in a popover like a document's (`SharePopover`) — change its
+ * description, and delete it once it holds no tables.
  */
 export function DatasetPage(): ReactNode {
   const domainPath = useDomainPath();
   const api = useApi();
   const { name = '', tab } = useParams<{ name: string; tab?: string }>();
-  const navigate = useNavigate();
   const { can } = useAuth();
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const dataset = useQuery({ queryKey: datasetKey(name), queryFn: () => api.dataset(name), refetchInterval: 15_000, retry: 0 });
   const data = dataset.data ?? null;
   const manages = data !== null && can('dataset.manage', data.dataset_id);
-  const tabs = TABS.filter((item) => item.key !== 'access' || manages);
-  const activeTab: Tab = tabs.some((item) => item.key === tab) ? (tab as Tab) : 'tables';
+  const crumbs = (
+    <Link to={domainPath('/datasets')} className="transition-colors hover:text-[var(--color-ink)]">
+      Datasets
+    </Link>
+  );
 
   if (dataset.isError) {
     const missing = dataset.error instanceof ApiError && dataset.error.status === 404;
     return (
-      <PageBody>
-        <Panel>
-          <EmptyState
-            title={missing ? `There is no dataset ${name}` : 'The dataset could not be loaded'}
-            description={dataset.error instanceof ApiError ? dataset.error.message : 'Try again in a moment.'}
-            action={
-              <Link to={domainPath('/datasets')} className="text-[13px] text-[var(--color-accent)] hover:underline">
-                All datasets
-              </Link>
-            }
-          />
-        </Panel>
-      </PageBody>
+      <>
+        <PageHeader crumbs={crumbs} title={name} />
+        <PageBody>
+          <Panel>
+            <EmptyState
+              title={missing ? `There is no dataset ${name}` : 'The dataset could not be loaded'}
+              description={dataset.error instanceof ApiError && !missing ? dataset.error.message : 'It may have been deleted.'}
+              action={
+                <Link to={domainPath('/datasets')} className="text-[13px] font-medium hover:underline">
+                  All datasets
+                </Link>
+              }
+            />
+          </Panel>
+        </PageBody>
+      </>
     );
   }
 
   return (
     <>
       <PageHeader
-        title={<span className="numeric">{name}</span>}
-        subtitle={data ? data.description || 'No description.' : 'Loading…'}
+        crumbs={crumbs}
+        title={name}
+        subtitle={data?.description || null}
         meta={
-          <>
-            <Link
-              to={domainPath('/datasets')}
-              className="inline-flex items-center gap-1 text-[12px] text-[var(--color-ink-muted)] transition-colors hover:text-[var(--color-ink)]"
-            >
-              <ArrowLeft className="size-3.5" />
-              All datasets
-            </Link>
-            {data ? (
-              <>
-                <AccessBadge dataset={data} />
-                <span className="text-[12px] text-[var(--color-ink-muted)]">
-                  Owned by {data.owners.length ? data.owners.map((owner) => owner.name).join(', ') : 'nobody'}
-                </span>
-              </>
-            ) : null}
-          </>
+          data ? (
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[var(--color-ink-muted)]">
+              <AccessWord dataset={data} />
+              <span aria-hidden className="size-[3px] rounded-full bg-[var(--color-ink-faint)]" />
+              <span>{data.owners.length ? `Owned by ${data.owners.map((owner) => owner.name).join(', ')}` : 'No owner'}</span>
+            </span>
+          ) : (
+            <Skeleton className="h-5 w-56" />
+          )
         }
         actions={
-          manages ? (
+          manages && data ? (
             <>
-              <Button variant="ghost" onClick={() => setEditing(true)}>
-                <Pencil className="size-3.5" />
-                Edit
-              </Button>
-              <Button variant="ghost" onClick={() => setDeleting(true)}>
-                <Trash2 className="size-4" />
-                Delete
-              </Button>
+              <SharePopover dataset={data.name} defaultOpen={tab === 'access'} />
+              <Popover
+                align="end"
+                width={220}
+                trigger={({ open, toggle, id }) => (
+                  <Button variant="ghost" onClick={toggle} aria-expanded={open} aria-controls={id} aria-label="More actions" className="px-2.5">
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                )}
+              >
+                {({ close }) => (
+                  <div className="p-1.5" role="menu">
+                    <MenuItem
+                      icon={<Pencil className="size-4" />}
+                      onClick={() => {
+                        close();
+                        setEditing(true);
+                      }}
+                    >
+                      Edit description…
+                    </MenuItem>
+                    <MenuItem
+                      icon={<Trash2 className="size-4" />}
+                      danger
+                      onClick={() => {
+                        close();
+                        setDeleting(true);
+                      }}
+                    >
+                      Delete dataset…
+                    </MenuItem>
+                  </div>
+                )}
+              </Popover>
             </>
           ) : null
         }
-      >
-        <div className="mx-auto max-w-[1400px] px-6">
-          <nav className="-mb-px flex gap-1" role="tablist">
-            {tabs.map((item) => (
-              <button
-                key={item.key}
-                role="tab"
-                type="button"
-                aria-selected={activeTab === item.key}
-                onClick={() => navigate(domainPath(`/datasets/${encodeURIComponent(name)}${item.key === 'tables' ? '' : `/${item.key}`}`), { replace: true })}
-                className={cn(
-                  'border-b-2 px-3 pb-2.5 text-[13px] font-medium transition-colors',
-                  activeTab === item.key
-                    ? 'border-[var(--color-ink)] text-[var(--color-ink)]'
-                    : 'border-transparent text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]',
-                )}
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
-        </div>
-      </PageHeader>
+      />
 
       {!data ? (
-        <PageBody className="space-y-4">
+        <PageBody>
           <Skeleton className="h-48" />
         </PageBody>
-      ) : activeTab === 'access' ? (
-        <DatasetAccess dataset={data} />
       ) : (
         <DatasetTables dataset={data} />
       )}
@@ -152,106 +152,117 @@ export function DatasetPage(): ReactNode {
   );
 }
 
-const STATE_LABELS: Record<DatasetTableState, { label: string; tone: 'running' | 'pending' | 'neutral' }> = {
-  pending: { label: 'being created', tone: 'pending' },
-  active: { label: 'written', tone: 'running' },
-  retired: { label: 'kept · read-only', tone: 'neutral' },
-  dropping: { label: 'being dropped', tone: 'pending' },
-  dropped: { label: 'dropped', tone: 'neutral' },
-};
+function MenuItem({ icon, danger = false, onClick, children }: { icon: ReactNode; danger?: boolean; onClick: () => void; children: ReactNode }): ReactNode {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className={cn(
+        'flex w-full items-center gap-2.5 rounded-[var(--radius-control)] px-2.5 py-2 text-left text-[13px] transition-colors hover:bg-[var(--color-raised)]',
+        danger ? 'text-[var(--color-flare-ink)]' : 'text-[var(--color-ink)]',
+      )}
+    >
+      {icon}
+      {children}
+    </button>
+  );
+}
 
+/** The tables in it, each with the materialization writing it and its state. */
 function DatasetTables({ dataset }: { dataset: CpDatasetDetail }): ReactNode {
   const { can } = useAuth();
-  const readable = !dataset.locked;
+  const domainPath = useDomainPath();
+  const shown = dataset.tables.filter((table) => table.state !== 'dropped');
   return (
     <PageBody className="space-y-4">
       {dataset.locked ? (
-        <p className="flex items-start gap-2 rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-raised)] px-4 py-3 text-[12px] text-[var(--color-ink-muted)]">
-          <Lock className="mt-0.5 size-3.5 shrink-0" />
-          This dataset is locked to you: you see its tables’ names, not their schemas or data. Ask one of its owners for a
-          role on it.
+        <p className="flex items-start gap-2 rounded-[var(--radius-control)] bg-[var(--color-raised)] px-4 py-3 text-[13px] text-[var(--color-ink-muted)]">
+          <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          Locked to you: you see its tables’ names, not their schemas or data. Ask one of its owners to share it with you.
         </p>
       ) : null}
       <Panel className="overflow-hidden">
-        <PanelHeader
-          title={`Tables (${dataset.tables.filter((table) => table.state !== 'dropping').length})`}
-          description={
-            <>
-              SQL reads each as <code className="numeric">{dataset.name}.&lt;table&gt;</code>, and engines on the Iceberg catalog as{' '}
-              <code className="numeric">lake.{dataset.name}.&lt;table&gt;</code>. Each is written by one materialization.
-            </>
-          }
-        />
-        {dataset.tables.length === 0 ? (
+        <header className="px-5 pt-4 pb-3">
+          <h2 className="text-[15px] font-semibold">
+            Tables <span className="numeric font-normal text-[var(--color-ink-faint)]">{shown.length}</span>
+          </h2>
+        </header>
+        {shown.length === 0 ? (
           <EmptyState
             title="No tables yet"
-            description={
-              can('dataset.write', dataset.dataset_id)
-                ? 'Choose this dataset for a topic’s table when you create or edit a materialization.'
-                : 'Tables are added by people who may write to this dataset.'
+            description="A table goes in it when a materialization writes a topic here: choose this dataset for the topic."
+            action={
+              can('dataset.write', dataset.dataset_id) && can('materializations.create') ? (
+                <Link
+                  to={domainPath('/materializations/new')}
+                  className="inline-flex h-9 items-center gap-2 rounded-[var(--radius-control)] bg-[var(--color-primary)] px-4 text-sm font-medium text-[var(--color-on-primary)] hover:opacity-90"
+                >
+                  <Plus className="size-4" />
+                  New materialization
+                </Link>
+              ) : null
             }
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-[12px]">
-              <thead>
-                <tr className="border-b border-[var(--color-line)] bg-[var(--color-raised)] text-left text-[12px] text-[var(--color-ink-muted)]">
-                  <th className="px-5 py-2 font-medium">Table · topic</th>
-                  <th className="px-2 py-2 font-medium">Materialization</th>
-                  <th className="px-2 py-2 font-medium">State</th>
-                  <th className="px-5 py-2 font-medium">Last commit</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--color-line)]">
-                {dataset.tables.map((table) => (
-                  <DatasetTableRow key={`${table.materialization_id}:${table.name}`} dataset={dataset.name} table={table} readable={readable} />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ul className="divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
+            {shown.map((table) => (
+              <TableRow key={`${table.materialization_id}:${table.name}`} dataset={dataset} table={table} />
+            ))}
+          </ul>
         )}
       </Panel>
     </PageBody>
   );
 }
 
-function DatasetTableRow({ dataset, table, readable }: { dataset: string; table: CpDatasetTable; readable: boolean }): ReactNode {
+function TableRow({ dataset, table }: { dataset: CpDatasetDetail; table: CpDatasetTable }): ReactNode {
   const domainPath = useDomainPath();
+  const domain = useDomain();
   const { can } = useAuth();
-  const state = STATE_LABELS[table.state] ?? { label: table.state, tone: 'neutral' as const };
-  const detail = domainPath(`/materializations/${encodeURIComponent(table.materialization_id)}`);
+  const { data: fleet } = useFleet(domain.id);
+  const item = fleet?.items.find((candidate) => candidate.domain === domain.id && candidate.materialization_id === table.materialization_id);
+  const status = tableStatus(table, null, item ? itemStatus(item) : null);
   const canOpen = can('materializations.view_details');
+  const opens = canOpen && !dataset.locked && (table.state === 'active' || table.state === 'retired');
+  const name = (
+    <>
+      <span className="text-[var(--color-ink-muted)]">{dataset.name}.</span>
+      {table.name}
+    </>
+  );
   return (
-    <tr className={cn('align-top', table.state === 'dropping' && 'opacity-60')}>
-      <td className="px-5 py-2">
-        {canOpen && readable && (table.state === 'active' || table.state === 'retired') ? (
-          <Link to={domainPath(tablePath(dataset, table.name))} className="numeric font-medium hover:text-[var(--color-accent)] hover:underline">
-            {dataset}.{table.name}
+    <li
+      className={cn(
+        'grid gap-x-6 gap-y-1 px-5 py-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-center',
+        table.state === 'dropping' && 'opacity-60',
+      )}
+    >
+      <div className="min-w-0">
+        {opens ? (
+          <Link to={domainPath(tablePath(dataset.name, table.name))} className="ident block truncate text-[13px] font-medium hover:underline">
+            {name}
           </Link>
         ) : (
-          <span className="numeric font-medium">
-            {dataset}.{table.name}
-          </span>
+          <span className="ident block truncate text-[13px] font-medium">{name}</span>
         )}
-        <span className="numeric block break-all text-[11px] text-[var(--color-ink-muted)]">{table.source_topic}</span>
-      </td>
-      <td className="px-2 py-2">
+        <span className="ident block truncate text-[12px] text-[var(--color-ink-faint)]">{table.source_topic}</span>
+      </div>
+      <span className="min-w-0 truncate text-[13px] text-[var(--color-ink-muted)]">
+        from{' '}
         {canOpen && table.materialization_name !== null ? (
-          <Link to={detail} className="hover:text-[var(--color-accent)] hover:underline">
+          <Link to={domainPath(`/materializations/${encodeURIComponent(table.materialization_id)}`)} className="text-[var(--color-ink)] hover:underline">
             {table.materialization_name}
           </Link>
         ) : (
-          <span>{table.materialization_name ?? table.materialization_id}</span>
+          <span className="text-[var(--color-ink)]">{table.materialization_name ?? table.materialization_id}</span>
         )}
-        <span className="numeric block text-[11px] text-[var(--color-ink-faint)]">{table.materialization_id}</span>
-      </td>
-      <td className="px-2 py-2">
-        <Badge tone={state.tone}>{state.label}</Badge>
-      </td>
-      <td className="px-5 py-2 whitespace-nowrap text-[var(--color-ink-muted)]">
-        <RelativeTime value={table.last_commit_at} />
-      </td>
-    </tr>
+      </span>
+      <span className="min-w-0 text-[13px]">{status ? <StatusLabel status={status} /> : null}</span>
+      <span className="text-[12px] whitespace-nowrap text-[var(--color-ink-faint)] sm:text-right">
+        {table.last_commit_at ? <RelativeTime value={table.last_commit_at} prefix="committed" /> : 'nothing committed yet'}
+      </span>
+    </li>
   );
 }
 
@@ -274,7 +285,7 @@ function EditDatasetDialog({ open, onClose, dataset }: { open: boolean; onClose:
     mutationFn: () => api.updateDataset(dataset.name, { description: description.trim(), base_revision: dataset.revision }),
     onSuccess: async () => {
       await Promise.all([queryClient.invalidateQueries({ queryKey: datasetKey(dataset.name) }), refresh()]);
-      toast.success('Dataset changed', `${dataset.name}’s description is saved.`);
+      toast.success('Description saved', dataset.name);
       onClose();
     },
     onError: (failure: unknown) => setError(failure instanceof ApiError ? failure.message : 'The change could not be saved.'),
@@ -289,8 +300,8 @@ function EditDatasetDialog({ open, onClose, dataset }: { open: boolean; onClose:
     <Dialog
       open={open}
       onClose={onClose}
-      title={`Edit ${dataset.name}`}
-      description="A dataset’s name never changes; its description can."
+      title={`Describe ${dataset.name}`}
+      description="What it is for, in a sentence. Its name never changes."
       footer={
         <>
           <Button variant="ghost" type="button" onClick={onClose}>
@@ -311,6 +322,7 @@ function EditDatasetDialog({ open, onClose, dataset }: { open: boolean; onClose:
   );
 }
 
+/** Deleting a dataset, with its plan: refused while it holds tables, which it names; its grants go with it. */
 function DeleteDatasetDialog({ open, onClose, dataset }: { open: boolean; onClose: () => void; dataset: CpDatasetDetail }): ReactNode {
   const domainPath = useDomainPath();
   const api = useApi();
@@ -321,27 +333,64 @@ function DeleteDatasetDialog({ open, onClose, dataset }: { open: boolean; onClos
     mutationFn: () => api.deleteDataset(dataset.name),
     onSuccess: async () => {
       await refresh();
-      toast.success('Dataset deleted', `${dataset.name} is gone; its name can be used again.`);
+      toast.success(`${dataset.name} deleted`, 'Its name is free to use again.');
       onClose();
-      navigate(domainPath('/datasets'));
+      void navigate(domainPath('/datasets'));
     },
     onError: (failure: unknown) => toast.error('Could not delete the dataset', failure instanceof ApiError ? failure.message : 'Try again in a moment.'),
   });
-  const held = dataset.tables.length;
+  const held = dataset.tables.filter((table) => table.state !== 'dropped');
   return (
-    <ConfirmDialog
+    <Dialog
       open={open}
       onClose={onClose}
       title={`Delete ${dataset.name}?`}
-      description={
-        held > 0
-          ? `It still holds ${held} ${held === 1 ? 'table' : 'tables'}: a dataset can be deleted only once its tables are gone - dropped, or their materializations deleted.`
-          : 'Its grants go with it, and its name can be used again. This cannot be undone.'
+      footer={
+        held.length > 0 ? (
+          <Button variant="secondary" onClick={onClose}>
+            Close
+          </Button>
+        ) : (
+          <>
+            <Button variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button variant="danger" loading={remove.isPending} onClick={() => remove.mutate()}>
+              Delete {dataset.name}
+            </Button>
+          </>
+        )
       }
-      confirmLabel={held > 0 ? 'Close' : 'Delete'}
-      danger={held === 0}
-      pending={remove.isPending}
-      onConfirm={() => (held > 0 ? onClose() : remove.mutate())}
-    />
+    >
+      <div className="space-y-4">
+        {held.length > 0 ? (
+          <>
+            <PlanBlocked>
+              It still holds {held.length === 1 ? 'a table' : `${formatCount(held.length)} tables`}. A dataset can be deleted once its tables are gone: dropped, or their
+              materializations deleted.
+            </PlanBlocked>
+            <PlanGroup title="Holds">
+              {held.map((table) => (
+                <PlanTable
+                  key={`${table.materialization_id}:${table.name}`}
+                  dataset={dataset.name}
+                  name={table.name}
+                  detail={`from ${table.materialization_name ?? table.materialization_id}`}
+                />
+              ))}
+            </PlanGroup>
+          </>
+        ) : (
+          <>
+            <PlanGroup title="Deletes">
+              <PlanItem detail="and who can use it: every grant on it goes with it">
+                The dataset <span className="ident">{dataset.name}</span>
+              </PlanItem>
+            </PlanGroup>
+            <PlanNote>Its name is free to use again. This cannot be undone.</PlanNote>
+          </>
+        )}
+      </div>
+    </Dialog>
   );
 }
