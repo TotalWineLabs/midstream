@@ -1,24 +1,17 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 
+import { MARK_DISPLAY, MARK_DISPLAY_LINE, MARK_TEXT, MARK_TEXT_LINE } from './markPaths';
 import { cn } from '@/lib/cn';
-
-/** The stream: it rises twice and settles into a line, the waterline where the lake begins. */
-const STREAM = 'M11,44 C14,33 16.6,14.5 21,14.5 C25.4,14.5 27,44 31.5,44 C35.6,44 36.6,25 40.6,25 C44.2,25 45.2,44 49.5,44 L56,44';
 
 /** Whether a mark has drawn itself yet: once a page load, not again on every page it reappears on. */
 let drawn = false;
 
-/** Heavier at small sizes, so the stroke holds its weight beside text. */
-function strokeFor(size: number): number {
-  if (size <= 20) return 7;
-  if (size <= 32) return 6.4;
-  return 5.6;
-}
-
 /**
- * Midstream's mark, one solid stroke in one colour (docs/10-design-system.md §Identity).
+ * Midstream's mark: one stream drawn with a pen, heavier on the way down and easing off along the
+ * tail, in one colour (docs/10-design-system.md §10.2). The shapes come from `design/mark/mark.py`.
  *
- * Alone it takes the text colour around it; on its tile it is the app icon, ink on Current. It draws
+ * Alone it takes the text colour around it; on its tile it is the app icon, ink on Current. At 32 px
+ * and under it uses the text cut, heavier and with less contrast, so its thin strokes hold. It draws
  * itself once when the console opens, and while `working` the stream flows through it.
  */
 export function Mark({
@@ -41,6 +34,9 @@ export function Mark({
   useEffect(() => {
     drawn = true;
   }, []);
+  const mask = useId();
+  const text = size <= 32;
+  const motion = working ? 'mark-flow' : draw ? 'mark-draw' : null;
 
   return (
     <svg
@@ -53,17 +49,22 @@ export function Mark({
       aria-hidden={label ? undefined : true}
     >
       {tile ? <rect width="64" height="64" rx="15" fill="#3EF0C5" /> : null}
-      <path
-        d={STREAM}
-        transform="translate(-1.5 3.4)"
-        pathLength={100}
-        fill="none"
-        stroke={tile ? '#07090C' : 'currentColor'}
-        strokeWidth={strokeFor(size)}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className={working ? 'mark-flow' : draw ? 'mark-draw' : undefined}
-      />
+      {motion ? (
+        <mask id={mask} maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+          {/* The pen's path, wide enough to uncover every width of the stroke as it travels. */}
+          <path
+            d={text ? MARK_TEXT_LINE : MARK_DISPLAY_LINE}
+            pathLength={100}
+            fill="none"
+            stroke="#fff"
+            strokeWidth={11}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={motion}
+          />
+        </mask>
+      ) : null}
+      <path d={text ? MARK_TEXT : MARK_DISPLAY} fill={tile ? '#07090C' : 'currentColor'} mask={motion ? `url(#${mask})` : undefined} />
     </svg>
   );
 }
