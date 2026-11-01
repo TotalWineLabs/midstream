@@ -4,18 +4,31 @@ Exactly what every screen shows, where each value comes from, and what every con
 
 ## 11.1 App shell
 
-Persistent around every page (`components/AppShell.tsx`).
+Persistent around every page (`components/AppShell.tsx`), in the design language of
+[10](./10-design-system.md).
 
 | Element | Behaviour |
 |---------|-----------|
-| Domain switcher | Above the navigation, where the console serves several domains: **All domains**, then each domain with its live dot (green live, amber reconnecting or unreachable, red misconfigured). Choosing one keeps the section open — the overview, the lists, settings |
-| Sidebar (≥ 768 px) | Logo, **Overview**, **Materializations**, **Datasets**, **Search**; **Settings** at the foot, above the account button; active item highlighted via `NavLink`. In a domain the items are that domain's; under **All domains** every domain's. Items a person may not open are left out |
-| Mobile nav (< 768 px) | Horizontal strip replacing the sidebar, Settings last; **Sign in** for a guest |
-| Account button | Signed in to any domain: an avatar with initials and the person's name; opens a menu with their email, the domains they are signed in to (and **sign in to more**), **Your account** and **Sign out everywhere**. Signed in nowhere: **Sign in** |
-| ⌘K / Ctrl+K | Opens **Search** from anywhere (§11.12) |
-| Theme toggle | Flips `.dark` and persists `console.theme` |
-| Domain banners | Across the top, one per domain that is misconfigured (its control plane says it is another domain) or runs a release this console does not work with, saying which |
+| Sidebar (≥ 768 px) | The mark and **Midstream** (to the overview); the domain switcher; **Search or jump to… ⌘K**; **Overview**, **Materializations**, **Datasets**; pinned items; **Settings**, the account and the live indicator at the foot. In a domain the items are that domain's; under **All domains** every domain's. Items a person may not open are left out. Collapses to icons, remembered in `console.sidebar.collapsed` |
+| Needs-you count | Beside **Materializations**: how many failed or need attention, in Buoy (Flare when one failed). Nothing at all when none do |
+| Pinned | Materializations and datasets a person pinned (the pin on a materialization's page, or ⌘K), each with its state's glyph; kept in the browser (`console.pins`, `lib/pins.ts`); unpinned with the × on hover. No heading when nothing is pinned |
+| Domain switcher | Where the console serves several domains: **All domains**, then each domain with its live dot. Choosing one keeps the section open: the overview, the lists, settings |
+| Content panel | The page sits in an inset panel on the canvas, beside the sidebar |
+| Phone (< 768 px) | A top bar with the mark, the live dot, search and the account; a bottom bar with **Overview**, **Materializations**, **Datasets** and **Search** |
+| ⌘K, Ctrl+K or / | The command menu (§11.1a) from anywhere; on the search page, focuses its field |
+| Account menu | The person's name and email, the domains they are signed in to (and **sign in to more**), **Appearance** (**System**, **Light**, **Dark**: `console.theme`, applied before first paint), **Your account**, **About this deployment**, **Sign out everywhere**. Signed in nowhere: **Sign in** |
+| Domain banners | Above the page, one per domain that is misconfigured (its control plane says it is another domain) or runs a release this console does not work with, saying which |
 | About this deployment | The console's version and every domain's control plane's; a warning when the domains sign access tokens with different federation keys |
+
+### 11.1a The command menu
+
+One field to go anywhere or do anything (`components/CommandMenu.tsx`):
+
+| Before typing | After |
+|---|---|
+| **Go to**: Overview, Materializations, Datasets, Settings, Your account (those the person may open); five materializations, the ones that need someone first | Places and materializations by name, id or topic, ranked and highlighted; **Actions** on the first three found: **Stop** (running), **Resume** (stopped), **Pin** or **Unpin**, each only with the permission in its domain; **Tables** and **Datasets** as search answers; **See every result** for the search page |
+
+↑↓ move, ↵ opens or acts, Esc closes. A stop acts at once; its toast offers **Undo**.
 
 ### Signing in (`/sign-in`, `/sign-in/:domain`)
 
@@ -49,96 +62,70 @@ page into that domain's guest's at the next request, and open streams close with
 
 | Condition | Display |
 |-----------|---------|
-| `status === 'live'` and no error | Pulsing green dot + `Live · <relative generatedAt>` |
-| `status === 'connecting'` | Amber dot + `Connecting…` |
-| Reconnecting or control-plane error | Amber dot + the error message, e.g. `control plane at http://… is unreachable` |
+| `status === 'live'` and no error | A Current dot that beats once for every frame that arrives, and **Live**; the tooltip says how long ago it updated |
+| `status === 'connecting'` | A Buoy dot and **Connecting…**, shimmering |
+| Reconnecting or control-plane error | A Buoy dot and the error, e.g. `control plane at http://… is unreachable` |
 
-The relative timestamp updates every second via `useTicker`, so a frozen stream becomes visible as
-a growing age rather than a silently stale screen.
+`compact` keeps only the dot, with the words in its tooltip: the collapsed sidebar, the phone's top
+bar, a materialization's header.
 
 ---
 
 ## 11.2 Overview (`/`)
 
-Fleet-wide health and throughput. Data: `useFleetStream()`.
+Is everything flowing? Data: `useFleet()`, from the shell's one fleet stream.
 
-### Stat row
+| Part | Content |
+|------|---------|
+| Readout | Pills: **N need you** (Buoy, or Flare when one failed) and **All N on track** or **N on track**. Then the fleet's rows a second, set large, rolling as it changes (`Ticker`, `formatReadoutRate`), and **into N tables · N rows committed** |
+| The river | Every materialization as a strand from **Kafka · N topics** through **Midstream · N** to **Lake · N rows** (`features/overview/River.tsx`): width by its rows a second, dots moving at its pace; Current while it moves, Dawn starting, Buoy or Flare when something is wrong, a still dashed Slate line when stopped; problems on top. Pointing at a strand names it; a click or Enter opens it. The 24 busiest are drawn |
+| Needs you | One line for each materialization that failed or needs attention: its name, state and reason, and **Open**. Gone when nothing needs anyone |
+| Materializations | The first eight, the ones that need someone first (`MaterializationRow`): the state's glyph, the name, the state's word and reason, and one fact (§11.3). **See all** past eight |
+| Domains | Under **All domains** with several: each domain's materializations, rows a second and rows |
 
-| Card | Value | Detail |
-|------|-------|--------|
-| Materializations | `totals.materializations` | `DistributionBar` over running/pending/stopped/failing, plus the counts as text |
-| Ingest rate | `totals.rowsPerSecond` | Every runtime member · 1-min window; sparkline of `series[].rowsPerSecond`, accent colour |
-| Write rate | `totals.bytesPerSecond` | Parquet · 15-min trend; sparkline of `series[].bytesPerSecond`, green |
-| Materialized | `totals.rowsCommitted`: the rows every table holds, as its committer last reported its current snapshot | `tableBytes` · `tableFiles` parquet files · `recordsSkipped` skipped |
-
-### Fleet throughput
-
-The same rows/s series over the last ~20 minutes, as a chart with a value axis, clock times and a
-hover readout. The fleet's rate is the sum of every materialization's, each measured per runtime
-member between its own heartbeats ([05 §5.4](./05-live-store-and-realtime.md#54-throughput-derivation)).
-
-### Needs attention
-
-Shows up to six materializations matching **any** of:
-
-- `observed_phase ∈ { failed, degraded }`
-- `runtimeHealth ∈ { degraded, unreachable }`
-- `desired_phase !== observed_phase` and `observed_phase !== 'deleted'`
-
-Each row: warning icon, name, humanized `phase_reason`, relative `updated_at`, phase badge. Empty
-state is "All clear — No failures, degraded runtimes, or pending reconciliation."
-
-### Busiest materializations
-
-Top eight by `rowsPerSecond`, tie-broken by `rowsCommitted`, filtered to those with any throughput or
-any rows. Columns: name and topics (the first two, then `+N`), rows/s, bytes/s, rows committed. "View all" links to the list.
-
-Skeletons render until the first frame arrives.
+With nothing to show: **Nothing is flowing yet**, what a materialization is in one sentence, and
+**New materialization**. Skeletons render until the first frame arrives.
 
 ---
 
 ## 11.3 Materializations (`/materializations`)
 
-Live, searchable, sortable list. Data: `useFleetStream()`.
+Which one needs me? Data: `useFleet()`.
 
-### Header
+### Groups
 
-Subtitle: `N total · M running · R rows/s`. Actions: **New materialization**.
+Materializations grouped by what someone does about them (`lib/status.ts::statusGroup`), each group
+only when it has any: **Needs you** (failed, needs attention), **In progress** (starting, updating,
+resuming, catching up, stopping, deleting), **Flowing**, **Stopped**; by name within a group. A
+group's heading carries its count.
+
+### Rows
+
+`features/materializations/MaterializationRow.tsx`: the state's glyph (§10.6), the name and its
+domain under **All domains**, the state's word and reason, on wide screens the source topics `→` the
+datasets, and one fact in the state's tint (`rowFact`):
+
+| State | Fact |
+|---|---|
+| Flowing | Rows a second, `0.1/s`, `6,240/s` |
+| Catching up | How far it has come from the backlog's peak and the time left, `62% · 1h 50m left` (`catchUp`, `lagEtaMs` from `shared/lagTrend.ts`) |
+| Stopped | Rows committed |
+| Others | None: the reason beside the word says it |
+
+↑↓ or j k move between rows; ↵ opens one.
 
 ### Search
 
-Case-insensitive substring across `materialization_id`, the label (`name`), every source topic,
-every dataset and every table (`sales.orders`) — what a row shows is what a search matches. Wrapped in `useDeferredValue`, so typing never
-blocks. The destination is not searched: rows do not
-show it, and most materializations share the default one.
+**Find by name, topic, dataset or table**: case-insensitive, across `materialization_id`, the label,
+the domain, every source topic, dataset and table (`sales.orders`). Wrapped in `useDeferredValue`.
 
-### Filters
+### Recently deleted
 
-| Segment | Predicate |
-|---------|-----------|
-| All | everything |
-| Running | `observed_phase === 'running'` |
-| Pending | `observed_phase ∈ { requested, discovering, discovered, deploying }` |
-| Stopped | `observed_phase ∈ { stopped, paused }` (`paused` only on records from before Stop) |
-| Attention | `observed_phase ∈ { failed, degraded }` **or** `desired_phase !== observed_phase` |
+**Recently deleted · N**, shown only when some were, lists them with when they went, until the
+control plane's retention drops them.
 
-### Columns
-
-| Column | Sortable | Content |
-|--------|----------|---------|
-| Materialization | yes (by display name) | The label, or the id; below it the source topics, the first two then `+N`, every one in the tooltip, and `→` the datasets their tables are in, the tables in the tooltip |
-| Phase | no | `PhaseBadge` with the reason as `title`; a `→ <desired>` line appears when reconciling |
-| Rate | yes | `formatRate(rowsPerSecond)` |
-| Rows | yes | `formatCount(rowsCommitted)`: the rows its tables' current snapshots hold, as their committer last reported them — the Overview tab's *Rows committed*. Not `rowsWritten`, the runtime's counter, which also counts what a member wrote and lost to a restart, then wrote again |
-| Size | yes | `formatBytes(tableBytes)`: those snapshots' data files — the Overview tab's *Table size* |
-| Tables | no | How many tables it writes: one per source topic |
-| Updated | yes (default, desc) | `RelativeTime` |
-
-Clicking a sorted column flips direction; a new column defaults to ascending for name, descending
-for numbers. Whole rows are links to the detail page.
-
-Empty states differentiate "No matches" (with **Clear filters**) from "No materializations yet"
-(with **New materialization**).
+Empty states: **No materializations yet** (with **New materialization**), **Nothing matches** (with
+**Clear**).
 
 ### Create dialog
 
@@ -218,12 +205,9 @@ detail cadence while the page is open.
 
 ### Header
 
-Title is the label (`name`) or the id. Subtitle is the source topics (the first three, then `+N`); the destination
-is in the Specification panel. The meta row carries: a back
-link, the copyable id, `PhaseBadge`, `HealthBadge`, a "Reconciling toward X" note when desired and
-observed disagree, and the `LiveIndicator`. The health badge says **Healthy**, **Unhealthy** (the
-`degraded` level), **Unreachable** or **Unknown**; its tooltip is the health's message — *8 of 10
-members restarted in the last 30 minutes: out of memory.* — or its reason.
+**Materializations** above the title, which is the label (`name`) or the id. On every tab but the
+Overview, whose readout says it, the state as a pill (§10.6) and a compact live dot. Actions on the
+right: **Pin** (to the sidebar), **Edit**, **Resume** or **Stop**, and **⋯** with **Delete…**.
 
 ### Actions
 
@@ -232,17 +216,14 @@ person without it does not see the button.
 
 | Button | Shown when | Behaviour |
 |--------|-----------|-----------|
-| Resume | the desired phase is `stopped` (also while it is still stopping) | 202, toast, converge; scales back to the replica count |
-| Stop | the desired phase is `running` and the materialization has a runtime | Opens a confirmation dialog, then 202, toast, converge to **Stopped** |
+| Resume | the desired phase is `stopped` (also while it is still stopping) | Acts at once: *Payments is resuming*; scales back to the replica count |
+| Stop | the desired phase is `running` and the materialization has a runtime | Acts at once, no dialog: *Payments is stopping. Nothing is lost: its tables stay readable, and Resume picks up where it left off.*, with **Undo**, which resumes it |
 | Edit | it has a runtime and is not being deleted | Opens the edit dialog (below) |
-| Delete | `observed_phase ∉ { deleting, deleted }` | Opens a confirmation dialog |
+| Delete | `observed_phase ∉ { deleting, deleted }` | In **⋯**: opens a confirmation dialog naming every table it removes |
 
-The stop dialog names the topics it stops consuming and the replica count Resume restores, says that
-the tables stay readable while the maintenance app goes on compacting them and expiring old
-snapshots, and that rows still being batched are read again on resume, without duplicates: the
-committed offsets only cover rows in the table (handbook [10 §10.7](../../docs/handbook/10-runtime-internals.md)). While stopping, the
-header shows **Deploying** and "Reconciling toward Stopped"; once the KasprApp has no members it
-shows **Stopped** with health **Unknown**.
+A stop loses nothing and duplicates nothing: rows still being batched are read again on resume, since
+the committed offsets only cover rows in the table (handbook [10 §10.7](../../docs/handbook/10-runtime-internals.md)).
+While stopping the state reads **Stopping**; once the KasprApp has no members, **Stopped**.
 
 ### Edit dialog
 
@@ -314,7 +295,8 @@ If the control plane is unreachable and no detail has ever been fetched, the pag
 
 ### Tabs
 
-URL segments: `` (Overview), `schema`, `data`, `table`, `protection`, `runtime`. The Schema, Data and Table tabs
+**Overview**, **Schema**, **Data**, **Tables**, **Protection**, **Diagnostics**. URL segments: ``
+(Overview), `schema`, `data`, `table`, `protection`, `runtime`. The Schema, Data and Table tabs
 show one table at a time, named by `?table=` (the first table when absent) and chosen with the
 table picker each shows when there are two or more; switching tabs keeps `?table=`. Every tab needs
 `materializations.view_details`; beyond it, **Schema** and **Protection** need `dataset.view_schema` and **Data**
@@ -329,26 +311,47 @@ only follows it.
 
 ## 11.5 Detail → Overview
 
-| Card | Value | Hint |
-|------|-------|------|
-| Ingest rate | `snapshot.rowsPerSecond` | Members reporting · 1-min window; sparkline |
-| Write rate | `snapshot.bytesPerSecond` | Parquet bytes sealed · 15-min trend; sparkline, green |
-| Rows committed | The rows in every table's current snapshot together (`GET …/data/summary` per table), exact | Tables · last commit · **Complete through**, the earliest across the tables; the skipped-record count, which opens the reasons |
-| Table size (**Tables' size** for several) | The current snapshots' bytes, together | Data files · average size · snapshots kept |
+Is it healthy, and what does it write? (`features/detail/MaterializationOverview.tsx`) The state
+leads; everything about how it runs is in Diagnostics (§11.6).
 
-Both rate cards come from each runtime member's own heartbeats, summed
-([05 §5.4](./05-live-store-and-realtime.md#54-throughput-derivation)); they read `—` until every
-member has reported twice, about half a minute after the console starts watching.
+**The readout**, by state (§10.6):
 
-**Rows committed** and **Table size** read the tables themselves, refreshed every 15 s — the same
-source the Data tab opens with, so the two always agree. The runtime's own counters are close but are not
-the same thing: they include rows still being batched or committed, and count again the rows a member
-reads a second time after a restart (the table does not hold them twice). They stand in, labelled as
-such, only while the table cannot be read or nothing has been committed yet.
+| State | Leads with | Context | Chart |
+|---|---|---|---|
+| Flowing | Rows a second, rolling as it changes | **Complete through** the earliest of the tables' `validThrough`, or the last commit | Rows a second, the last 30 minutes |
+| Catching up | Records behind | *Caught up around 4:30 PM · 62% there · falling 5,914 a second*: the drain's end at its current pace, how far from the backlog's peak (`catchUpProgress`), and the rate | Records behind over **15m / 1h / 6h**, on an axis fitted to the values |
+| Stopped | **Stopped** | *Its tables stay readable, and Resume picks up where it left off.* (**Stopping**: *Its workers are shutting down.*) | **Resume**, with the permission |
+| Starting, Updating, Resuming | What it is doing, shimmering: *Waiting for its workers* | — | — |
+| Needs attention, Failed | The reason in words, or the control plane's message | The message, where it says more | **Open Diagnostics** |
 
-**Throughput** — the last ~20 minutes as a chart with a value axis, clock times and a hover (or
-arrow-key) readout; **Rows / Bytes** switches the series. It grows to the height of the panel
-beside it.
+**Four facts** — **Rows committed** (rolling as commits land) and **Size**, from each table's
+current snapshot (`GET …/data/summary`, every 15 s; the workers' own counts stand in, labelled, while
+the tables cannot be read); **Behind** — **Caught up** at the lag floor, else the records behind, with
+the time to go or *and growing*; **Workers** — how many run, *scaled up from 2* while autoscaling has
+it scaled up, *none while stopped*.
+
+**Tables** — one row per table, in the order of its topics, then the kept tables, then any being
+dropped: the table as SQL reads it, `sales.orders` — its dataset a link to the dataset's page, its
+name a link into the Data tab with it chosen when the person may query it, else a lock naming the
+dataset; an icon into the Tables tab — above its topic, its rows, size and files from the control
+plane's record, its topic's lag, its schema id, its last commit, and its state — **not created yet**
+until the control plane has sampled its topic and created it, **kept · read-only**, **dropping**,
+**dropped · files kept**, its last error in red, or what runs on it (files pending, a maintenance
+job). The heading counts them, and the kept ones beside (`features/detail/TablesPanel.tsx`).
+
+**Properties**, in a column beside (below on a phone): the state with its reason, the **Target** while
+it differs, what it **Reads**, what it **Writes** (datasets and how many tables), **Workers**,
+**Partitioned by**, **Null records** (kept as rows or ignored), **Protection** (the kinds in force as
+chips, and how far the policy has reached: **In force · revision 2**, **Applying revision 3**,
+**Applies on resume**, **No member reporting**), **Created** and by whom, the **Location**, the copyable
+**Id**, the **Workers' version**, and **Diagnostics**.
+
+---
+
+## 11.6 Detail → Diagnostics
+
+Everything the control plane knows about how it runs, for whoever needs to look closely
+(`DiagnosticsPanels` in `features/detail/OverviewTab.tsx`, then `RuntimeTab.tsx`).
 
 **Reconciliation** — `desired_phase`, `observed_phase`, `phase_reason`, `observation_source`,
 `last_transition_time`, `last_heartbeat`, `last_resource_observation_time`, **Tables** (`N of M
@@ -378,28 +381,25 @@ to a batch per partition plus a commit interval, and its lag falls in steps as c
 | Part | Content |
 |------|---------|
 | Headline | The latest measured lag, records behind |
-| Trend | **Caught up** at the floor — a lag no larger than what arrived on the source topics in the last 630 s (the batch ceiling and a commit interval), counted from the topics' end offsets at each measurement — however it wobbles as batches commit. Above it, **Catching up** with the drain rate and the time left at that pace (`−5,914/s · about 4h 38m to go`), **Falling behind** with the growth rate, or **Holding steady**: the least-squares slope of the last ten minutes of measurements, where under half a record a second, a single record, or 0.1% of the lag is no trend. **Not measured lately** once ten minutes pass without a measurement (`features/detail/lagTrend.ts`) |
+| Trend | **Caught up** at the floor — a lag no larger than what arrived on the source topics in the last 630 s (the batch ceiling and a commit interval), counted from the topics' end offsets at each measurement — however it wobbles as batches commit. Above it, **Catching up** with the drain rate and the time left at that pace (`−5,914/s · about 4h 38m to go`), **Falling behind** with the growth rate, or **Holding steady**: the least-squares slope of the last ten minutes of measurements, where under half a record a second, a single record, or 0.1% of the lag is no trend. **Not measured lately** once ten minutes pass without a measurement (`shared/lagTrend.ts`) |
 | Chart | One point per measurement over **15m / 1h / 6h**, on an axis fitted to the values, so a large backlog falling slowly is a slope rather than a flat line at the top of a zero-based chart |
 | Partitions | `N of M partitions behind`, and **Show M partitions** for each partition's lag with a bar against the largest; with several topics each is named `<topic> P<n>`, and each topic's own lag is in the Tables panel |
 | Footer | When it was last measured and how often measurements arrive |
 
-**Specification** — the **Source topics**, the **Datasets** its tables are in, how many
-**Tables**, the tables' **Location** (the directory each table's own sits under),
-**Replicas** (with "none running while stopped" when stopped, or "16 while catching up" while
-autoscaling has it scaled up), **Autoscaling** (**On · up to 16**, **Off**, or **Off for every
-materialization**; absent before 4.4), storage per replica, `namespace`,
-`runtime_mode`, `resolved_runtime_name`, `created_by`, `created_at`, `resource_profile`,
-`spec_version`, **Tombstones** (**Ignored** or **Kept as rows**), **Partitioned by** (day, hour,
-month or nothing) and **Data protection** — the kinds in force as chips, *Email addresses · hashed*,
-or *None: values are written as they arrive*, with how far the policy has reached: **In force ·
-revision 2**, **Applying revision 3** (its tooltip naming the tables and members behind), **Applies
-on resume** or **No member reporting** — then label and annotation chips when non-empty.
+**Specification** — the **Source topics**, the tables' **Location** (the directory each table's own
+sits under), **Replicas** (with "none running while stopped" when stopped, or "16 while catching up"
+while autoscaling has it scaled up), **Autoscaling** (**On · up to 16**, **Off**, or **Off for every
+materialization**; absent before 4.4), storage per replica, `namespace`, `runtime_mode`,
+`resolved_runtime_name`, `resource_profile`, `spec_version` and **Data protection**, then label and
+annotation chips when non-empty. Its datasets, tables, partitioning, null records and creation are in
+the Overview's properties.
 
----
+**Throughput** — the last ~20 minutes as a chart with a value axis, clock times and a hover (or
+arrow-key) readout; **Rows / Bytes** switches the series.
 
-## 11.6 Detail → Runtime
+**Skipped records** — when any were: each reason with its count and where its latest is on the
+source topic.
 
-Everything the control plane observed about the Kubernetes resource.
 
 **Kubernetes resource** — `kaspr_app_name`, `namespace`, `resource_exists`, `available_members`,
 `metadata_generation / observed_generation`, rollout state, `rebalance_required`,

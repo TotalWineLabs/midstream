@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { formatEta, lagTrend } from './lagTrend.ts';
+import { catchUpProgress, formatEta, lagTrend } from './lagTrend.ts';
 
 const minute = 60_000;
 const series = (lags: number[], every = minute) => lags.map((lag, index) => ({ t: index * every, lag }));
@@ -64,6 +64,35 @@ describe('lagTrend', () => {
     // Growing an hour ago, draining now.
     const lags = [...Array.from({ length: 50 }, (_, index) => 1_000 + index * 100), ...Array.from({ length: 10 }, (_, index) => 5_900 - index * 300)];
     assert.equal(lagTrend(series(lags)).state, 'draining');
+  });
+});
+
+describe('catchUpProgress', () => {
+  it('measures from the peak since the lag last sat at its floor', () => {
+    // Caught up, then a backlog of 1,000,000 that is now down to 250,000.
+    const history = [
+      { t: 0, lag: 40, arrived: 0 },
+      { t: minute, lag: 45, arrived: 10 },
+      { t: 2 * minute, lag: 1_000_000, arrived: 20 },
+      { t: 3 * minute, lag: 600_000, arrived: 30 },
+      { t: 4 * minute, lag: 250_000, arrived: 40 },
+    ];
+    assert.equal(catchUpProgress(history), 0.75);
+  });
+
+  it('ignores an older backlog it already caught up from', () => {
+    const history = [
+      { t: 0, lag: 5_000_000, arrived: 0 },
+      { t: minute, lag: 30, arrived: 10 },
+      { t: 2 * minute, lag: 200_000, arrived: 20 },
+      { t: 3 * minute, lag: 100_000, arrived: 30 },
+    ];
+    assert.equal(catchUpProgress(history), 0.5);
+  });
+
+  it('has nothing to say without a backlog', () => {
+    assert.equal(catchUpProgress([]), null);
+    assert.equal(catchUpProgress(series([10, 0])), null);
   });
 });
 

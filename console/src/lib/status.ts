@@ -135,17 +135,16 @@ export function statusOf(input: StatusInput): Status {
   return said('flowing', 'Flowing', null, true);
 }
 
-/** A fleet row's state, from what the list carries: its phases, reason and health level. */
+/** A fleet row's state, from what the list carries: its phases, reason, health level and lag trend. */
 export function itemStatus(
-  item: Pick<MaterializationSummary, 'desired_phase' | 'observed_phase' | 'phase_reason' | 'runtimeHealth'>,
-  catchingUp = false,
+  item: Pick<MaterializationSummary, 'desired_phase' | 'observed_phase' | 'phase_reason' | 'runtimeHealth'> & Partial<Pick<MaterializationSummary, 'lagState'>>,
 ): Status {
   return statusOf({
     desired: item.desired_phase,
     observed: item.observed_phase,
     reason: item.phase_reason,
     health: item.runtimeHealth,
-    catchingUp,
+    catchingUp: item.lagState === 'draining',
   });
 }
 

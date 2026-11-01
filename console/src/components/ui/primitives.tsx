@@ -116,7 +116,7 @@ type BadgeTone = 'neutral' | 'accent' | 'running' | 'pending' | 'paused' | 'fail
 
 const BADGE_TONES: Record<BadgeTone, string> = {
   neutral: 'text-[var(--color-ink-muted)] bg-[var(--color-raised)] border-[var(--color-line)]',
-  accent: 'text-[var(--color-current-ink)] bg-[var(--color-current-wash)] border-transparent',
+  accent: 'text-[var(--color-ink)] bg-[var(--color-raised)] border-[var(--color-line)]',
   running: 'text-[var(--color-current-ink)] bg-[var(--color-current-wash)] border-transparent',
   pending: 'text-[var(--color-dawn-ink)] bg-[var(--color-dawn-wash)] border-transparent',
   paused: 'text-[var(--color-buoy-ink)] bg-[var(--color-buoy-wash)] border-transparent',

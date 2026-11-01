@@ -4,6 +4,7 @@ import { ConsoleError } from '../errors.ts';
 import { logger, type Logger } from '../logger.ts';
 import { RateTracker, type CurrentRates } from './rates.ts';
 import { can } from '../../shared/access.ts';
+import { catchUpProgress, lagTrend } from '../../shared/lagTrend.ts';
 import { isDeletedPhase, readableTables } from '../../shared/types.ts';
 import type {
   CpConsumerLag,
@@ -238,10 +239,15 @@ export class LiveStore {
     const progress = detail?.status.runtime_progress;
     const observation = detail?.status.resource_observation;
     const rates = this.rates.get(item.materialization_id) ?? NO_RATES;
+    const history = this.lagHistory.get(item.materialization_id) ?? [];
+    const trend = lagTrend(history, { now: Date.now() });
 
     return {
       ...item,
       runtimeHealth: detail?.status.runtime_health.level ?? 'unknown',
+      lagState: trend.state,
+      lagEtaMs: trend.etaMs,
+      catchUp: trend.state === 'draining' ? catchUpProgress(history) : null,
       lastHeartbeat: detail?.status.last_heartbeat ?? null,
       ...committedColumns(committedTotals(progress)),
       rowsWritten: progress?.cumulative_rows_written ?? progress?.rows_written ?? null,

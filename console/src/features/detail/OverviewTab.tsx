@@ -1,25 +1,19 @@
-import { useQueries } from '@tanstack/react-query';
 import { ChevronsUp, CircleCheck, Minus, TrendingDown, TrendingUp } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 
-import { formatEta, lagTrend, type LagTrend } from './lagTrend';
-import { TablesPanel } from './TablesPanel';
-import { PageBody } from '@/components/AppShell';
+import { formatEta, lagTrend, type LagTrend } from '@shared/lagTrend';
 import { RelativeTime } from '@/components/Inline';
-import { StatCard } from '@/components/StatCard';
 import { TimeSeriesChart, type ChartPoint } from '@/components/TimeSeriesChart';
-import { Badge, Button, EmptyState, KeyValue, Panel, PanelHeader, SegmentedControl } from '@/components/ui/primitives';
+import { Badge, KeyValue, Panel, PanelHeader, SegmentedControl } from '@/components/ui/primitives';
 import { cn } from '@/lib/cn';
 import { useAutoscaling, useMaterializationDefaults } from '@/lib/defaults';
 import { ProtectionChips, ProtectionStateBadge } from '../protection/ProtectionSummary';
-import { useApi } from '@/lib/domains';
 import {
   formatBytes,
   formatBytesRate,
   formatCount,
   formatExact,
   formatRate,
-  formatTimestamp,
   humanize,
   topicsLabel,
 } from '@/lib/format';
@@ -29,44 +23,12 @@ import type {
   CpAutoscale,
   CpDetail,
   CpMemberProgress,
-  CpRuntimeProgress,
   CpSkipReason,
   CpTopicLag,
-  DataSummary,
   DetailSnapshot,
   LagSample,
   MemberRate,
 } from '@shared/types';
-import { readableTables } from '@shared/types';
-
-/** What every table of a materialization holds together, from their snapshots' manifests. */
-interface StorageSummary {
-  tables: number;
-  rows: number;
-  bytes: number;
-  objects: number;
-  /** The earliest of the tables' `validThrough`: complete through it on every table; null when any is unknown. */
-  validThrough: string | null;
-  newestCommit: string | null;
-}
-
-function combineSummaries(summaries: DataSummary[]): StorageSummary | null {
-  const available = summaries.filter((summary) => summary.available);
-  if (available.length === 0) return null;
-  const instant = (value: string | null): number => (value ? Date.parse(value) : Number.NaN);
-  const through = summaries.map((summary) => summary.validThrough);
-  const commits = available.map((summary) => summary.newestCommit).filter((value): value is string => value !== null);
-  return {
-    tables: summaries.length,
-    rows: available.reduce((sum, summary) => sum + summary.rows, 0),
-    bytes: available.reduce((sum, summary) => sum + summary.bytes, 0),
-    objects: available.reduce((sum, summary) => sum + summary.objects, 0),
-    validThrough: through.some((value) => value === null)
-      ? null
-      : through.reduce<string | null>((first, value) => (first === null || instant(value) < instant(first) ? value : first), null),
-    newestCommit: commits.reduce<string | null>((last, value) => (last === null || instant(value) > instant(last) ? value : last), null),
-  };
-}
 
 /** How many of the tables the runtime writes exist yet, and how many more are kept read-only. */
 function TableCounts({ detail }: { detail: CpDetail }): ReactNode {
@@ -83,7 +45,7 @@ function TableCounts({ detail }: { detail: CpDetail }): ReactNode {
 }
 
 /** Where the materialization's tables live: the directory each table's own is in. */
-function materializationLocation(detail: CpDetail): string {
+export function materializationLocation(detail: CpDetail): string {
   const table = detail.tables[0];
   if (!table) return detail.materialization.destination_uri;
   return table.location.endsWith(`/${table.name}`) ? table.location.slice(0, -table.name.length - 1) : table.location;
@@ -96,7 +58,7 @@ function materializationLocation(detail: CpDetail): string {
  * this can legitimately differ between two materializations and from the control plane itself.
  * It stays blank until the runtime has reported at least once.
  */
-function RuntimeVersion({ value }: { value?: string | null }): ReactNode {
+export function RuntimeVersion({ value }: { value?: string | null }): ReactNode {
   if (!value) {
     return (
       <span className="text-[var(--color-ink-faint)]" title="No runtime status reported yet">
@@ -112,32 +74,19 @@ type LagWindow = '15m' | '1h' | '6h';
 
 const LAG_WINDOWS: Record<LagWindow, number> = { '15m': 15 * 60_000, '1h': 60 * 60_000, '6h': 6 * 60 * 60_000 };
 
-export function DetailOverviewTab({ snapshot }: { snapshot: DetailSnapshot }): ReactNode {
-  const api = useApi();
+/**
+ * Everything the control plane knows about a materialization, for whoever needs to look closely:
+ * what it last concluded and why, each worker, the lag on every partition, the specification, both
+ * throughput series, and why records were skipped. The Diagnostics tab, above the runtime's own
+ * Kubernetes state (docs/10-design-system.md §10.5).
+ */
+export function DiagnosticsPanels({ snapshot }: { snapshot: DetailSnapshot }): ReactNode {
   const detail = snapshot.detail;
   const progress = detail?.status.runtime_progress;
   const consumerLag = detail?.status.consumer_lag;
-  const [showSkips, setShowSkips] = useState(false);
   const [metric, setMetric] = useState<ThroughputMetric>('rows');
   const autoscalingPolicy = useAutoscaling();
   const protectionCatalog = useMaterializationDefaults().defaults?.protection ?? null;
-
-  // What is in the tables, from their current snapshots' manifests — the same counts the Data tab opens with.
-  // Kept tables too: they hold data, and stay readable.
-  const materialization = detail?.materialization;
-  const tableNames = useMemo(() => (materialization ? readableTables(materialization) : []).map((table) => table.name), [materialization]);
-  const summaryQueries = useQueries({
-    queries: tableNames.map((table) => ({
-      queryKey: ['data-summary', snapshot.materializationId, table],
-      queryFn: () => api.dataSummary(snapshot.materializationId, table),
-      refetchInterval: 15_000,
-      retry: 0,
-    })),
-  });
-  const summaries = summaryQueries.map((query) => query.data).filter((value): value is DataSummary => value !== undefined);
-  const summary = summaries.length === tableNames.length ? combineSummaries(summaries) : null;
-  const summaryError = summaryQueries.find((query) => query.error)?.error ?? null;
-  const summaryPending = summaryQueries.some((query) => query.isPending);
   const liveTables = Object.values(progress?.tables ?? {});
 
   const now = Date.parse(snapshot.generatedAt) || Date.now();
@@ -150,116 +99,19 @@ export function DetailOverviewTab({ snapshot }: { snapshot: DetailSnapshot }): R
     [snapshot.series],
   );
   const seriesFrom = snapshot.series[0]?.t ?? now;
-
-  const members = Object.keys(snapshot.memberRates).length;
   const recordsSkipped = progress?.cumulative_records_skipped ?? progress?.records_skipped ?? null;
 
-  if (!detail) {
-    return (
-      <PageBody>
-        <EmptyState
-          title="Not found"
-          description="This materialization is no longer present in the control plane."
-        />
-      </PageBody>
-    );
-  }
-
-  const skipped = recordsSkipped ? (
-    <button
-      type="button"
-      onClick={() => setShowSkips((value) => !value)}
-      aria-expanded={showSkips}
-      className="text-[var(--color-phase-paused)] underline decoration-dotted underline-offset-2 hover:text-[var(--color-ink)]"
-    >
-      {formatExact(recordsSkipped)} records skipped
-    </button>
-  ) : null;
+  if (!detail) return null;
 
   return (
-    <PageBody className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Ingest rate"
-          value={formatRate(snapshot.rowsPerSecond, '')}
-          unit="rows/s"
-          hint={
-            <span title="Each runtime member's rows over its last minute of heartbeats, summed across members.">
-              {members > 1 ? `${members} members` : 'Runtime'} · 1-min window
-            </span>
-          }
-          series={rowSeries}
-        />
-        <StatCard
-          label="Write rate"
-          value={formatBytesRate(snapshot.bytesPerSecond)}
-          hint={
-            <span title="Parquet bytes sealed per second. Batches seal in waves every few minutes, so this is a 15-minute trend.">
-              Parquet · 15-min trend
-            </span>
-          }
-          series={byteSeries}
-          color="var(--color-phase-running)"
-        />
-        <StorageCards
-          summary={summary}
-          summaryError={summaryError}
-          loading={summaryPending}
-          progress={progress}
-          snapshots={liveTables.length > 0 ? liveTables.reduce((sum, table) => sum + (table.snapshots ?? 0), 0) : null}
-          skipped={skipped}
-        />
-      </div>
-
-      {showSkips && recordsSkipped ? (
-        <SkippedRecords
-          total={recordsSkipped}
-          reasons={progress?.skip_reasons ?? []}
-          onClose={() => setShowSkips(false)}
-        />
-      ) : null}
-
+    <>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <Panel className="flex flex-col">
-          <PanelHeader
-            title="Throughput"
-            description={
-              metric === 'rows'
-                ? 'Rows per second, measured per runtime member between its own heartbeats and summed.'
-                : 'Parquet bytes per second, as a 15-minute trend: batches seal in waves, not continuously.'
-            }
-            actions={
-              <SegmentedControl
-                value={metric}
-                onChange={setMetric}
-                options={[
-                  { value: 'rows', label: 'Rows' },
-                  { value: 'bytes', label: 'Bytes' },
-                ]}
-              />
-            }
-          />
-          {/* Grows with the panel beside it, so the chart uses the row's height instead of leaving it empty. */}
-          <div className="min-h-[220px] flex-1 px-3 pt-3 pb-2">
-            <TimeSeriesChart
-              points={metric === 'rows' ? rowSeries : byteSeries}
-              from={Math.max(seriesFrom, now - 30 * 60_000)}
-              to={now}
-              color={metric === 'rows' ? 'var(--color-accent)' : 'var(--color-phase-running)'}
-              formatValue={metric === 'rows' ? (value) => formatRate(value, 'rows/s') : formatBytesRate}
-              formatTick={metric === 'rows' ? formatCount : (value) => formatBytes(value)}
-              label={metric === 'rows' ? 'Ingest rate' : 'Write rate'}
-              empty="Collecting — rates appear once every runtime member has reported twice."
-            />
-          </div>
-        </Panel>
-
         <Panel>
           <PanelHeader title="Reconciliation" description="What the control plane last concluded." />
           <dl className="grid grid-cols-2 gap-x-4 gap-y-4 p-5">
             <KeyValue label="Desired">{humanize(detail.status.desired_phase)}</KeyValue>
             <KeyValue label="Observed">{humanize(detail.status.observed_phase)}</KeyValue>
-            <KeyValue label="Reason">{humanize(detail.status.phase_reason)}</KeyValue>
+            <KeyValue label="Reason" mono>{detail.status.phase_reason}</KeyValue>
             <KeyValue label="Source">{humanize(detail.status.observation_source)}</KeyValue>
             <KeyValue label="Last transition">
               <RelativeTime value={detail.status.last_transition_time} />
@@ -288,16 +140,12 @@ export function DetailOverviewTab({ snapshot }: { snapshot: DetailSnapshot }): R
           <ScaledUp autoscale={detail.autoscale} stopped={detail.status.desired_phase !== 'running'} />
           <MemberStates members={progress?.member_progress} rates={snapshot.memberRates} committer={liveTables[0]?.member_id ?? null} />
           {detail.status.last_error ? (
-            <p className="border-t border-[var(--color-line)] px-5 py-3 text-[13px] leading-relaxed text-[var(--color-phase-failed)]">
+            <p className="border-t border-[var(--color-line)] px-5 py-3 text-[13px] leading-relaxed text-[var(--color-flare-ink)]">
               {withFieldNames(detail.status.last_error)}
             </p>
           ) : null}
         </Panel>
-      </div>
 
-      <TablesPanel detail={detail} />
-
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <ConsumerLagPanel
           history={snapshot.lagHistory}
           now={now}
@@ -307,26 +155,51 @@ export function DetailOverviewTab({ snapshot }: { snapshot: DetailSnapshot }): R
           error={consumerLag?.error ?? null}
           ingestRate={snapshot.rowsPerSecond}
         />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <Panel className="flex flex-col">
+          <PanelHeader
+            title="Throughput"
+            description={
+              metric === 'rows'
+                ? 'Rows a second, each worker measured between its own heartbeats, summed.'
+                : 'Parquet bytes a second, as a 15-minute trend: batches seal in waves.'
+            }
+            actions={
+              <SegmentedControl
+                value={metric}
+                onChange={setMetric}
+                options={[
+                  { value: 'rows', label: 'Rows' },
+                  { value: 'bytes', label: 'Bytes' },
+                ]}
+              />
+            }
+          />
+          <div className="min-h-[220px] flex-1 px-3 pt-3 pb-2">
+            <TimeSeriesChart
+              points={metric === 'rows' ? rowSeries : byteSeries}
+              from={Math.max(seriesFrom, now - 30 * 60_000)}
+              to={now}
+              formatValue={metric === 'rows' ? (value) => formatRate(value, 'rows/s') : formatBytesRate}
+              formatTick={metric === 'rows' ? formatCount : (value) => formatBytes(value)}
+              label={metric === 'rows' ? 'Rows a second' : 'Parquet bytes a second'}
+              empty="Rates appear once every worker has reported twice."
+            />
+          </div>
+        </Panel>
 
         <Panel>
-          <PanelHeader title="Specification" description="Desired state recorded by the control plane." />
+          <PanelHeader title="Specification" description="The desired state the control plane records." />
           <dl className="grid grid-cols-2 gap-x-4 gap-y-4 p-5">
             <KeyValue label={detail.materialization.source_topics.length === 1 ? 'Source topic' : 'Source topics'} className="col-span-2">
               <span className="block break-all" title={detail.materialization.source_topics.join('\n')}>
                 {topicsLabel(detail.materialization.source_topics, 6)}
               </span>
             </KeyValue>
-            <KeyValue label={detail.materialization.datasets.length === 1 ? 'Dataset' : 'Datasets'} mono>
-              {detail.materialization.datasets.length > 0 ? detail.materialization.datasets.join(', ') : '—'}
-            </KeyValue>
-            <KeyValue label="Tables">
-              {formatExact(detail.materialization.tables.length)}
-              {detail.materialization.retired_tables?.length ? (
-                <span className="text-[var(--color-ink-muted)]"> · {formatExact(detail.materialization.retired_tables.length)} kept</span>
-              ) : null}
-            </KeyValue>
             <KeyValue label="Location" className="col-span-2">
-              <span className="block break-all">{materializationLocation(detail)}</span>
+              <span className="ident block break-all">{materializationLocation(detail)}</span>
             </KeyValue>
             <KeyValue label="Replicas">
               {detail.materialization.replicas ?? 1}
@@ -340,21 +213,13 @@ export function DetailOverviewTab({ snapshot }: { snapshot: DetailSnapshot }): R
               <KeyValue label="Autoscaling">{autoscalingLabel(detail.materialization.autoscaling, autoscalingPolicy)}</KeyValue>
             ) : null}
             <KeyValue label="Storage per replica">{detail.materialization.storage_size ?? '—'}</KeyValue>
-            <KeyValue label="Namespace">{detail.materialization.namespace}</KeyValue>
+            <KeyValue label="Namespace" mono>{detail.materialization.namespace}</KeyValue>
             <KeyValue label="Runtime mode">{detail.materialization.runtime_mode}</KeyValue>
-            <KeyValue label="Runtime name">
+            <KeyValue label="Runtime name" mono>
               {detail.materialization.resolved_runtime_name ?? '—'}
             </KeyValue>
-            <KeyValue label="Created by">{detail.materialization.created_by ?? '—'}</KeyValue>
-            <KeyValue label="Created">{formatTimestamp(detail.materialization.created_at)}</KeyValue>
             <KeyValue label="Resource profile">{detail.materialization.resource_profile ?? '—'}</KeyValue>
             <KeyValue label="Spec version">{detail.materialization.spec_version ?? 1}</KeyValue>
-            <KeyValue label="Tombstones">
-              {detail.materialization.skip_tombstones ? 'Ignored' : 'Kept as rows'}
-            </KeyValue>
-            <KeyValue label="Partitioned by">
-              {partitionLabel(detail.tables[0]?.partition_granularity ?? detail.materialization.partition_granularity ?? null)}
-            </KeyValue>
             {detail.materialization.protection !== undefined ? (
               <KeyValue label="Data protection" className="col-span-2">
                 <span className="flex flex-wrap items-center gap-2">
@@ -368,7 +233,9 @@ export function DetailOverviewTab({ snapshot }: { snapshot: DetailSnapshot }): R
           <LabelList title="Annotations" entries={detail.materialization.annotations} />
         </Panel>
       </div>
-    </PageBody>
+
+      {recordsSkipped ? <SkippedRecords total={recordsSkipped} reasons={progress?.skip_reasons ?? []} /> : null}
+    </>
   );
 }
 
@@ -391,102 +258,19 @@ function ScaledUp({ autoscale, stopped }: { autoscale: CpAutoscale | undefined; 
 }
 
 /** Whether the control plane may scale this runtime: its own switch, and the deployment's over it. */
-function autoscalingLabel(enabled: boolean, policy: ConsoleAutoscaling | null): string {
+export function autoscalingLabel(enabled: boolean, policy: ConsoleAutoscaling | null): string {
   if (!enabled) return 'Off';
   if (policy && !policy.enabled) return 'Off for every materialization';
   return policy ? `On · up to ${policy.maxReplicas}` : 'On';
 }
 
 /** The newest commit to any of the materialization's tables. */
-function newestCommit(detail: CpDetail): string | null {
+export function newestCommit(detail: CpDetail): string | null {
   const commits = [
     ...detail.tables.map((table) => table.last_commit_at),
     ...Object.values(detail.status.runtime_progress?.tables ?? {}).map((table) => table.last_commit_at ?? null),
   ].filter((value): value is string => typeof value === 'string');
   return commits.reduce<string | null>((last, value) => (last === null || Date.parse(value) > Date.parse(last) ? value : last), null);
-}
-
-/**
- * What the materialization's tables hold, together.
- *
- * Read from each table's current snapshot, so these are exactly the rows and bytes queries over All
- * time see — the Data tab opens with the same counts. The runtime's own counters are close but not
- * the same thing: they include rows still being batched, and a pod restart drops the few counted
- * since its last heartbeat. They stand in only when the tables cannot be read.
- */
-function StorageCards({
-  summary,
-  summaryError,
-  loading,
-  progress,
-  snapshots,
-  skipped,
-}: {
-  summary: StorageSummary | null;
-  summaryError: unknown;
-  loading: boolean;
-  progress: CpRuntimeProgress | undefined;
-  /** Snapshots the table keeps, as the committer last reported. */
-  snapshots: number | null;
-  skipped: ReactNode;
-}): ReactNode {
-  if (summary) {
-    const average = summary.objects > 0 ? summary.bytes / summary.objects : null;
-    return (
-      <>
-        <StatCard
-          label="Rows committed"
-          value={formatExact(summary.rows)}
-          hint={
-            <>
-              <span
-                title={
-                  summary.tables > 1
-                    ? "Rows in the current snapshots of every table, together — each table's count is in the Tables panel."
-                    : "Rows in the table's current snapshot — the count the Data tab shows for All time."
-                }
-              >
-                {summary.tables > 1 ? `${formatExact(summary.tables)} tables · ` : null}
-                {summary.validThrough ? (
-                  <span title="Every record with a Kafka timestamp before this moment is in the table.">
-                    complete through {formatTimestamp(summary.validThrough)} ·{' '}
-                  </span>
-                ) : null}
-                last commit <RelativeTime value={summary.newestCommit} />
-              </span>
-              {skipped ? <span className="mt-0.5 block">{skipped}</span> : null}
-            </>
-          }
-        />
-        <StatCard
-          label={summary.tables > 1 ? 'Tables’ size' : 'Table size'}
-          value={formatBytes(summary.bytes)}
-          hint={`${formatExact(summary.objects)} data ${summary.objects === 1 ? 'file' : 'files'}${average === null ? '' : ` · ${formatBytes(average)} each`}${snapshots === null ? '' : ` · ${formatExact(snapshots)} snapshots kept`}`}
-        />
-      </>
-    );
-  }
-
-  // The table cannot be read, or holds nothing yet: say which, and fall back to the runtime.
-  const rows = progress?.cumulative_rows_written ?? progress?.rows_written ?? null;
-  const bytes = progress?.cumulative_bytes_written ?? progress?.bytes_written ?? null;
-  const files = progress?.cumulative_files_written ?? progress?.files_written ?? null;
-  const why = loading ? 'Reading the table…' : summaryError ? 'Table unreadable · runtime counters' : 'Nothing committed yet · runtime counters';
-  return (
-    <>
-      <StatCard
-        label="Rows committed"
-        value={loading ? '—' : formatCount(rows)}
-        hint={
-          <>
-            <span>{why}</span>
-            {skipped ? <span className="mt-0.5 block">{skipped}</span> : null}
-          </>
-        }
-      />
-      <StatCard label="Table size" value={loading ? '—' : formatBytes(bytes)} hint={loading ? why : `${formatCount(files)} files sealed · runtime counters`} />
-    </>
-  );
 }
 
 const LAG_STATE: Record<LagTrend['state'], { label: string; tone: 'running' | 'paused' | 'neutral'; icon: ReactNode }> = {
@@ -663,9 +447,7 @@ function LabelList({
   if (pairs.length === 0) return null;
   return (
     <div className="border-t border-[var(--color-line)] px-5 py-3">
-      <p className="text-[11px] font-medium tracking-wide text-[var(--color-ink-faint)] uppercase">
-        {title}
-      </p>
+      <p className="text-[12px] text-[var(--color-ink-faint)]">{title}</p>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {pairs.map(([key, value]) => (
           <span
@@ -686,15 +468,7 @@ function LabelList({
  * Reasons are tracked from the runtime release that introduced them, so they can sum to less than
  * the cumulative total: the remainder was skipped before reasons were recorded.
  */
-function SkippedRecords({
-  total,
-  reasons,
-  onClose,
-}: {
-  total: number;
-  reasons: CpSkipReason[];
-  onClose: () => void;
-}): ReactNode {
+function SkippedRecords({ total, reasons }: { total: number; reasons: CpSkipReason[] }): ReactNode {
   const attributed = reasons.reduce((sum, reason) => sum + reason.count, 0);
   const unattributed = Math.max(total - attributed, 0);
 
@@ -702,12 +476,7 @@ function SkippedRecords({
     <Panel>
       <PanelHeader
         title="Skipped records"
-        description="Records the runtime could not write, grouped by reason. Each row names the latest occurrence so the record can be found on the source topic."
-        actions={
-          <Button size="sm" variant="ghost" onClick={onClose}>
-            Close
-          </Button>
-        }
+        description="Records the workers could not write, by reason, each with where its latest is on the source topic."
       />
       {reasons.length === 0 ? (
         <p className="px-5 py-4 text-[13px] text-[var(--color-ink-muted)]">
@@ -866,7 +635,7 @@ function MemberStates({
   );
 }
 
-function partitionLabel(granularity: string | null): string {
+export function partitionLabel(granularity: string | null): string {
   if (granularity === 'day') return 'Day of the Kafka timestamp';
   if (granularity === 'hour') return 'Hour of the Kafka timestamp';
   if (granularity === 'month') return 'Month of the Kafka timestamp';

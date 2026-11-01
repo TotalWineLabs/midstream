@@ -198,3 +198,15 @@ export function StatusPill({
     </span>
   );
 }
+
+/** A row's one fact in its state's tint: a rate while flowing, progress while catching up, the reason otherwise. */
+export function FactPill({ kind, children, className }: { kind: StatusKind; children: ReactNode; className?: string }): ReactNode {
+  return (
+    <span
+      className={cn('numeric inline-flex h-6 max-w-full items-center truncate rounded-[7px] px-2 text-[12px] font-semibold whitespace-nowrap', className)}
+      style={{ background: WASH[kind], color: INK[kind] } as CSSProperties}
+    >
+      {children}
+    </span>
+  );
+}

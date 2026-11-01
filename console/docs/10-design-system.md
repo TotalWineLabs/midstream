@@ -219,7 +219,7 @@ the phone, the sidebar badge.
   in Diagnostics.
 - **The lag floor is normal.** Offsets commit only once their rows are in the table, so a caught-up
   runtime always trails its topics by what arrived in the last batch ceiling and commit interval
-  (630 s). A lag at or under that floor is Flowing (`features/detail/lagTrend.ts`). Catching up
+  (630 s). A lag at or under that floor is Flowing (`shared/lagTrend.ts`). Catching up
   appears only for a backlog clearly falling, with an end time that means something.
 - **Groups**, for lists: Needs you (failed, needs attention), In progress (starting, catching up,
   stopping, deleting), Flowing, Stopped (`statusGroup`).
@@ -275,8 +275,12 @@ Rules:
 - **The waterline** sits wherever live and committed meet: between a table's live rows and its
   committed ones, and at zero on a backlog chart. Live rows above it, "Committed through 2:41:04 PM" on
   it, committed rows below.
-- **A backlog shows its end:** while catching up, the chart projects the drain rate to zero as a
-  dotted line, and the readout says when.
+- **A backlog shows its end:** while catching up, the readout says when it will be done at the
+  current pace (*Caught up around 4:30 PM · 62% there*); the chart's dotted projection to zero is to
+  come.
+- **The river** leads the Overview: each materialization a strand from Kafka through Midstream to the
+  lake, its width its throughput and its dots moving at its pace; colour only where something is
+  wrong; a stopped strand still and dashed (`River.tsx`).
 
 ## 10.9 Writing
 
@@ -332,8 +336,14 @@ The glossary: terms the console says differently from the system.
 |---|---|---|
 | `Mark`, `Lockup` | `components/Logo.tsx` | The mark, the mark with the name (§10.2) |
 | `StatusGlyph`, `StatusLabel`, `StatusPill` | `components/Status.tsx` | Status, everywhere (§10.6) |
+| `FactPill` | `components/Status.tsx` | A row's one fact in its state's tint |
 | `Ticker` | `components/motion/Ticker.tsx` | A live number (§10.7) |
 | `Shimmer` | `components/motion/Shimmer.tsx` | Words for work under way |
+| `Readout` | `components/Readout.tsx` | The number that leads a screen: pills, the number, its unit in words, one line of context, its chart (§10.8) |
+| `CommandMenu` | `components/CommandMenu.tsx` | ⌘K (§10.10) |
+| `River` | `features/overview/River.tsx` | The fleet as strands from Kafka to the lake (§10.8) |
+| `MaterializationRow` | `features/materializations/MaterializationRow.tsx` | A materialization in a list: glyph, name, state, one fact |
+| `LiveIndicator` | `components/AppShell.tsx` | A dot that beats once per frame, and the words |
 | `Button` | `components/ui/primitives.tsx` | `primary` (ink, one per screen), `secondary`, `ghost`, `danger` |
 | `Panel`, `PanelHeader`, `Badge`, `Input`, `Field`, `SegmentedControl`, `EmptyState`, `Skeleton`, `KeyValue` | `components/ui/primitives.tsx` | Building blocks |
 | `Dialog`, `Popover`, `ToastProvider` | `components/ui/` | Floating surfaces |

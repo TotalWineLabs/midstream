@@ -99,6 +99,7 @@ console/
   shared/fieldPaths.ts         Field naming without the `payload.` root; nested JSON from field paths
   shared/tableNames.ts         Dataset and table name rules, labels, and the table name each topic gets
   shared/access.ts             Dataset permissions: what a principal may do on one dataset, as the control plane resolves it
+  shared/lagTrend.ts           Which way consumer lag is heading, its floor, the time left and how far a catch-up has come
   server/
     main.ts                    Bootstrap: Fastify, error handler, routes, static, shutdown
     workerPool.ts              Sizes Node's worker pool before anything starts it

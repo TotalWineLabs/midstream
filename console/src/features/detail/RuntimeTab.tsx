@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 
+import { DiagnosticsPanels } from './OverviewTab';
 import { PageBody } from '@/components/AppShell';
 import { Identifier, RelativeTime } from '@/components/Inline';
 import { Badge, EmptyState, KeyValue, Panel, PanelHeader } from '@/components/ui/primitives';
@@ -31,6 +32,7 @@ export function RuntimeTab({ snapshot }: { snapshot: DetailSnapshot }): ReactNod
 
   return (
     <PageBody className="space-y-6">
+      <DiagnosticsPanels snapshot={snapshot} />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Panel>
           <PanelHeader

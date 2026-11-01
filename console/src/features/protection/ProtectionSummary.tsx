@@ -45,7 +45,7 @@ export function ProtectionStateBadge({ summary }: { summary: CpProtectionSummary
     case 'not_reporting':
       return <Badge tone="neutral">No member reporting</Badge>;
     default:
-      return <Badge tone="running">In force · revision {summary.revision}</Badge>;
+      return <Badge tone="neutral">In force · revision {summary.revision}</Badge>;
   }
 }
 

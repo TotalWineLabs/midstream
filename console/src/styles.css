@@ -64,9 +64,12 @@
   --color-on-primary: #ffffff;
   --color-veil: rgba(16, 36, 56, 0.07);
 
-  /* Before Current: still used across the screens, now with Current's values. Text-safe on purpose. */
-  --color-accent: #007a5c;
-  --color-accent-soft: rgba(0, 179, 134, 0.12);
+  /*
+   * Before Current: names still used across the screens. `accent` was the interaction colour —
+   * links, selection, focus, toggles — which in Current is ink, never aqua.
+   */
+  --color-accent: #0a1218;
+  --color-accent-soft: rgba(16, 36, 56, 0.08);
   --color-phase-running: #007a5c;
   --color-phase-pending: #5643d1;
   --color-phase-paused: #9a5800;
@@ -107,8 +110,8 @@
   --color-on-primary: #07090c;
   --color-veil: rgba(150, 172, 198, 0.08);
 
-  --color-accent: #4ff5ce;
-  --color-accent-soft: rgba(62, 240, 197, 0.12);
+  --color-accent: #e7eef5;
+  --color-accent-soft: rgba(150, 172, 198, 0.12);
   --color-phase-running: #4ff5ce;
   --color-phase-pending: #b9aeff;
   --color-phase-paused: #ffc14d;
@@ -413,6 +416,17 @@
   animation: spin 8s linear infinite;
 }
 
+/* The river: dots ride each strand at its own pace, set by its throughput (River.tsx). */
+@keyframes river-flow {
+  to {
+    stroke-dashoffset: -36;
+  }
+}
+
+.river-flow {
+  animation: river-flow 4s linear infinite;
+}
+
 /* A catch-up's ring fills as the backlog falls. */
 .glyph-fill {
   transition: stroke-dasharray var(--duration-draw) var(--ease-out);
@@ -464,7 +478,8 @@
   .mark-flow,
   .ticker-enter,
   .glyph-flow,
-  .glyph-turn {
+  .glyph-turn,
+  .river-flow {
     animation: none;
   }
 

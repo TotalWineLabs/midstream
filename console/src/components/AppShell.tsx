@@ -719,12 +719,15 @@ function AccountMenu({
 
 export function PageHeader({
   title,
+  crumbs,
   subtitle,
   actions,
   meta,
   children,
 }: {
   title: ReactNode;
+  /** Where the page sits, above its title: the list it belongs to. */
+  crumbs?: ReactNode;
   subtitle?: ReactNode;
   actions?: ReactNode;
   meta?: ReactNode;
@@ -734,6 +737,7 @@ export function PageHeader({
     <header className="border-b border-[var(--color-line)]">
       <div className="mx-auto flex max-w-[1400px] flex-wrap items-start justify-between gap-4 px-4 pt-5 pb-4 sm:px-6 md:pt-7">
         <div className="min-w-0">
+          {crumbs ? <p className="mb-1 text-[13px] text-[var(--color-ink-muted)]">{crumbs}</p> : null}
           <h1 className="display truncate text-[24px] leading-tight font-semibold">{title}</h1>
           {subtitle ? <div className="mt-1 text-[13px] text-[var(--color-ink-muted)]">{subtitle}</div> : null}
           {meta ? <div className="mt-3 flex flex-wrap items-center gap-2">{meta}</div> : null}

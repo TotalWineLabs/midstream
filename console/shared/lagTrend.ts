@@ -1,5 +1,4 @@
-// Type-only, so `node --test` can load this module without the bundler's path aliases.
-import type { LagSample } from '@shared/types';
+import type { LagSample } from './types.ts';
 
 export type LagState = 'caught-up' | 'draining' | 'growing' | 'steady' | 'stale' | 'unknown';
 
@@ -78,6 +77,32 @@ function arrivedWithin(history: LagSample[], latest: LagSample, floorMs: number)
   const from = history.find((point) => point.arrived !== undefined && point.t >= latest.t - floorMs && point.t < latest.t);
   if (from?.arrived === undefined) return null;
   return ((latest.arrived - from.arrived) * floorMs) / (latest.t - from.t);
+}
+
+/**
+ * How far a falling backlog has come, 0 to 1: from its peak since the lag last sat at its floor to
+ * now. Null without a backlog. One pass from the newest measurement back, the floor's window
+ * following it, so a long history costs no more than its length.
+ */
+export function catchUpProgress(history: LagSample[], floorMs = LAG_FLOOR_MS): number | null {
+  const latest = history.at(-1);
+  if (!latest || latest.lag <= 0) return null;
+  let peak = latest.lag;
+  let start = history.length - 1;
+  for (let index = history.length - 2; index >= 0; index -= 1) {
+    const point = history[index] as LagSample;
+    // The earliest measurement inside this one's floor window: it only moves back as this one does.
+    while (start > 0 && (history[start - 1] as LagSample).t >= point.t - floorMs) start -= 1;
+    if (start >= index) start = index;
+    const from = history[start] as LagSample;
+    const arrived =
+      point.arrived !== undefined && from.arrived !== undefined && point.t > from.t
+        ? ((point.arrived - from.arrived) * floorMs) / (point.t - from.t)
+        : null;
+    if (point.lag === 0 || (arrived !== null && point.lag <= arrived)) break;
+    peak = Math.max(peak, point.lag);
+  }
+  return peak > 0 ? Math.min(1, Math.max(0, (peak - latest.lag) / peak)) : null;
 }
 
 /** `3h 10m`, `12m`, `45s`: a duration to read at a glance, to the nearest sensible unit. */

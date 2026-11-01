@@ -1,9 +1,9 @@
-import { ArrowLeft, Lock, Pencil, Play, Square, Trash2 } from 'lucide-react';
+import { Lock, MoreHorizontal, Pencil, Pin, Play, Square, Trash2 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { EditMaterializationDialog } from './EditMaterializationDialog';
-import { DetailOverviewTab } from './OverviewTab';
+import { DetailOverviewTab } from './MaterializationOverview';
 import { RuntimeTab } from './RuntimeTab';
 import { TableTab } from './TableTab';
 import { canDelete, canEdit, canResume, canStop, useLifecycleActions } from '../materializations/actions';
@@ -11,17 +11,19 @@ import { DataTab } from '../data/DataTab';
 import { ProtectionTab } from '../protection/ProtectionTab';
 import { SchemaTab } from '../schema/SchemaTab';
 import { LiveIndicator, PageBody, PageHeader } from '@/components/AppShell';
-import { Identifier } from '@/components/Inline';
-import { HealthBadge, PhaseBadge } from '@/components/PhaseBadge';
+import { StatusPill } from '@/components/Status';
+import { Popover } from '@/components/ui/Popover';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button, Panel, Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/cn';
-import { displayName, humanize, topicsLabel } from '@/lib/format';
+import { displayName } from '@/lib/format';
+import { isPinned, togglePin, usePins } from '@/lib/pins';
+import { statusOf } from '@/lib/status';
 import { TABLE_PARAM } from '../tables/selectedTable';
 import { useAuth } from '@/lib/auth';
 import { useDetailStream } from '@/lib/live';
 import { readableTables, type CpDetail, type CpTableSpec } from '@shared/types';
-import { useDomainPath } from '@/lib/domains';
+import { useDomain, useDomainPath } from '@/lib/domains';
 
 /**
  * Each tab, and the dataset permission it needs, beyond seeing the materialization at all, on at
@@ -32,9 +34,9 @@ const TABS = [
   { key: '', label: 'Overview', permission: null },
   { key: 'schema', label: 'Schema', permission: 'dataset.view_schema' },
   { key: 'data', label: 'Data', permission: 'data.query' },
-  { key: 'table', label: 'Table', permission: null },
+  { key: 'table', label: 'Tables', permission: null },
   { key: 'protection', label: 'Protection', permission: 'dataset.view_schema' },
-  { key: 'runtime', label: 'Runtime', permission: null },
+  { key: 'runtime', label: 'Diagnostics', permission: null },
 ] as const;
 
 /** Every table a delete removes - written, kept, or still being dropped - in its dataset. */
@@ -55,6 +57,7 @@ export function DetailPage(): ReactNode {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editing, setEditing] = useState(false);
   const { can } = useAuth();
+  const { id: domainId } = useDomain();
 
   if (!materializationId) return <Navigate to={domainPath('/materializations')} replace />;
 
@@ -81,51 +84,33 @@ export function DetailPage(): ReactNode {
   return (
     <>
       <PageHeader
-        title={detail ? displayName(detail.materialization) : materializationId}
-        subtitle={
-          detail ? (
-            <span className="break-all" title={detail.materialization.source_topics.join('\n')}>
-              {topicsLabel(detail.materialization.source_topics)}
-            </span>
-          ) : (
-            'Loading…'
-          )
+        crumbs={
+          <Link to={domainPath('/materializations')} className="transition-colors hover:text-[var(--color-ink)]">
+            Materializations
+          </Link>
         }
+        title={detail ? displayName(detail.materialization) : materializationId}
         meta={
-          <>
-            <Link
-              to={domainPath('/materializations')}
-              className="inline-flex items-center gap-1 text-[12px] text-[var(--color-ink-muted)] transition-colors hover:text-[var(--color-ink)]"
-            >
-              <ArrowLeft className="size-3.5" />
-              All materializations
-            </Link>
-            <Identifier value={materializationId} />
-            {detail ? (
-              <>
-                <PhaseBadge
-                  phase={detail.status.observed_phase}
-                  reason={detail.status.phase_reason}
-                />
-                <HealthBadge
-                  level={detail.status.runtime_health.level}
-                  reason={detail.status.runtime_health.message ?? detail.status.runtime_health.reason}
-                />
-                {detail.status.desired_phase !== detail.status.observed_phase ? (
-                  <span className="text-[12px] text-[var(--color-ink-muted)]">
-                    Reconciling toward {humanize(detail.status.desired_phase)}
-                  </span>
-                ) : null}
-              </>
-            ) : null}
-            <LiveIndicator status={status} generatedAt={data?.generatedAt} error={data?.error ?? null} />
-          </>
+          detail && activeTab !== '' ? (
+            <>
+              <StatusPill status={headerStatus(detail)} animate={false} />
+              <LiveIndicator status={status} generatedAt={data?.generatedAt} error={data?.error ?? null} compact />
+            </>
+          ) : null
         }
         actions={
           detail ? (
             <>
+              <PinButton domain={domainId} id={materializationId} label={displayName(detail.materialization)} />
+              {canEdit(detail) && can('materializations.edit') ? (
+                <Button variant="ghost" onClick={() => setEditing(true)}>
+                  <Pencil className="size-3.5" />
+                  Edit
+                </Button>
+              ) : null}
               {canResume(detail) && can('materializations.resume') ? (
                 <Button
+                  variant="primary"
                   onClick={() => run('resume', materializationId, undefined, displayName(detail.materialization))}
                   loading={pending === 'resume'}
                 >
@@ -139,23 +124,39 @@ export function DetailPage(): ReactNode {
                   Stop
                 </Button>
               ) : null}
-              {canEdit(detail) && can('materializations.edit') ? (
-                <Button variant="ghost" onClick={() => setEditing(true)}>
-                  <Pencil className="size-3.5" />
-                  Edit
-                </Button>
-              ) : null}
               {canDelete(detail) && can('materializations.delete') ? (
-                <Button variant="ghost" onClick={() => setConfirmDelete(true)}>
-                  <Trash2 className="size-4" />
-                  Delete
-                </Button>
+                <Popover
+                  align="end"
+                  width={200}
+                  trigger={({ open, toggle, id }) => (
+                    <Button variant="ghost" onClick={toggle} aria-expanded={open} aria-controls={id} aria-label="More actions" className="px-2.5">
+                      <MoreHorizontal className="size-4" />
+                    </Button>
+                  )}
+                >
+                  {({ close }) => (
+                    <div className="p-1.5" role="menu">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          close();
+                          setConfirmDelete(true);
+                        }}
+                        className="flex w-full items-center gap-2.5 rounded-[var(--radius-control)] px-2.5 py-2 text-left text-[13px] text-[var(--color-flare-ink)] transition-colors hover:bg-[var(--color-raised)]"
+                      >
+                        <Trash2 className="size-4" />
+                        Delete…
+                      </button>
+                    </div>
+                  )}
+                </Popover>
               ) : null}
             </>
           ) : null
         }
       >
-        <div className="mx-auto max-w-[1400px] px-6">
+        <div className="mx-auto max-w-[1400px] overflow-x-auto px-4 sm:px-6">
           <nav className="-mb-px flex gap-1" role="tablist">
             {tabs.map((item) => {
               const active = activeTab === item.key;
@@ -174,7 +175,7 @@ export function DetailPage(): ReactNode {
                     });
                   }}
                   className={cn(
-                    'border-b-2 px-3 pb-2.5 text-[13px] font-medium transition-colors',
+                    'border-b-2 px-3 pb-2.5 text-[13px] font-medium whitespace-nowrap transition-colors',
                     active
                       ? 'border-[var(--color-ink)] text-[var(--color-ink)]'
                       : 'border-transparent text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]',
@@ -270,5 +271,34 @@ export function DetailPage(): ReactNode {
         </div>
       </Dialog>
     </>
+  );
+}
+
+/** The state the header shows on every tab but the overview, whose readout says it. */
+function headerStatus(detail: CpDetail) {
+  return statusOf({
+    desired: detail.status.desired_phase,
+    observed: detail.status.observed_phase,
+    reason: detail.status.phase_reason,
+    health: detail.status.runtime_health.level,
+    healthReason: detail.status.runtime_health.reason,
+  });
+}
+
+/** Keep it in the sidebar, to come back to. */
+function PinButton({ domain, id, label }: { domain: string; id: string; label: string }): ReactNode {
+  const pins = usePins();
+  const pinned = isPinned(pins, { kind: 'materialization', domain, id });
+  return (
+    <Button
+      variant="ghost"
+      onClick={() => togglePin({ kind: 'materialization', domain, id, label })}
+      aria-pressed={pinned}
+      aria-label={pinned ? 'Unpin from the sidebar' : 'Pin to the sidebar'}
+      title={pinned ? 'Unpin from the sidebar' : 'Pin to the sidebar'}
+      className={cn('px-2.5', pinned && 'text-[var(--color-ink)]')}
+    >
+      <Pin className={cn('size-4', pinned && 'fill-current')} />
+    </Button>
   );
 }
