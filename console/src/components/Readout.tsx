@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 
+import { Shimmer } from './motion/Shimmer';
 import { Ticker } from './motion/Ticker';
 import { cn } from '@/lib/cn';
 
@@ -28,9 +29,18 @@ export function Readout({
   return (
     <section className={cn('min-w-0', className)}>
       {pills ? <div className="flex flex-wrap items-center gap-2">{pills}</div> : null}
-      <p className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <Ticker value={value} format={format} className="display text-[44px] leading-[1.05] font-semibold sm:text-[60px]" />
-        <span className="text-[16px] text-[var(--color-ink-muted)] sm:text-[18px]">{unit}</span>
+      <p className="mt-4 flex min-h-[46px] flex-wrap items-baseline gap-x-3 gap-y-1 sm:min-h-[63px]">
+        {value === null || value === undefined ? (
+          // Not measured yet, as when the console has just started: say so, rather than a dash set large.
+          <span className="self-center text-[16px] text-[var(--color-ink-muted)] sm:text-[18px]">
+            <Shimmer>Measuring {unit}…</Shimmer>
+          </span>
+        ) : (
+          <>
+            <Ticker value={value} format={format} className="display text-[44px] leading-[1.05] font-semibold sm:text-[60px]" />
+            <span className="text-[16px] text-[var(--color-ink-muted)] sm:text-[18px]">{unit}</span>
+          </>
+        )}
       </p>
       {context ? <p className="mt-2 text-[14px] text-[var(--color-ink-muted)]">{context}</p> : null}
       {children ? <div className="mt-5">{children}</div> : null}

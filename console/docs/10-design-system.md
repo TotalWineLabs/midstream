@@ -266,6 +266,9 @@ Rules:
   line chart. The number is the state's own: rows a second when flowing, records behind and the end
   time when catching up, what failed when failed.
 - **Live numbers roll** (`Ticker`). Static figures don't.
+- **Not measured yet is said in words:** a readout without its number, as when the console has just
+  started and its workers have not reported twice, reads *Measuring rows a second…*, shimmering,
+  never a dash set large.
 - **Formats** (`lib/format.ts`): `formatCount` compacts at 10,000 (`1.2M`); `formatExact` for
   anything someone compares or copies. Rates read "75,312 a second" in a readout and `/s` in dense
   rows. Bytes use `formatBytes` (SI).

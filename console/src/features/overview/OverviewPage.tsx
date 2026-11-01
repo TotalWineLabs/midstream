@@ -229,7 +229,7 @@ function DomainsPanel({ domains }: { domains: readonly DomainFleet[] }): ReactNo
               <span className="text-right text-[13px]">
                 {formatCount(totals.materializations)} <span className="text-[var(--color-ink-muted)]">{totals.materializations === 1 ? 'materialization' : 'materializations'}</span>
               </span>
-              <span className="numeric text-right text-[13px]">{formatReadoutRate(totals.rowsPerSecond)}/s</span>
+              <span className="numeric text-right text-[13px]">{totals.rowsPerSecond === null ? '—' : `${formatReadoutRate(totals.rowsPerSecond)}/s`}</span>
               <span className="numeric text-right text-[13px] text-[var(--color-ink-muted)]">{formatCount(totals.rowsCommitted)} rows</span>
             </Link>
           );
