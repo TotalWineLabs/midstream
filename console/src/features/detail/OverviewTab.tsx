@@ -494,6 +494,7 @@ const LAG_STATE: Record<LagTrend['state'], { label: string; tone: 'running' | 'p
   draining: { label: 'Catching up', tone: 'neutral', icon: <TrendingDown className="size-3" /> },
   growing: { label: 'Falling behind', tone: 'paused', icon: <TrendingUp className="size-3" /> },
   steady: { label: 'Holding steady', tone: 'neutral', icon: <Minus className="size-3" /> },
+  stale: { label: 'Not measured lately', tone: 'neutral', icon: <Minus className="size-3" /> },
   unknown: { label: 'Measuring', tone: 'neutral', icon: <Minus className="size-3" /> },
 };
 
@@ -526,7 +527,7 @@ function ConsumerLagPanel({
   const [lagWindow, setLagWindow] = useState<LagWindow>('1h');
   const [showPartitions, setShowPartitions] = useState(false);
 
-  const trend = useMemo(() => lagTrend(history), [history]);
+  const trend = useMemo(() => lagTrend(history, { now }), [history, now]);
   const points = useMemo<ChartPoint[]>(() => history.map((point) => ({ t: point.t, value: point.lag })), [history]);
   const several = Object.keys(topics ?? {}).length > 1;
   const partitions = useMemo(
@@ -580,7 +581,8 @@ function ConsumerLagPanel({
         <TimeSeriesChart
           points={points}
           from={now - LAG_WINDOWS[lagWindow]}
-          to={now}
+          // A measurement stamped a moment past the console's clock still draws.
+          to={Math.max(now, history.at(-1)?.t ?? now)}
           baseline="auto"
           formatValue={(value) => `${formatExact(value)} records`}
           formatTick={formatCount}

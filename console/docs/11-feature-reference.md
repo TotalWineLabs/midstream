@@ -378,7 +378,7 @@ to a batch per partition plus a commit interval, and its lag falls in steps as c
 | Part | Content |
 |------|---------|
 | Headline | The latest measured lag, records behind |
-| Trend | **Catching up** with the drain rate and the time left at that pace (`−5,914/s · about 4h 38m to go`), **Falling behind** with the growth rate, **Holding steady**, or **Caught up** — the least-squares slope of the last ten minutes of measurements |
+| Trend | **Caught up** at the floor — a lag no larger than what arrived on the source topics in the last 630 s (the batch ceiling and a commit interval), counted from the topics' end offsets at each measurement — however it wobbles as batches commit. Above it, **Catching up** with the drain rate and the time left at that pace (`−5,914/s · about 4h 38m to go`), **Falling behind** with the growth rate, or **Holding steady**: the least-squares slope of the last ten minutes of measurements, where under half a record a second, a single record, or 0.1% of the lag is no trend. **Not measured lately** once ten minutes pass without a measurement (`features/detail/lagTrend.ts`) |
 | Chart | One point per measurement over **15m / 1h / 6h**, on an axis fitted to the values, so a large backlog falling slowly is a slope rather than a flat line at the top of a zero-based chart |
 | Partitions | `N of M partitions behind`, and **Show M partitions** for each partition's lag with a bar against the largest; with several topics each is named `<topic> P<n>`, and each topic's own lag is in the Tables panel |
 | Footer | When it was last measured and how often measurements arrive |

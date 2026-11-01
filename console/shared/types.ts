@@ -867,6 +867,12 @@ export interface LagSample {
   /** When the control plane measured it, epoch milliseconds. */
   t: number;
   lag: number;
+  /**
+   * Records that had arrived on the source topics by this measurement, counted from the console's
+   * first: a running total, so two samples' difference is what arrived between them. Absent when
+   * the control plane did not report the topics' end offsets.
+   */
+  arrived?: number;
 }
 
 export interface MaterializationSummary extends CpListItem {

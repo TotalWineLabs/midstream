@@ -70,6 +70,8 @@ export class LiveStore {
   private readonly rateTrackers = new Map<string, RateTracker>();
   private readonly rates = new Map<string, CurrentRates>();
   private readonly lagHistory = new Map<string, LagSample[]>();
+  /** Each materialization's source topics' end offsets at its last measurement, and the arrivals counted to it. */
+  private readonly lastEnds = new Map<string, TopicEnds>();
   private readonly lastDetailFetch = new Map<string, number>();
 
   private fleetSeries: ThroughputSample[] = [];
@@ -397,7 +399,9 @@ export class LiveStore {
     const history = this.lagHistory.get(id) ?? [];
     const last = history.at(-1);
     if (last && t <= last.t) return;
-    this.lagHistory.set(id, appendLag(history, { t, lag: consumerLag.total_lag }));
+    const ends = countArrivals(this.lastEnds.get(id), consumerLag);
+    if (ends) this.lastEnds.set(id, ends);
+    this.lagHistory.set(id, appendLag(history, ends ? { t, lag: consumerLag.total_lag, arrived: ends.arrived } : { t, lag: consumerLag.total_lag }));
   }
 
   private recordFleetSample(now: number): void {
@@ -444,6 +448,7 @@ export class LiveStore {
     this.rateTrackers.delete(id);
     this.rates.delete(id);
     this.lagHistory.delete(id);
+    this.lastEnds.delete(id);
     this.lastDetailFetch.delete(id);
   }
 
@@ -484,6 +489,35 @@ export function appendSample(
   const settled = series.at(-2);
   const next = settled && sample.t - settled.t < spacingMs ? [...series.slice(0, -1), sample] : [...series, sample];
   return next.length > retention ? next.slice(next.length - retention) : next;
+}
+
+export interface TopicEnds {
+  /** Each source topic's end offsets, summed over its partitions. */
+  ends: Record<string, number>;
+  /** Records that arrived on the source topics up to these ends, from the first measurement counted. */
+  arrived: number;
+}
+
+/**
+ * Count what arrived on a materialization's source topics since its previous measurement.
+ *
+ * Only a topic measured both times counts, and never backwards: a topic just added to the
+ * materialization brings its whole history with it, and one deleted and created again starts its
+ * offsets over, and neither is records arriving. Null when the measurement reports no end offsets.
+ */
+export function countArrivals(previous: TopicEnds | undefined, consumerLag: CpConsumerLag): TopicEnds | null {
+  const ends: Record<string, number> = {};
+  for (const [topic, lag] of Object.entries(consumerLag.topics ?? {})) {
+    if (!lag.end_offsets) continue;
+    ends[topic] = Object.values(lag.end_offsets).reduce((sum, offset) => sum + offset, 0);
+  }
+  if (Object.keys(ends).length === 0) return null;
+  let arrived = previous?.arrived ?? 0;
+  for (const [topic, end] of Object.entries(ends)) {
+    const before = previous?.ends[topic];
+    if (before !== undefined && end > before) arrived += end - before;
+  }
+  return { ends, arrived };
 }
 
 /**

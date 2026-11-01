@@ -23,6 +23,38 @@ describe('lagTrend', () => {
     assert.equal(lagTrend(series([30, 0])).state, 'caught-up');
   });
 
+  it('reads the floor a caught-up runtime sits on as caught up, however it wobbles', () => {
+    // A quiet topic on a test cluster: lags of 28 to 49, a few records a minute arriving, held
+    // until their batch rolls. Read as a slope, this was "Catching up · −0/s · about 44m to go".
+    const wobble = [35, 49, 41, 35];
+    assert.equal(lagTrend(series(wobble)).state, 'steady');
+    const arriving = wobble.map((lag, index) => ({ t: index * minute, lag, arrived: 1_000 + index * 6 }));
+    const trend = lagTrend(arriving);
+    assert.equal(trend.state, 'caught-up');
+    assert.equal(trend.perSecond, null);
+    // Growing as a batch fills is the floor too.
+    assert.equal(lagTrend([10, 20, 30, 40].map((lag, index) => ({ t: index * minute, lag, arrived: index * 12 }))).state, 'caught-up');
+  });
+
+  it('reads a backlog above the floor as one', () => {
+    const lags = [107_357_698, 106_938_384, 106_543_644, 106_130_762];
+    const trend = lagTrend(lags.map((lag, index) => ({ t: index * minute, lag, arrived: index * 60_000 })));
+    assert.equal(trend.state, 'draining');
+    // A topic outrunning its runtime: more behind than arrived in the last ten minutes, and growing.
+    const growing = [700_000, 760_000, 820_000, 880_000].map((lag, index) => ({ t: index * minute, lag, arrived: index * 61_000 }));
+    assert.equal(lagTrend(growing).state, 'growing');
+  });
+
+  it('never calls a rate under half a record a second a trend', () => {
+    assert.equal(lagTrend(series([5_000, 5_010, 5_020, 5_030])).state, 'steady');
+  });
+
+  it('has no trend once the measurements stop', () => {
+    const history = series([35, 49, 41, 35]);
+    assert.equal(lagTrend(history, { now: 3 * minute + 30_000 }).state, 'steady');
+    assert.equal(lagTrend(history, { now: 3 * minute + 11 * minute }).state, 'stale');
+  });
+
   it('needs two measurements', () => {
     assert.equal(lagTrend(series([5_000])).state, 'unknown');
     assert.equal(lagTrend([]).state, 'unknown');
