@@ -128,7 +128,7 @@ export function SearchPage(): ReactNode {
               if (found.length === 0) return null;
               return (
                 <section key={kind} aria-label={title} className="space-y-2">
-                  <h2 className="px-1 text-[11px] font-medium tracking-wide text-[var(--color-ink-faint)] uppercase">{title}</h2>
+                  <h2 className="px-1 text-[12px] font-medium text-[var(--color-ink-faint)]">{title}</h2>
                   <Panel>
                     <ul className="divide-y divide-[var(--color-line)]">
                       {found.map((result) => {

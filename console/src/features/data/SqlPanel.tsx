@@ -65,7 +65,7 @@ export function SqlPanel({
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--color-surface)]">
       <div className="flex shrink-0 flex-wrap items-center gap-2 px-3 py-1.5">
-        <span className="text-[10px] font-semibold tracking-wide text-[var(--color-ink-faint)] uppercase">SQL</span>
+        <span className="text-[12px] font-medium text-[var(--color-ink-faint)]">SQL</span>
         <span className="min-w-0 truncate text-[11px] text-[var(--color-ink-muted)]">
           {tables.length > 1 ? (
             <>

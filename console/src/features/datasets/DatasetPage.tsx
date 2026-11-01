@@ -194,7 +194,7 @@ function DatasetTables({ dataset }: { dataset: CpDatasetDetail }): ReactNode {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-[12px]">
               <thead>
-                <tr className="border-b border-[var(--color-line)] bg-[var(--color-raised)] text-left text-[11px] tracking-wide text-[var(--color-ink-muted)] uppercase">
+                <tr className="border-b border-[var(--color-line)] bg-[var(--color-raised)] text-left text-[12px] text-[var(--color-ink-muted)]">
                   <th className="px-5 py-2 font-medium">Table · topic</th>
                   <th className="px-2 py-2 font-medium">Materialization</th>
                   <th className="px-2 py-2 font-medium">State</th>

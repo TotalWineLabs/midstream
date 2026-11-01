@@ -128,7 +128,7 @@ export function ColumnRail({
                   ) : (
                     <ChevronDown className="size-3 shrink-0 text-[var(--color-ink-faint)]" />
                   )}
-                  <span className="truncate text-[11px] font-semibold tracking-wide text-[var(--color-ink-muted)] uppercase">
+                  <span className="truncate text-[12px] font-medium text-[var(--color-ink-muted)]">
                     {group.label}
                   </span>
                   <span className="numeric shrink-0 text-[11px] text-[var(--color-ink-faint)]">
@@ -254,7 +254,7 @@ function ColumnRow({
         >
           only
         </button>
-        <span className="shrink-0 text-[10px] tracking-wide text-[var(--color-ink-faint)] uppercase">
+        <span className="shrink-0 text-[12px] text-[var(--color-ink-faint)]">
           {compactType(column.type)}
         </span>
       </div>

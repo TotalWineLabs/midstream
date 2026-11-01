@@ -245,7 +245,7 @@ function SnapshotsPanel({
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-[12px]">
             <thead>
-              <tr className="border-b border-[var(--color-line)] bg-[var(--color-raised)] text-left text-[11px] tracking-wide text-[var(--color-ink-muted)] uppercase">
+              <tr className="border-b border-[var(--color-line)] bg-[var(--color-raised)] text-left text-[12px] text-[var(--color-ink-muted)]">
                 <th className="px-5 py-2 font-medium">Committed</th>
                 <th className="px-2 py-2 font-medium">Operation</th>
                 <th className="px-2 py-2 text-right font-medium whitespace-nowrap">Added</th>

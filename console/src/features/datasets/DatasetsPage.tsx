@@ -175,7 +175,7 @@ function DatasetGroup({
             <div
               className={cn(
                 GRID,
-                'border-b border-[var(--color-line)] bg-[var(--color-raised)] px-5 py-2 text-[11px] font-medium tracking-wide text-[var(--color-ink-muted)] uppercase',
+                'border-b border-[var(--color-line)] bg-[var(--color-raised)] px-5 py-2 text-[12px] font-medium text-[var(--color-ink-muted)]',
               )}
             >
               <span>Dataset</span>

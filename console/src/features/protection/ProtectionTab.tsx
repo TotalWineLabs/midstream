@@ -216,7 +216,7 @@ function TableProtectionPanel({
       ) : (
         <table className="w-full text-[13px]">
           <thead>
-            <tr className="border-b border-[var(--color-line)] text-left text-[11px] uppercase tracking-wide text-[var(--color-ink-faint)]">
+            <tr className="border-b border-[var(--color-line)] text-left text-[12px] text-[var(--color-ink-faint)]">
               <th className="px-5 py-2 font-medium">Field</th>
               <th className="px-3 py-2 font-medium">Kind</th>
               <th className="px-3 py-2 font-medium">Mask</th>
@@ -255,7 +255,7 @@ function TableProtectionPanel({
       )}
       {table.history.length > 0 ? (
         <div className="border-t border-[var(--color-line)] px-5 py-3">
-          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-[var(--color-ink-faint)]">History</p>
+          <p className="mb-1.5 text-[12px] font-medium text-[var(--color-ink-faint)]">History</p>
           <ol className="space-y-1 text-[12px] text-[var(--color-ink-muted)]">
             {[...table.history].reverse().map((change) => (
               <li key={`${change.revision}:${change.at ?? ''}`}>

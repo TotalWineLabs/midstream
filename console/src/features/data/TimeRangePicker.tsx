@@ -199,7 +199,7 @@ function Section({
 function PresetColumn({ label, children }: { label: string; children: ReactNode }): ReactNode {
   return (
     <div>
-      <p className="px-1.5 pb-1 text-[10px] font-semibold tracking-wide text-[var(--color-ink-faint)] uppercase">
+      <p className="px-1.5 pb-1 text-[12px] font-medium text-[var(--color-ink-faint)]">
         {label}
       </p>
       <ul className="space-y-px">{children}</ul>

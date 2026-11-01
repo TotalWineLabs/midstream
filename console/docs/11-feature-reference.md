@@ -282,13 +282,14 @@ shows under the field it names, a name taken on its row. Dropping only kept tabl
 topics shows the materialization **Deploying** with "Changing the runtime's topics" for about five
 minutes (handbook [07 §7.9a](../../docs/handbook/07-control-plane-workflows.md)).
 
-The delete dialog states plainly that the runtime, its Kafka topics and its consumer group are
-removed, and so are its Iceberg tables with all their data — unless the control plane runs with
-destination cleanup turned off, when the tables leave their datasets but stay readable by path — and
-that this cannot be undone. It lists every table it takes out of its dataset, `sales.orders`, kept
-ones and ones being dropped included: anyone's queries of them stop working, and their names are free
-again. Deleting needs write access to every one of those datasets; without it a table carries a lock,
-the dialog names the datasets — *ask their owners* — and **Delete** is disabled.
+The delete dialog names the consequence before it happens (10 §10.10): *Delete Payments? This
+permanently deletes its 2 tables and their data. Queries on them stop working. The source topics are
+not touched.* Then every table it removes, `sales.orders`, kept ones and ones being dropped included,
+each with its rows; a note that where the control plane keeps deleted tables' files they stay in
+storage, out of every dataset, and that their names are free again. The runtime, its Kafka topics
+and its consumer group go too. Deleting needs write access to every one of those datasets; without it
+a table carries a lock, the dialog names the datasets — *ask their owners* — and **Delete** is
+disabled.
 
 If the control plane is unreachable and no detail has ever been fetched, the page renders a
 "Cannot reach the control plane" panel with the error instead of an empty shell.

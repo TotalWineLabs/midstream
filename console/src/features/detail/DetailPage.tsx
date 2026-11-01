@@ -16,7 +16,7 @@ import { Popover } from '@/components/ui/Popover';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button, Panel, Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/cn';
-import { displayName } from '@/lib/format';
+import { displayName, formatCount } from '@/lib/format';
 import { isPinned, togglePin, usePins } from '@/lib/pins';
 import { statusOf } from '@/lib/status';
 import { TABLE_PARAM } from '../tables/selectedTable';
@@ -217,10 +217,8 @@ export function DetailPage(): ReactNode {
       <Dialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
-        title="Delete materialization?"
-        description={`The runtime, its Kafka topics and its consumer group are removed, and so ${
-          removed.length > 1 ? `are its ${removed.length} Iceberg tables` : 'is its Iceberg table'
-        } with every file in them — unless the control plane has destination cleanup turned off, when the tables leave their datasets but their files stay. The source topics themselves are not touched. This cannot be undone.`}
+        title={`Delete ${detail ? displayName(detail.materialization) : materializationId}?`}
+        description={`This permanently deletes ${removed.length === 1 ? 'its table and its data' : `its ${removed.length} tables and their data`}. Queries on ${removed.length === 1 ? 'it' : 'them'} stop working. The source topics are not touched.`}
         footer={
           <>
             <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
@@ -241,31 +239,29 @@ export function DetailPage(): ReactNode {
         }
       >
         <div className="space-y-3 text-[13px] leading-relaxed">
-          <div>
-            <p className="text-[var(--color-ink-muted)]">
-              {removed.length === 1 ? 'This table leaves its dataset' : 'These tables leave their datasets'}, and anyone’s queries of them
-              stop working; their names are free to be used again:
-            </p>
-            <ul className="mt-1.5 space-y-0.5">
-              {removed.map((spec) => (
-                <li key={`${spec.dataset}.${spec.name}`} className="flex items-center gap-1.5">
-                  <code className="numeric">
+          {/* Every table it removes, named, with what it holds: the consequence, before it happens. */}
+          <ul className="divide-y divide-[var(--color-line)] rounded-[var(--radius-control)] border border-[var(--color-line)]">
+            {removed.map((spec) => {
+              const record = detail?.tables.find((table) => table.name === spec.name);
+              return (
+                <li key={`${spec.dataset}.${spec.name}`} className="flex items-center gap-2 px-3 py-2">
+                  <code className="ident min-w-0 flex-1 truncate">
                     {spec.dataset}.{spec.name}
                   </code>
                   {can('dataset.write', spec.dataset_id) ? null : <Lock className="size-3 text-[var(--color-ink-faint)]" aria-label="no write access" />}
+                  {record ? <span className="numeric shrink-0 text-[var(--color-ink-muted)]">{formatCount(record.totals.records ?? 0)} rows</span> : null}
                 </li>
-              ))}
-            </ul>
-          </div>
+              );
+            })}
+          </ul>
           {unwritable.length > 0 ? (
-            <p className="text-[var(--color-phase-failed)]">
-              Deleting needs write access to {unwritable.join(' and ')}, which you do not have: ask {unwritable.length === 1 ? 'its' : 'their'}{' '}
-              owners.
+            <p className="text-[var(--color-flare-ink)]">
+              Deleting needs write access to {unwritable.join(' and ')}: ask {unwritable.length === 1 ? 'its' : 'their'} owners.
             </p>
           ) : (
-            <p className="text-[var(--color-ink-muted)]">
-              Deletion is asynchronous and multi-stage: runtime teardown, observation confirmation, Kafka cleanup, then
-              control-plane record removal.
+            <p className="text-[12px] text-[var(--color-ink-faint)]">
+              Where the control plane keeps deleted tables' files, they stay in storage, out of every dataset. Their names are
+              free to use again.
             </p>
           )}
         </div>

@@ -221,7 +221,7 @@ export function UserDetail({ userId }: { userId: string }): ReactNode {
 function Fact({ label, children }: { label: string; children: ReactNode }): ReactNode {
   return (
     <div className="min-w-0">
-      <dt className="text-[11px] font-medium tracking-wide text-[var(--color-ink-faint)] uppercase">{label}</dt>
+      <dt className="text-[12px] font-medium text-[var(--color-ink-faint)]">{label}</dt>
       <dd className="mt-1">{children}</dd>
     </div>
   );
@@ -339,7 +339,7 @@ export function AccessPanel({ user, catalog }: { user: Pick<CpUserDetail, 'permi
             if (rows.length === 0) return null;
             return (
               <div key={category.id} className="px-5 py-3">
-                <p className="mb-1.5 text-[11px] font-medium tracking-wide text-[var(--color-ink-faint)] uppercase">{category.label}</p>
+                <p className="mb-1.5 text-[12px] font-medium text-[var(--color-ink-faint)]">{category.label}</p>
                 <ul className="space-y-1.5">
                   {rows.map((permission) => (
                     <li key={permission.key} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 text-[13px]">

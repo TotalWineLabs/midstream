@@ -284,7 +284,7 @@ function FieldPicker({ columns, onPick }: { columns: QueryColumn[]; onPick: (col
           return (
             <li key={match.column.name} role="presentation">
               {groupStart ? (
-                <p className="px-2 pt-1.5 pb-1 text-[10px] font-semibold tracking-wide text-[var(--color-ink-faint)] uppercase">
+                <p className="px-2 pt-1.5 pb-1 text-[12px] font-medium text-[var(--color-ink-faint)]">
                   {groupOf(match.column.name) === 'kafka' ? 'Kafka metadata' : 'Fields'}
                 </p>
               ) : null}
@@ -305,7 +305,7 @@ function FieldPicker({ columns, onPick }: { columns: QueryColumn[]; onPick: (col
                 )}
               >
                 <MatchedName name={match.column.name} ranges={match.ranges} />
-                <span className="shrink-0 text-[10px] tracking-wide text-[var(--color-ink-faint)] uppercase">
+                <span className="shrink-0 text-[12px] text-[var(--color-ink-faint)]">
                   {compactType(match.column.type)}
                 </span>
               </button>
@@ -396,7 +396,7 @@ function FilterValue({
       <div className="flex items-center gap-1.5">
         <Filter className="size-3.5 shrink-0 text-[var(--color-ink-faint)]" />
         <ColumnLabelText labels={labels} name={column.name} className="numeric min-w-0 flex-1 text-[12px] font-medium" />
-        <span className="shrink-0 text-[10px] tracking-wide text-[var(--color-ink-faint)] uppercase">
+        <span className="shrink-0 text-[12px] text-[var(--color-ink-faint)]">
           {compactType(column.type)}
         </span>
         <button
@@ -455,7 +455,7 @@ function FilterValue({
             <p className="px-1 text-[11px] text-[var(--color-phase-paused)]">Could not read values. Type one instead.</p>
           ) : suggestions.data && suggestions.data.topValues.length > 0 ? (
             <>
-              <p className="px-1 pb-1 text-[10px] font-semibold tracking-wide text-[var(--color-ink-faint)] uppercase">
+              <p className="px-1 pb-1 text-[12px] font-medium text-[var(--color-ink-faint)]">
                 Values in view
               </p>
               <ul className="max-h-[168px] space-y-0.5 overflow-y-auto">

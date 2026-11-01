@@ -121,7 +121,7 @@ export function RowDrawer({
         <div className="min-h-0 flex-1 overflow-y-auto">
           {groups.map((group) => (
             <section key={group.id}>
-              <h3 className="sticky top-0 z-10 border-b border-[var(--color-line)] bg-[var(--color-raised)] px-4 py-1.5 text-[10px] font-semibold tracking-wide text-[var(--color-ink-muted)] uppercase">
+              <h3 className="sticky top-0 z-10 border-b border-[var(--color-line)] bg-[var(--color-raised)] px-4 py-1.5 text-[12px] font-medium text-[var(--color-ink-muted)]">
                 {group.label}
               </h3>
               <dl>

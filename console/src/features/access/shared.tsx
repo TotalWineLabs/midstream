@@ -128,7 +128,7 @@ export function BackLink({ to, children }: { to: string; children: ReactNode }):
 
 /** A grid row for the access tables, the header and every row sharing one template. */
 export const tableHeaderClass =
-  'border-b border-[var(--color-line)] bg-[var(--color-raised)] px-5 py-2.5 text-[11px] font-medium tracking-wide text-[var(--color-ink-muted)] uppercase';
+  'border-b border-[var(--color-line)] bg-[var(--color-raised)] px-5 py-2.5 text-[12px] font-medium text-[var(--color-ink-muted)]';
 
 export function formatDate(value: string | null | undefined): string {
   if (!value || value.startsWith('1970-')) return '—';
