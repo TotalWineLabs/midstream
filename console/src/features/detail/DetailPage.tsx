@@ -2,18 +2,18 @@ import { Lock, MoreHorizontal, Pencil, Pin, Play, Square, Trash2 } from 'lucide-
 import { useState, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
-import { EditMaterializationDialog } from './EditMaterializationDialog';
 import { DetailOverviewTab } from './MaterializationOverview';
 import { RuntimeTab } from './RuntimeTab';
 import { canDelete, canEdit, canResume, canStop, useLifecycleActions } from '../materializations/actions';
 import { ProtectionTab } from '../protection/ProtectionTab';
 import { PageBody, PageHeader } from '@/components/AppShell';
+import { PlanBlocked, PlanGroup, PlanItem, PlanNote, PlanTable } from '@/components/Plan';
 import { StatusPill } from '@/components/Status';
 import { Popover } from '@/components/ui/Popover';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button, Panel, Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/cn';
-import { displayName, formatCount } from '@/lib/format';
+import { displayName, formatBytes, formatCount } from '@/lib/format';
 import { isPinned, togglePin, usePins } from '@/lib/pins';
 import { statusOf } from '@/lib/status';
 import { TABLE_PARAM, resolveTable } from '../tables/selectedTable';
@@ -52,7 +52,6 @@ export function DetailPage(): ReactNode {
   const { data } = useDetailStream(materializationId ?? '');
   const { run, pending } = useLifecycleActions();
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [editing, setEditing] = useState(false);
   const { can } = useAuth();
   const { id: domainId } = useDomain();
 
@@ -109,7 +108,7 @@ export function DetailPage(): ReactNode {
             <>
               <PinButton domain={domainId} id={materializationId} label={displayName(detail.materialization)} />
               {canEdit(detail) && can('materializations.edit') ? (
-                <Button variant="ghost" onClick={() => setEditing(true)}>
+                <Button variant="ghost" onClick={() => void navigate(domainPath(`/materializations/${encodeURIComponent(materializationId)}/edit`))}>
                   <Pencil className="size-3.5" />
                   Edit
                 </Button>
@@ -201,17 +200,10 @@ export function DetailPage(): ReactNode {
         <DetailOverviewTab snapshot={data} />
       )}
 
-      {detail ? (
-        <>
-          <EditMaterializationDialog open={editing} onClose={() => setEditing(false)} detail={detail} />
-        </>
-      ) : null}
-
       <Dialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
         title={`Delete ${detail ? displayName(detail.materialization) : materializationId}?`}
-        description={`This permanently deletes ${removed.length === 1 ? 'its table and its data' : `its ${removed.length} tables and their data`}. Queries on ${removed.length === 1 ? 'it' : 'them'} stop working. The source topics are not touched.`}
         footer={
           <>
             <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
@@ -226,37 +218,53 @@ export function DetailPage(): ReactNode {
                 setConfirmDelete(false);
               }}
             >
-              Delete
+              {removed.length === 0 ? 'Delete' : `Delete it and ${removed.length === 1 ? 'its table' : `${removed.length} tables`}`}
             </Button>
           </>
         }
       >
-        <div className="space-y-3 text-[13px] leading-relaxed">
-          {/* Every table it removes, named, with what it holds: the consequence, before it happens. */}
-          <ul className="divide-y divide-[var(--color-line)] rounded-[var(--radius-control)] border border-[var(--color-line)]">
-            {removed.map((spec) => {
-              const record = detail?.tables.find((table) => table.name === spec.name);
-              return (
-                <li key={`${spec.dataset}.${spec.name}`} className="flex items-center gap-2 px-3 py-2">
-                  <code className="ident min-w-0 flex-1 truncate">
-                    {spec.dataset}.{spec.name}
-                  </code>
-                  {can('dataset.write', spec.dataset_id) ? null : <Lock className="size-3 text-[var(--color-ink-faint)]" aria-label="no write access" />}
-                  {record ? <span className="numeric shrink-0 text-[var(--color-ink-muted)]">{formatCount(record.totals.records ?? 0)} rows</span> : null}
-                </li>
-              );
-            })}
-          </ul>
-          {unwritable.length > 0 ? (
-            <p className="text-[var(--color-flare-ink)]">
-              Deleting needs write access to {unwritable.join(' and ')}: ask {unwritable.length === 1 ? 'its' : 'their'} owners.
-            </p>
-          ) : (
-            <p className="text-[12px] text-[var(--color-ink-faint)]">
-              Where the control plane keeps deleted tables' files, they stay in storage, out of every dataset. Their names are
-              free to use again.
-            </p>
-          )}
+        {/* The plan of a delete: what goes, by the names SQL uses, and what stays — before it happens. */}
+        <div className="space-y-4">
+          {removed.length > 0 ? (
+            <PlanGroup title={`Deletes ${removed.length === 1 ? 'its table' : `its ${removed.length} tables`}, with their data — this cannot be undone`}>
+              {removed.map((spec) => {
+                const record = detail?.tables.find((table) => table.name === spec.name);
+                const rows = record?.totals.records;
+                const bytes = record?.totals.bytes;
+                return (
+                  <PlanTable
+                    key={`${spec.dataset}.${spec.name}`}
+                    dataset={spec.dataset}
+                    name={spec.name}
+                    detail={
+                      <>
+                        {rows !== undefined ? `${formatCount(rows)} rows` : 'not written yet'}
+                        {bytes ? ` · ${formatBytes(bytes)}` : ''}
+                        {can('dataset.write', spec.dataset_id) ? null : (
+                          <span className="ml-1.5 inline-flex items-center gap-1">
+                            <Lock className="size-3" aria-hidden /> no write access to {spec.dataset}
+                          </span>
+                        )}
+                      </>
+                    }
+                  />
+                );
+              })}
+            </PlanGroup>
+          ) : null}
+          {detail ? (
+            <PlanGroup title="Stays">
+              <PlanItem detail="Kafka keeps them; nothing reads them for this materialization any more.">
+                {detail.materialization.source_topics.length === 1 ? 'Its topic' : `Its ${detail.materialization.source_topics.length} topics`},{' '}
+                <span className="ident">{detail.materialization.source_topics.join(', ')}</span>
+              </PlanItem>
+            </PlanGroup>
+          ) : null}
+          <PlanNote>
+            Its workers stop, then its tables leave their datasets: queries on them stop working, and their names are free to use again. Where the control
+            plane keeps deleted tables’ files, they stay in storage.
+          </PlanNote>
+          {unwritable.length > 0 ? <PlanBlocked>Deleting needs write access to {unwritable.join(' and ')}: ask {unwritable.length === 1 ? 'its' : 'their'} owners.</PlanBlocked> : null}
         </div>
       </Dialog>
     </>

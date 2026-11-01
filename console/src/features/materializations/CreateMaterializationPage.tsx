@@ -4,6 +4,7 @@ import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { PageBody, PageHeader } from '@/components/AppShell';
+import { PlanBlocked, PlanCard, PlanGroup, PlanNote, PlanRow, PlanTable } from '@/components/Plan';
 import { useToast } from '@/components/ui/Toast';
 import { Button, Field, Input, Panel, Select } from '@/components/ui/primitives';
 import { cn } from '@/lib/cn';
@@ -445,29 +446,37 @@ function Plan({
   const count = tables.length;
   return (
     <aside className="min-w-0 self-start lg:sticky lg:top-6">
-      <Panel className="p-5">
-        <h2 className="text-[13px] font-semibold">The plan</h2>
+      <PlanCard
+        action={
+          <>
+            {destinationMissing ? (
+              <PlanBlocked>No storage is set up for tables yet. An administrator sets it in Settings, under Materializations.</PlanBlocked>
+            ) : null}
+            <Button type="submit" variant="primary" className="w-full" disabled={!ready} loading={pending}>
+              {count > 1 ? `Create ${count} tables` : 'Create'}
+            </Button>
+          </>
+        }
+      >
         {count === 0 ? (
-          <p className="mt-3 text-[13px] text-[var(--color-ink-muted)]">Choose a topic, and what it will create shows here.</p>
+          <PlanNote>Choose a topic, and what it will create shows here.</PlanNote>
         ) : (
           <>
-            <p className="mt-3 text-[13px] text-[var(--color-ink-muted)]">
-              Creates {count} {count === 1 ? 'table' : 'tables'}, as SQL will read {count === 1 ? 'it' : 'them'}:
-            </p>
-            <ul className="mt-2 space-y-2.5">
+            <PlanGroup title={`Creates ${count} ${count === 1 ? 'table' : 'tables'}, as SQL will read ${count === 1 ? 'it' : 'them'}`}>
               {tables.map((draft) => (
-                <li key={draft.topic} className="min-w-0">
-                  <p className="ident truncate text-[13px]">
-                    <span className="text-[var(--color-ink-muted)]">{draft.dataset || 'dataset'}.</span>
-                    {draft.name || 'table'}
-                  </p>
-                  <p className="truncate text-[12px] text-[var(--color-ink-faint)]">
-                    from <span className="ident">{draft.topic}</span>
-                  </p>
-                </li>
+                <PlanTable
+                  key={draft.topic}
+                  dataset={draft.dataset || 'dataset'}
+                  name={draft.name || 'table'}
+                  detail={
+                    <>
+                      from <span className="ident">{draft.topic}</span>
+                    </>
+                  }
+                />
               ))}
-            </ul>
-            <dl className="mt-4 space-y-1.5 border-t border-[var(--color-line)] pt-4 text-[13px]">
+            </PlanGroup>
+            <dl className="space-y-1.5 border-t border-[var(--color-line)] pt-4">
               <PlanRow label="Partitioned">{granularity}</PlanRow>
               <PlanRow label="Workers">
                 {workers}
@@ -480,32 +489,10 @@ function Plan({
               ) : null}
               <PlanRow label="Null records">{skipTombstones ? 'Ignored' : 'Kept'}</PlanRow>
             </dl>
-            <p className="mt-4 text-[12px] leading-relaxed text-[var(--color-ink-muted)]">
-              About a minute: its names are claimed, its topics sampled, its tables created, then its workers start. You can
-              leave; it carries on.
-            </p>
+            <PlanNote>About a minute: its names are claimed, its topics sampled, its tables created, then its workers start. You can leave; it carries on.</PlanNote>
           </>
         )}
-        {destinationMissing ? (
-          <p role="alert" className="mt-4 rounded-[var(--radius-control)] bg-[var(--color-flare-wash)] px-3 py-2.5 text-[12px] text-[var(--color-flare-ink)]">
-            No storage is set up for tables yet. An administrator sets it in Settings, under Materializations.
-          </p>
-        ) : null}
-        <Button type="submit" variant="primary" className="mt-5 w-full" disabled={!ready} loading={pending}>
-          {count > 1 ? `Create ${count} tables` : 'Create'}
-        </Button>
-      </Panel>
+      </PlanCard>
     </aside>
-  );
-}
-
-function PlanRow({ label, children }: { label: string; children: ReactNode }): ReactNode {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="shrink-0 text-[var(--color-ink-faint)]">{label}</dt>
-      <dd className="min-w-0 truncate text-right" title={typeof children === 'string' ? children : undefined}>
-        {children}
-      </dd>
-    </div>
   );
 }

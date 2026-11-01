@@ -1,8 +1,8 @@
-import { AlertTriangle, RotateCcw, Undo2 } from 'lucide-react';
+import { AlertTriangle, Lock, RotateCcw, Undo2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { RelativeTime } from '@/components/Inline';
-import { Badge, FIELD_BASE, Select } from '@/components/ui/primitives';
+import { FIELD_BASE, Select } from '@/components/ui/primitives';
 import { cn } from '@/lib/cn';
 import type { SettingView } from '@shared/types';
 
@@ -57,7 +57,7 @@ export function Switch({
       <span
         className={cn(
           'inline-block size-3.5 rounded-full shadow-sm transition-transform',
-          checked ? 'bg-[var(--color-on-primary)]' : 'bg-white dark:bg-[var(--color-ink-muted)]',
+          checked ? 'bg-[var(--color-on-primary)]' : 'bg-[var(--color-shelf)] dark:bg-[var(--color-ink-muted)]',
           checked ? 'translate-x-[18px]' : 'translate-x-[2px]',
         )}
       />
@@ -152,9 +152,9 @@ export function SettingRow({
       <div
         className={cn(
           FIELD_BASE,
-          'flex h-8 items-center gap-2 pr-2.5 focus-within:border-[var(--color-accent)]',
+          'flex h-8 items-center gap-2 pr-2.5 focus-within:border-[var(--color-ink-muted)]',
           wide ? 'w-full md:w-72' : 'w-44',
-          error && 'border-[var(--color-phase-failed)] focus-within:border-[var(--color-phase-failed)]',
+          error && 'border-[var(--color-flare)] focus-within:border-[var(--color-flare)]',
           readOnly && 'opacity-50',
         )}
       >
@@ -182,28 +182,35 @@ export function SettingRow({
   return (
     <div
       className={cn(
-        'grid gap-3 px-5 py-4',
+        'relative grid gap-3 px-5 py-4',
         !wideControl && 'md:grid-cols-[minmax(0,1fr)_auto] md:gap-8',
-        changed && 'bg-[var(--color-accent-soft)]/40',
+        changed && 'bg-[var(--color-raised)]',
       )}
     >
+      {/* An edit not saved yet is marked the way a document marks a change: a bar in the margin. */}
+      {changed ? <span aria-hidden className="absolute inset-y-0 left-0 w-0.5 bg-[var(--color-ink)]" /> : null}
       <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
           <label htmlFor={setting.kind === 'boolean' ? undefined : id} className="text-[13px] font-medium">
             {setting.label}
           </label>
           {setting.danger ? (
-            <Badge tone="paused" title="Changing this can remove data">
-              <AlertTriangle className="size-3" />
-              Destructive
-            </Badge>
+            <span className="inline-flex items-center gap-1 self-center text-[12px] text-[var(--color-ink-muted)]">
+              <AlertTriangle className="size-3" aria-hidden />
+              Can remove data
+            </span>
           ) : null}
-          {changed ? <Badge tone="accent">Unsaved</Badge> : null}
+          {changed ? <span className="text-[12px] text-[var(--color-ink-muted)]">Unsaved</span> : null}
         </div>
         {setting.description ? (
-          <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-[var(--color-ink-muted)]">{setting.description}</p>
+          <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-[var(--color-ink-muted)] [overflow-wrap:anywhere]">{setting.description}</p>
         ) : null}
-        {lockedReason ? <p className="mt-1 text-[12px] text-[var(--color-phase-paused)]">{lockedReason}</p> : null}
+        {lockedReason ? (
+          <p className="mt-1 flex items-start gap-1.5 text-[12px] text-[var(--color-ink-muted)]">
+            <Lock className="mt-0.5 size-3 shrink-0" aria-hidden />
+            {lockedReason}
+          </p>
+        ) : null}
         <SettingMeta
           id={`${id}-meta`}
           setting={setting}
@@ -217,7 +224,7 @@ export function SettingRow({
       <div className={cn('flex flex-col items-start gap-1', !wideControl && 'md:items-end')}>
         {control}
         {error ? (
-          <span role="alert" className="text-[12px] text-[var(--color-phase-failed)]">
+          <span role="alert" className="text-[12px] text-[var(--color-flare-ink)]">
             {error}
           </span>
         ) : hint ? (
@@ -228,7 +235,10 @@ export function SettingRow({
   );
 }
 
-/** Where the value comes from, when the change applies, and the way back to the deployment value. */
+/**
+ * Where a changed value comes from, and the way back; quiet while a setting holds its default. What
+ * a change applies to is said while one is being made.
+ */
 function SettingMeta({
   id,
   setting,
@@ -248,53 +258,53 @@ function SettingMeta({
 }): ReactNode {
   const fallback = formatValue(setting, fallbackValue(setting));
   const fallbackFrom = fallbackSource(setting) === 'deployment' ? 'deployment value' : 'default';
+  const source = pendingReset ? (
+    <span className="text-[var(--color-ink)]">
+      Returns to the {fallbackFrom}, {fallback}, when saved
+    </span>
+  ) : setting.source === 'override' ? (
+    <span>
+      Changed
+      {setting.updatedBy ? ` by ${setting.updatedBy}` : ''}
+      {setting.updatedAt ? (
+        <>
+          {' · '}
+          <RelativeTime value={setting.updatedAt} />
+        </>
+      ) : null}
+      {' · '}
+      {fallbackFrom} {fallback}
+    </span>
+  ) : setting.source === 'deployment' ? (
+    <span title={setting.envVar ? `Set by ${setting.envVar}` : undefined}>Set by the deployment</span>
+  ) : null;
+  const effect = hasDraft && setting.effect ? <span>Applies to {setting.effect}</span> : null;
+  const action = hasDraft ? (
+    <button
+      type="button"
+      onClick={onUndo}
+      className="inline-flex items-center gap-1 text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]"
+    >
+      <Undo2 className="size-3" />
+      Undo
+    </button>
+  ) : setting.source === 'override' && !readOnly ? (
+    <button
+      type="button"
+      onClick={onReset}
+      className="inline-flex items-center gap-1 text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]"
+      title={`Return to the ${fallbackFrom}: ${fallback}`}
+    >
+      <RotateCcw className="size-3" />
+      Reset
+    </button>
+  ) : null;
+  if (!source && !effect && !action) return null;
   return (
     <div id={id} className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-[var(--color-ink-faint)]">
-      {pendingReset ? (
-        <span className="text-[var(--color-accent)]">
-          Returns to the {fallbackFrom}, {fallback}, when saved
-        </span>
-      ) : setting.source === 'override' ? (
-        <span>
-          Changed
-          {setting.updatedBy ? ` by ${setting.updatedBy}` : ''}
-          {setting.updatedAt ? (
-            <>
-              {' · '}
-              <RelativeTime value={setting.updatedAt} />
-            </>
-          ) : null}
-          {' · '}
-          {fallbackFrom} {fallback}
-        </span>
-      ) : setting.source === 'deployment' ? (
-        <span title={setting.envVar ?? undefined}>
-          Set by the deployment{setting.envVar ? <code className="numeric ml-1">{setting.envVar}</code> : null}
-        </span>
-      ) : (
-        <span>Default</span>
-      )}
-      {setting.effect ? <span>Applies to {setting.effect}</span> : null}
-      {hasDraft ? (
-        <button
-          type="button"
-          onClick={onUndo}
-          className="inline-flex items-center gap-1 text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]"
-        >
-          <Undo2 className="size-3" />
-          Undo
-        </button>
-      ) : setting.source === 'override' && !readOnly ? (
-        <button
-          type="button"
-          onClick={onReset}
-          className="inline-flex items-center gap-1 text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]"
-          title={`Return to the ${fallbackFrom}: ${fallback}`}
-        >
-          <RotateCcw className="size-3" />
-          Reset
-        </button>
-      ) : null}
+      {source}
+      {effect}
+      {action}
     </div>
   );
 }

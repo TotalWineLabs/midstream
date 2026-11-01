@@ -18,8 +18,10 @@ import { DomainsSection } from './DomainsSection';
 import { HistorySection } from './HistorySection';
 import { RuntimeRolloutPanel } from './RuntimeRollout';
 import { SettingRow, SettingRowList } from './SettingRow';
+import { SettingsSearchField, SettingsSearchResults } from './SettingsSearch';
 import { AccessSectionContent } from '../access/AccessSections';
 import { ProtectionKeyNotice } from '../protection/ProtectionKeyNotice';
+import { searchSettings } from './search';
 import {
   CONSOLE_SECTIONS,
   DOMAIN_SECTIONS,
@@ -45,7 +47,7 @@ import {
 const SCOPE_NOTES: Record<SettingsScope, string> = {
   'control-plane': 'Applies to the control plane.',
   runtime: 'Delivered to every running runtime.',
-  console: 'Applies to this console and every other replica of it.',
+  console: 'Applies to this console, wherever it runs.',
 };
 
 /**
@@ -56,7 +58,8 @@ const SCOPE_NOTES: Record<SettingsScope, string> = {
  * stored in the settings home, the domains, your account in each and every domain's history.
  *
  * Values come from the deployment's environment unless changed here; a change is stored with a
- * control plane and applies without a restart. Edits stay drafts, across sections, until saved.
+ * control plane and applies without a restart. Edits stay drafts, across sections and searches,
+ * until saved. A search, focused with `/`, finds settings in every section at once.
  */
 export function SettingsPage(): ReactNode {
   const { section: sectionId, itemId } = useParams<{ section?: string; itemId?: string }>();
@@ -87,6 +90,9 @@ export function SettingsPage(): ReactNode {
   const [drafts, setDrafts] = useState<Drafts>({});
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
   const [conflict, setConflict] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  // Choosing a section, from the navigation or a result, ends a search.
+  useEffect(() => setQuery(''), [location.pathname]);
 
   const overview = useQuery({
     queryKey: ['settings'],
@@ -98,6 +104,9 @@ export function SettingsPage(): ReactNode {
       sectionId !== undefined && RUNTIME_SECTIONS.has(sectionId) && hasOutstandingRollout(query.state.data) ? 5_000 : false,
   });
   const settings = useMemo(() => settingsByKey(overview.data), [overview.data]);
+  const searchable = canView && sections.some((item) => SETTINGS_KINDS.has(item.kind));
+  const searching = searchable && query.trim() !== '';
+  const found = useMemo(() => searchSettings(searching ? query : '', overview.data, sections), [searching, query, overview.data, sections]);
   const pending = useMemo(() => pendingDrafts(drafts, settings), [drafts, settings]);
   const readOnly = !overview.data?.controlPlane.reachable || !can('settings.manage');
 
@@ -106,8 +115,10 @@ export function SettingsPage(): ReactNode {
     if (!hasEdits) return;
     const warn = (event: BeforeUnloadEvent): void => event.preventDefault();
     window.addEventListener('beforeunload', warn);
-    // Keep toasts, such as a failed save's, clear of the save bar and its button.
-    document.documentElement.style.setProperty('--toast-offset', '4.5rem');
+    // Keep toasts, such as a failed save's, clear of the save bar and its button; on a phone the bar
+    // sits above the navigation.
+    const phone = window.matchMedia('(max-width: 767px)').matches;
+    document.documentElement.style.setProperty('--toast-offset', phone ? 'calc(8.5rem + env(safe-area-inset-bottom))' : '4.5rem');
     return () => {
       window.removeEventListener('beforeunload', warn);
       document.documentElement.style.removeProperty('--toast-offset');
@@ -185,115 +196,149 @@ export function SettingsPage(): ReactNode {
 
   const dirtySections = new Set(pending.changed.map(([setting]) => setting.section));
   const usesSettings = SETTINGS_KINDS.has(section.kind);
+  const lockedReason = (setting: SettingView): string | null =>
+    setting.permission && !can(setting.permission) ? `Changing this needs ${permissionLabel(setting.permission)}, besides Manage settings.` : null;
+  const renderRow = (setting: SettingView): ReactNode => {
+    const locked = lockedReason(setting);
+    return (
+      <SettingRow
+        key={draftKey(setting)}
+        setting={setting}
+        draft={drafts[draftKey(setting)]}
+        serverError={serverErrors[draftKey(setting)] ?? null}
+        readOnly={readOnly || locked !== null}
+        lockedReason={readOnly ? null : locked}
+        onDraft={(draft) => setDraft(setting, draft)}
+      />
+    );
+  };
+
+  // Said wherever settings are shown: in a section, or in what a search found.
+  const notices = (
+    <>
+      {overview.data && !overview.data.controlPlane.reachable ? (
+        <Banner tone="warning" icon={<CloudOff className="size-4" />}>
+          <strong className="font-medium">Settings are read-only.</strong> They are stored with{' '}
+          {domain ? `${domain.name}'s control plane` : 'the settings home\'s control plane'}, which cannot be reached:{' '}
+          {overview.data.controlPlane.error ?? 'no answer'}.
+        </Banner>
+      ) : null}
+      {conflict ? (
+        <Banner
+          tone="danger"
+          icon={<AlertTriangle className="size-4" />}
+          action={
+            <Button
+              size="sm"
+              onClick={() => {
+                setConflict(null);
+                void overview.refetch();
+              }}
+            >
+              <RefreshCw className="size-3.5" />
+              Reload settings
+            </Button>
+          }
+        >
+          {conflict}
+        </Banner>
+      ) : null}
+    </>
+  );
 
   return (
     <>
-      <PageHeader
-        title={domain ? `${domain.name} settings` : 'Settings'}
-        subtitle={
-          domain
-            ? `Configure ${domain.name}'s control plane and runtimes, and who may use it. Changes apply without a restart.`
-            : canView
-              ? 'Configure this console, see the domains it serves, and manage your account in each.'
-              : 'Your account in each domain, and the domains this console serves.'
-        }
-      />
+      <PageHeader title={domain ? `${domain.name} settings` : 'Settings'} />
       <PageBody className="pb-24">
         <div className="grid gap-6 md:grid-cols-[208px_minmax(0,1fr)] md:gap-10">
-          <SettingsNav sections={sections} current={section} dirty={dirtySections} base={base} onSelect={(id) => navigate(`${base}/${id}`)} />
-
-          <div className="min-w-0 space-y-5">
-            {itemId && !usesSettings ? null : (
-              <header>
-                <h2 className="text-[15px] font-semibold tracking-tight">{section.label}</h2>
-                <p className="mt-1 text-[13px] text-[var(--color-ink-muted)]">{section.summary}</p>
-              </header>
-            )}
-
-            {section.kind === 'domains' ? <DomainsSection /> : null}
-            {section.kind === 'history' ? <HistorySection domain={domain?.id ?? null} /> : null}
-            {!usesSettings && section.kind !== 'domains' && section.kind !== 'history' ? (
-              <AccessSectionContent section={section} itemId={itemId ?? null} />
-            ) : null}
-
-            {usesSettings && overview.data && !overview.data.controlPlane.reachable ? (
-              <Banner tone="warning" icon={<CloudOff className="size-4" />}>
-                <strong className="font-medium">Settings are read-only.</strong> They are stored with{' '}
-                {domain ? `${domain.name}'s control plane` : 'the settings home\'s control plane'}, which cannot be reached:{' '}
-                {overview.data.controlPlane.error ?? 'no answer'}.
-              </Banner>
-            ) : null}
-
-            {usesSettings && conflict ? (
-              <Banner
-                tone="danger"
-                icon={<AlertTriangle className="size-4" />}
-                action={
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setConflict(null);
-                      void overview.refetch();
-                    }}
-                  >
-                    <RefreshCw className="size-3.5" />
-                    Reload settings
-                  </Button>
-                }
-              >
-                {conflict}
-              </Banner>
-            ) : null}
-
-            {!usesSettings ? null : overview.isLoading ? (
-              <Panel className="space-y-4 p-5">
-                <Skeleton className="h-4 w-1/3" />
-                <Skeleton className="h-4 w-2/3" />
-                <Skeleton className="h-4 w-1/2" />
-              </Panel>
-            ) : overview.error ? (
-              <Panel>
-                <EmptyState
-                  title="Settings could not be loaded"
-                  description={overview.error instanceof Error ? overview.error.message : String(overview.error)}
-                  action={
-                    <Button size="sm" onClick={() => void overview.refetch()}>
-                      Retry
-                    </Button>
-                  }
-                />
-              </Panel>
-            ) : overview.data ? (
-              <SectionContent
-                section={section}
-                overview={overview.data}
-                drafts={drafts}
-                serverErrors={serverErrors}
-                readOnly={readOnly}
-                onDraft={setDraft}
-                lockedReason={(setting) =>
-                  setting.permission && !can(setting.permission)
-                    ? `Changing this needs ${permissionLabel(setting.permission)}, besides Manage settings.`
-                    : null
-                }
-              />
-            ) : null}
+          <div className="min-w-0 space-y-3 md:space-y-5">
+            {searchable ? <SettingsSearchField value={query} onChange={setQuery} /> : null}
+            <SettingsNav
+              sections={sections}
+              current={section}
+              dirty={dirtySections}
+              base={base}
+              searching={searching}
+              onSelect={(id) => navigate(`${base}/${id}`)}
+              onEndSearch={() => setQuery('')}
+            />
           </div>
+
+          {searching ? (
+            <div className="min-w-0 space-y-5">
+              {notices}
+              {overview.isLoading ? (
+                <Panel className="space-y-4 p-5">
+                  <Skeleton className="h-4 w-1/3" />
+                  <Skeleton className="h-4 w-2/3" />
+                </Panel>
+              ) : (
+                // Settings that could not be read leave only the sections to find.
+                <SettingsSearchResults
+                  query={query}
+                  result={found}
+                  base={base}
+                  deploymentLabel={sections.find((item) => item.kind === 'deployment')?.label ?? null}
+                  renderRow={renderRow}
+                  onClear={() => setQuery('')}
+                />
+              )}
+            </div>
+          ) : (
+            <div className="min-w-0 space-y-5">
+              {itemId && !usesSettings ? null : (
+                <header>
+                  <h2 className="text-[15px] font-semibold tracking-tight">{section.label}</h2>
+                  <p className="mt-1 text-[13px] text-[var(--color-ink-muted)]">{section.summary}</p>
+                </header>
+              )}
+
+              {section.kind === 'domains' ? <DomainsSection /> : null}
+              {section.kind === 'history' ? <HistorySection domain={domain?.id ?? null} /> : null}
+              {!usesSettings && section.kind !== 'domains' && section.kind !== 'history' ? (
+                <AccessSectionContent section={section} itemId={itemId ?? null} />
+              ) : null}
+
+              {usesSettings ? notices : null}
+
+              {!usesSettings ? null : overview.isLoading ? (
+                <Panel className="space-y-4 p-5">
+                  <Skeleton className="h-4 w-1/3" />
+                  <Skeleton className="h-4 w-2/3" />
+                  <Skeleton className="h-4 w-1/2" />
+                </Panel>
+              ) : overview.error ? (
+                <Panel>
+                  <EmptyState
+                    title="Settings could not be loaded"
+                    description={overview.error instanceof Error ? overview.error.message : String(overview.error)}
+                    action={
+                      <Button size="sm" onClick={() => void overview.refetch()}>
+                        Retry
+                      </Button>
+                    }
+                  />
+                </Panel>
+              ) : overview.data ? (
+                <SectionContent section={section} overview={overview.data} drafts={drafts} readOnly={readOnly} renderRow={renderRow} />
+              ) : null}
+            </div>
+          )}
         </div>
 
         {pending.changed.length > 0 ? (
-          <div className="pointer-events-none fixed inset-x-0 bottom-5 z-20 flex justify-center px-4 md:pl-[216px]">
+          <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-20 flex justify-center px-4 md:bottom-5 md:pl-[216px]">
             <div className="panel fade-in pointer-events-auto flex w-full max-w-2xl flex-wrap items-center justify-between gap-3 px-4 py-3 shadow-lg">
               <span className="text-[13px]">
                 <strong className="font-medium">
                   {pending.changed.length} unsaved {pending.changed.length === 1 ? 'change' : 'changes'}
                 </strong>
                 {pending.invalid > 0 ? (
-                  <span className="ml-2 text-[var(--color-phase-failed)]">
+                  <span className="ml-2 text-[var(--color-flare-ink)]">
                     {pending.invalid} {pending.invalid === 1 ? 'needs' : 'need'} fixing
                   </span>
                 ) : (
-                  <span className="ml-2 text-[var(--color-ink-muted)]">in {describeSections(sections, dirtySections)}</span>
+                  <span className="ml-2 hidden text-[var(--color-ink-muted)] sm:inline">in {describeSections(sections, dirtySections)}</span>
                 )}
               </span>
               <span className="flex items-center gap-2">
@@ -330,19 +375,15 @@ function SectionContent({
   section,
   overview,
   drafts,
-  serverErrors,
   readOnly,
-  onDraft,
-  lockedReason,
+  renderRow,
 }: {
   section: SettingsSection;
   overview: SettingsOverview;
   drafts: Drafts;
-  serverErrors: Record<string, string>;
   readOnly: boolean;
-  onDraft: (setting: SettingView, draft: Draft | undefined) => void;
-  /** Why one setting cannot be changed by this person though the section can (its own permission). */
-  lockedReason: (setting: SettingView) => string | null;
+  /** One setting, with its draft, its error from the last save and whether this person may change it. */
+  renderRow: (setting: SettingView) => ReactNode;
 }): ReactNode {
   if (section.kind === 'deployment') return <DeploymentSection entries={overview.deployment} />;
 
@@ -373,17 +414,6 @@ function SectionContent({
         const scoped = rows.filter((setting) => setting.scope === scope);
         const primary = scoped.filter((setting) => !setting.advanced);
         const advanced = scoped.filter((setting) => setting.advanced);
-        const renderRow = (setting: SettingView): ReactNode => (
-          <SettingRow
-            key={draftKey(setting)}
-            setting={setting}
-            draft={drafts[draftKey(setting)]}
-            serverError={serverErrors[draftKey(setting)] ?? null}
-            readOnly={readOnly || lockedReason(setting) !== null}
-            lockedReason={readOnly ? null : lockedReason(setting)}
-            onDraft={(draft) => onDraft(setting, draft)}
-          />
-        );
         return (
           <div key={scope} className="space-y-3">
             {primary.length > 0 ? (
@@ -448,14 +478,20 @@ function SettingsNav({
   current,
   dirty,
   base,
+  searching,
   onSelect,
+  onEndSearch,
 }: {
   sections: SettingsSection[];
   current: SettingsSection;
   dirty: Set<string>;
   /** Where the page is: `/settings`, or a domain's `/d/<domain>/settings`. */
   base: string;
+  /** Results from every section are shown, so none is the current one. */
+  searching: boolean;
   onSelect: (id: string) => void;
+  /** A section chosen while searching shows that section, even the one already open. */
+  onEndSearch: () => void;
 }): ReactNode {
   return (
     <>
@@ -484,10 +520,11 @@ function SettingsNav({
                 <li key={section.id}>
                   <NavLink
                     to={`${base}/${section.id}`}
+                    onClick={onEndSearch}
                     className={({ isActive }) =>
                       cn(
                         'flex items-center gap-2.5 rounded-[var(--radius-control)] px-2.5 py-1.5 text-[13px] transition-colors',
-                        isActive
+                        isActive && !searching
                           ? 'bg-[var(--color-raised)] font-medium text-[var(--color-ink)]'
                           : 'text-[var(--color-ink-muted)] hover:bg-[var(--color-raised)] hover:text-[var(--color-ink)]',
                       )
@@ -496,7 +533,7 @@ function SettingsNav({
                     <section.icon className="size-4 shrink-0" />
                     <span className="min-w-0 flex-1 truncate">{section.label}</span>
                     {dirty.has(section.id) ? (
-                      <span className="size-1.5 rounded-full bg-[var(--color-accent)]" title="Unsaved changes" />
+                      <span className="size-1.5 shrink-0 rounded-full bg-[var(--color-ink)]" title="Unsaved changes" />
                     ) : null}
                   </NavLink>
                 </li>
@@ -520,14 +557,15 @@ function Banner({
   action?: ReactNode;
   children: ReactNode;
 }): ReactNode {
-  const color = tone === 'danger' ? 'var(--color-phase-failed)' : 'var(--color-phase-paused)';
   return (
     <div
       role="status"
-      className="flex flex-wrap items-start gap-3 rounded-[var(--radius-panel)] border px-4 py-3 text-[13px]"
-      style={{ borderColor: `color-mix(in srgb, ${color} 35%, transparent)`, background: `color-mix(in srgb, ${color} 8%, transparent)` }}
+      className={cn(
+        'flex flex-wrap items-start gap-3 rounded-[var(--radius-panel)] px-4 py-3 text-[13px]',
+        tone === 'danger' ? 'bg-[var(--color-flare-wash)]' : 'bg-[var(--color-buoy-wash)]',
+      )}
     >
-      <span className="mt-0.5 shrink-0" style={{ color }}>
+      <span className={cn('mt-0.5 shrink-0', tone === 'danger' ? 'text-[var(--color-flare-ink)]' : 'text-[var(--color-buoy-ink)]')}>
         {icon}
       </span>
       <p className="min-w-0 flex-1 leading-relaxed">{children}</p>

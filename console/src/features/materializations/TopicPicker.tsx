@@ -523,8 +523,8 @@ export function TopicPicker({
   } else if (value.length > 1) {
     hint = (
       <span className="block text-[12px] text-[var(--color-ink-muted)]">
-        {formatExact(value.length)} topics, one runtime: {partitionsLabel(totalPartitions)} in all
-        {known.length === value.length ? `, which keep at most ${formatExact(assignableMembers(partitions))} runtime members busy` : ''}.
+        {formatExact(value.length)} topics, {partitionsLabel(totalPartitions)} in all
+        {known.length === value.length ? `, which keep at most ${formatExact(assignableMembers(partitions))} workers busy` : ''}.
         {full ? ` A materialization reads at most ${formatExact(maxTopics)} topics.` : ''}
       </span>
     );
@@ -537,8 +537,8 @@ export function TopicPicker({
   } else {
     hint = (
       <span className="block text-[12px] text-[var(--color-ink-muted)]">
-        Search the cluster's topics, or type an exact topic name. Choose several to read them with one runtime, each
-        into a table of its own.
+        Search the cluster's topics, or type an exact topic name. Choose several to read them together, each into a
+        table of its own.
       </span>
     );
   }

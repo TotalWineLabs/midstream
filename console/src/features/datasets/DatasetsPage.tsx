@@ -3,7 +3,7 @@ import { useDeferredValue, useMemo, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 import { PageBody, PageHeader } from '@/components/AppShell';
-import { Badge, Button, EmptyState, Input, Panel, Skeleton } from '@/components/ui/primitives';
+import { Button, EmptyState, Input, Panel, Skeleton } from '@/components/ui/primitives';
 import { ApiError } from '@/lib/api';
 import { useConsoleAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
@@ -17,7 +17,7 @@ import { HiddenDomains } from '../domains/HiddenDomains';
 import { CreateDatasetDialog } from './CreateDatasetDialog';
 import { useDatasets } from './useDatasets';
 
-const GRID = 'grid grid-cols-[minmax(160px,1fr)_minmax(200px,2fr)_minmax(140px,1fr)_80px] items-center gap-4';
+const GRID = 'grid items-center gap-x-6 gap-y-1 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)_minmax(0,1fr)_88px]';
 
 /** Whether a dataset matches a search: its name, description or a table's name, without regard to case. */
 export function matchesDataset(dataset: Pick<CpDataset, 'name' | 'description' | 'tables'>, query: string): boolean {
@@ -56,11 +56,6 @@ export function DatasetsPage(): ReactNode {
     <>
       <PageHeader
         title="Datasets"
-        subtitle={
-          many
-            ? 'Named groups of tables in each domain: SQL reads each table as <domain>.<dataset>.<table>. Access is granted per dataset.'
-            : 'Named groups of tables: SQL reads each table as <domain>.<dataset>.<table>. Access is granted per dataset.'
-        }
         actions={
           creatable.length > 0 ? (
             <Button variant="primary" onClick={create}>
@@ -70,7 +65,7 @@ export function DatasetsPage(): ReactNode {
           ) : null
         }
       >
-        <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-3 px-6 pb-4">
+        <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-3 px-4 pb-4 sm:px-6">
           <div className="relative min-w-[240px] flex-1">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[var(--color-ink-faint)]" />
             <Input
@@ -113,7 +108,7 @@ export function DatasetsPage(): ReactNode {
               title="You may not see datasets here"
               action={
                 consoleAuth.overall.signedIn ? null : (
-                  <Link to="/sign-in" state={{ from: location }} className="text-[13px] font-medium text-[var(--color-accent)] hover:underline">
+                  <Link to="/sign-in" state={{ from: location }} className="text-[13px] font-medium text-[var(--color-ink)] underline-offset-2 hover:underline">
                     Sign in
                   </Link>
                 )
@@ -172,16 +167,11 @@ function DatasetGroup({
           <p className="px-5 py-3 text-[13px] text-[var(--color-ink-muted)]">No matches.</p>
         ) : (
           <>
-            <div
-              className={cn(
-                GRID,
-                'border-b border-[var(--color-line)] bg-[var(--color-raised)] px-5 py-2 text-[12px] font-medium text-[var(--color-ink-muted)]',
-              )}
-            >
+            <div className={cn(GRID, 'hidden border-b border-[var(--color-line)] px-5 py-2 text-[12px] text-[var(--color-ink-faint)] sm:grid')}>
               <span>Dataset</span>
               <span>Tables</span>
               <span>Owners</span>
-              <span className="text-right">Access</span>
+              <span className="text-right">Your access</span>
             </div>
             {datasets.isPending ? (
               <div className="space-y-px p-5">
@@ -201,9 +191,7 @@ function DatasetGroup({
                 description={
                   searching
                     ? 'Try a different search.'
-                    : canCreate
-                      ? 'Create one, then put tables in it when you create a materialization.'
-                      : 'Someone who may create datasets has not created one yet.'
+                    : 'A dataset groups tables under one name, and is shared on its own: SQL reads each table as dataset.table.'
                 }
                 action={
                   !searching && canCreate ? (
@@ -233,44 +221,49 @@ function DatasetRow({ dataset, to }: { dataset: CpDataset; to: string }): ReactN
     <li>
       <Link to={to} className={cn(GRID, 'px-5 py-3 transition-colors hover:bg-[var(--color-raised)]')}>
         <div className="min-w-0">
-          <p className="numeric flex items-center gap-1.5 truncate text-[13px] font-medium">
+          <p className="ident flex items-center gap-1.5 truncate text-[13px] font-medium">
             {dataset.name}
             {dataset.locked ? <Lock className="size-3 shrink-0 text-[var(--color-ink-faint)]" aria-label="locked" /> : null}
           </p>
-          <p className="mt-0.5 truncate text-[12px] text-[var(--color-ink-muted)]" title={dataset.description}>
-            {dataset.description || '—'}
-          </p>
+          {dataset.description ? (
+            <p className="mt-0.5 truncate text-[12px] text-[var(--color-ink-muted)]" title={dataset.description}>
+              {dataset.description}
+            </p>
+          ) : null}
         </div>
-        <p className="numeric truncate text-[12px] text-[var(--color-ink-muted)]" title={dataset.tables.join('\n')}>
+        <p className="truncate text-[12px] text-[var(--color-ink-muted)]" title={dataset.tables.join('\n')}>
           {dataset.table_count === 0 ? (
-            <span className="text-[var(--color-ink-faint)]">empty</span>
+            <span className="text-[var(--color-ink-faint)]">No tables yet</span>
           ) : (
             <>
-              <span className="text-[var(--color-ink)]">{formatExact(dataset.table_count)}</span> · {dataset.tables.slice(0, 4).join(', ')}
-              {dataset.table_count > 4 ? ', …' : ''}
+              <span className="numeric text-[var(--color-ink)]">
+                {formatExact(dataset.table_count)} {dataset.table_count === 1 ? 'table' : 'tables'}
+              </span>
+              <span className="ident"> · {dataset.tables.slice(0, 3).join(', ')}</span>
+              {dataset.table_count > 3 ? ', …' : ''}
             </>
           )}
         </p>
         <p className="truncate text-[12px] text-[var(--color-ink-muted)]" title={dataset.owners.map((owner) => owner.email ?? owner.name).join('\n')}>
-          {dataset.owners.length ? dataset.owners.map((owner) => owner.name).join(', ') : '—'}
+          {dataset.owners.length ? dataset.owners.map((owner) => owner.name).join(', ') : 'No owner'}
         </p>
-        <span className="text-right">
-          <AccessBadge dataset={dataset} />
+        <span className="text-[12px] sm:text-right">
+          <AccessWord dataset={dataset} />
         </span>
       </Link>
     </li>
   );
 }
 
-/** What the person may do with a dataset, in a word. */
-export function AccessBadge({ dataset }: { dataset: Pick<CpDataset, 'permissions' | 'locked' | 'name'> }): ReactNode {
-  if (dataset.permissions.includes('dataset.manage')) return <Badge tone="accent">owner</Badge>;
-  if (dataset.permissions.includes('dataset.write')) return <Badge tone="running">writer</Badge>;
-  if (!dataset.locked) return <Badge>reader</Badge>;
+/** What the person may do with a dataset, in a word: a role, or locked. Words, not a state's colour. */
+export function AccessWord({ dataset }: { dataset: Pick<CpDataset, 'permissions' | 'locked' | 'name'> }): ReactNode {
+  if (dataset.permissions.includes('dataset.manage')) return <span className="text-[var(--color-ink)]">Owner</span>;
+  if (dataset.permissions.includes('dataset.write')) return <span className="text-[var(--color-ink)]">Writer</span>;
+  if (!dataset.locked) return <span className="text-[var(--color-ink-muted)]">Reader</span>;
   return (
-    <Badge title={`Its schemas and data need a role on ${dataset.name}: ask one of its owners.`}>
-      <Lock className="size-3" />
-      locked
-    </Badge>
+    <span className="inline-flex items-center gap-1 text-[var(--color-ink-faint)]" title={`Its schemas and data need a role on ${dataset.name}: ask one of its owners.`}>
+      <Lock className="size-3" aria-hidden />
+      Locked
+    </span>
   );
 }

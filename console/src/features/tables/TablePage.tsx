@@ -226,7 +226,7 @@ function TableView({ dataset, entry, tab }: { dataset: CpDatasetDetail; entry: C
  * A table's state: its materialization's, while it writes the table; otherwise what became of the
  * table — kept and read-only, being created, or being dropped.
  */
-function tableStatus(entry: CpDatasetTable, detail: CpDetail | null, fleet: Status | null): Status | null {
+export function tableStatus(entry: CpDatasetTable, detail: CpDetail | null, fleet: Status | null): Status | null {
   if (entry.state === 'retired') return { kind: 'stopped', label: 'Kept', reason: 'No longer written; still readable', moving: false };
   if (entry.state === 'dropping') return { kind: 'stopped', label: 'Being dropped', reason: null, moving: true };
   if (entry.state === 'pending') return { kind: 'starting', label: 'Starting', reason: 'Being created', moving: true };

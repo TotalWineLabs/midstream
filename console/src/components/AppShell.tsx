@@ -20,7 +20,7 @@ import { formatRelativeTime } from '@/lib/format';
 import { FleetStreamProvider, useTicker, type LiveStatus } from '@/lib/live';
 import { domainPath, tablePath } from '@/lib/paths';
 import { togglePin, usePins, type Pin } from '@/lib/pins';
-import { FOCUS_SEARCH_EVENT } from '@/lib/shortcuts';
+import { FOCUS_SEARCH_EVENT, type FocusSearchKey } from '@/lib/shortcuts';
 import { itemStatus, statusGroup } from '@/lib/status';
 import type { ConsoleDomain } from '@shared/types';
 
@@ -484,9 +484,11 @@ function BottomBar({
   );
 }
 
-/** ⌘K or Ctrl+K, anywhere: the command menu. `/` too, outside a text field. */
+/**
+ * ⌘K or Ctrl+K, anywhere: the command menu. `/` too, outside a text field. A page with a search box
+ * of its own takes either key first (`FOCUS_SEARCH_EVENT`).
+ */
 function useCommandShortcut(open: () => void): void {
-  const { pathname } = useLocation();
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       const typing = event.target instanceof HTMLElement && (event.target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName));
@@ -494,13 +496,14 @@ function useCommandShortcut(open: () => void): void {
       const slash = event.key === '/' && !typing && !event.metaKey && !event.ctrlKey;
       if (!commandK && !slash) return;
       event.preventDefault();
-      // The search page has its own field: ⌘K there focuses it.
-      if (pathname === '/search') window.dispatchEvent(new Event(FOCUS_SEARCH_EVENT));
-      else open();
+      // A page with a search box of its own claims the key by cancelling the event.
+      const key: FocusSearchKey = commandK ? 'k' : '/';
+      const claimed = !window.dispatchEvent(new CustomEvent(FOCUS_SEARCH_EVENT, { detail: key, cancelable: true }));
+      if (!claimed) open();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, pathname]);
+  }, [open]);
 }
 
 /**

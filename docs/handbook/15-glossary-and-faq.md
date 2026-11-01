@@ -96,7 +96,7 @@ and access to its tables is granted on it. Its name is fixed, lowercase and uniq
 an id, `ds-<12 hex>` ([18 §18.16](./18-identity-and-access.md)).
 
 **Dataset grant** — The dataset roles a person or a group holds on one dataset: what they may do
-with its tables. Its owners make them, on the dataset's Access tab
+with its tables. Its owners make them from **Share** on the dataset's page in the console
 ([18 §18.16](./18-identity-and-access.md)).
 
 **Dataset role** — A role holding only dataset permissions, so it can be granted on one dataset:
@@ -534,7 +534,7 @@ email)` and joins on it still work; the value itself cannot be read back. Choosi
 
 **I masked a field, but its older rows still show the value.**
 An edit masks what is written from then on. *Mask rows already written* on the Protection tab — or
-*Also mask rows already written* in the edit dialog — has the maintenance app rewrite the files
+*Also mask rows already written* on the edit page — has the maintenance app rewrite the files
 holding it; with *Purge the plain text now* the older snapshots, through which time travel would
 still read it, go too ([22 §22.14](./22-data-protection.md)).
 

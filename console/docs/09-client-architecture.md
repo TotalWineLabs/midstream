@@ -55,7 +55,8 @@ under `/api/d/<domain>`) and its cache; `useDomain()`, `useDomainPath()` read th
 <Route path="/settings[/:section[/:itemId]]" element={<SettingsPage />} />        // the console's own sections
 // One domain:
 <Route path="/d/:domain/*" element={<DomainScope><DomainRoutes /></DomainScope>} />
-  // index → Overview; materializations, materializations/:id[/:tab]; datasets, datasets/:name[/:tab];
+  // index → Overview; materializations, materializations/:id/edit, materializations/:id[/:tab];
+  // datasets, datasets/:name[/:tab] (`access` opens Share);
   // settings[/:section[/:itemId]] → the domain's sections; anything else → the domain's overview
 <Route path="*"                   element={<Navigate to="/" replace />} />
 ```
@@ -71,7 +72,8 @@ console's own. ⌘K or Ctrl+K opens search from anywhere.
 
 Settings sections are URL segments too (`/settings/domains`, `/d/domain_a/settings/users/usr-…`);
 a page and an unknown section redirect to the first section the person may see. Moving between
-sections keeps the same `SettingsPage` mounted, so unsaved edits survive it.
+sections keeps the same `SettingsPage` mounted, so unsaved edits survive it, and a search across
+them too.
 
 Detail tabs are URL segments, so `/d/domain_a/materializations/mat-x/protection` is bookmarkable,
 shareable, and survives a reload. `DetailPage` reads `tab` from params, defaults to `''` (Overview),
@@ -274,11 +276,11 @@ features/
   materializations/
     MaterializationsPage.tsx                Grouped by state, the ones that need you first; search; recently deleted
     CreateMaterializationPage.tsx           Create: the topics, name, protection and options beside the plan
+    EditMaterializationPage.tsx             Edit: the topics (each removed topic's table kept or dropped, kept tables dropped), name, workers, autoscaling and protection beside the plan; what is fixed at creation
     actions.ts                              useLifecycleActions (stop acts at once, with Undo) + phase predicates
     MaterializationRow.tsx                  A list row: the state's glyph, name, word and reason, one fact (rowFact)
   detail/
-    DetailPage.tsx                          Header, actions, tab shell, stop and delete confirmations
-    EditMaterializationDialog.tsx           Changes the topics, the replica count and the data protection: each removed topic's table kept or dropped, kept tables dropped; shows what is fixed at creation
+    DetailPage.tsx                          Header, actions, tab shell, and the delete plan
     topicChange.ts                          No React: what a choice of topics does to the tables (planTopicChange), and keepOrder
     TablesPanel.tsx                         The Overview's tables: written, kept, being dropped; what runs on each
     TableTab.tsx                            One table: figures, snapshots, maintenance and Run now, partitions, properties, Connect
@@ -310,10 +312,17 @@ features/
     RowDrawer.tsx                           Single-row detail, including hidden columns
     columns.ts                              Column grouping, default visibility, labels, older names
     viewState.ts                            Read/write the view in the query string
+  datasets/
+    DatasetsPage.tsx                        Every dataset, locked ones included: tables, owners, your access in a word (AccessWord)
+    DatasetPage.tsx                         A dataset: its tables and their state; Share, describe and the delete plan for its owners
+    SharePopover.tsx                        Who can use it, shared like a document: add someone with a role, change or remove one
+    CreateDatasetDialog.tsx                 A name, checked as typed, and a description
+    DatasetPicker.tsx / TableDraftRow.tsx   A new table's dataset and name, on create and edit (tableDrafts.ts checks them; tested)
+    useDatasets.ts                          The datasets a domain lists, and refreshing them after a change
   protection/
     protection.ts                           No React: choices and policies, their text, what changes between two (tested)
-    ProtectionControl.tsx                   A row per kind with its masks; the create and edit dialogs' and the Settings page's control
-    ProtectionField.tsx                     The dialogs' block: the choice in a line, locked per dataset, the no-key warning
+    ProtectionControl.tsx                   A row per kind with its masks; the create and edit pages' and the Settings page's control
+    ProtectionField.tsx                     The create and edit pages' block: the choice in a line, locked per dataset, the no-key warning
     ProtectionSummary.tsx                   Chips, the rollout badge, the shield on protected fields and columns
     ProtectionTab.tsx                       The Detail tab: policy and rollout, what is about to change, per-table fields and history
   auth/
@@ -334,7 +343,9 @@ features/
   settings/
     SettingsPage.tsx                        Section navigation, drafts, save bar, conflict and read-only banners
     sections.ts                             The sections, their groups and audiences, in navigation order
-    SettingRow.tsx                          One setting: label, description, provenance, control, Reset / Undo
+    SettingRow.tsx                          One setting: label, description, provenance, control, Reset / Undo; an unsaved edit marked
+    SettingsSearch.tsx                      The search box (`/`) and what it finds, in place of a section
+    search.ts                               No React: what a search finds, by section, and the sections it names (tested)
     RuntimeRollout.tsx                      How far the runtime-settings revision has reached
     DeploymentSection.tsx                   The deployment's read-only settings
     HistorySection.tsx                      Every scope's changes, newest first
@@ -359,6 +370,14 @@ An edit is a **draft** until saved: `{ reset: false, input }` for a typed value,
 scope against the revision the page read (`buildChanges`). It checks each draft the way the server
 will (`parseInput`), so the save button stays disabled while any draft is invalid. All of it is
 unit-tested in `values.test.ts`.
+
+A search (`search.ts::searchSettings`) reads the same overview: each setting of the sections the
+person may see, by its own words — name, description, key, environment variable — the deployment's
+fixed settings, and the sections whose name matches. Its results render the same `SettingRow`s as
+the sections, with the same drafts, so an edit made from a search is saved with the rest. The query
+lives in the page's state, not the URL, and choosing a section ends it. `/` reaches the box through
+`FOCUS_SEARCH_EVENT` (`lib/shortcuts.ts`): the shell dispatches it, cancelable, before opening the
+command menu, and a page with a box of its own claims the key.
 
 A save sends every scope's changes in one request and reacts to the answer:
 
@@ -393,7 +412,7 @@ control plane refuses either before then with `409 runtime_not_deployed`.
 the console config (`materializationDefaults`), asking again when its copy is over a minute old,
 and derives the dataset and table name rules from them — the control plane's own reserved-word
 list when it has reported one, the console's copy (`shared/tableNames.ts`) otherwise — with the
-label's length and the topic limit. The create and edit dialogs, and the dataset dialogs, use it.
+label's length and the topic limit. The create and edit pages, and the dataset dialogs, use it.
 
 The mutation deliberately performs **no optimistic update**. Its `onSuccess` shows a toast that
 tells the user to watch the phase converge; the actual state change arrives over the stream. The
