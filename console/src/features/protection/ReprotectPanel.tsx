@@ -5,7 +5,7 @@ import { useState, type ReactNode } from 'react';
 import { RelativeTime } from '@/components/Inline';
 import { Dialog } from '@/components/ui/Dialog';
 import { useToast } from '@/components/ui/Toast';
-import { Badge, Button, Panel, PanelHeader } from '@/components/ui/primitives';
+import { Badge, Button, Panel } from '@/components/ui/primitives';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
@@ -73,46 +73,51 @@ export function ReprotectPanel({ review, detail }: { review: CpProtectionReview;
   const mayReprotect =
     can('materializations.maintain') && readableTables(detail?.materialization ?? { tables: [] }).every((spec) => can('dataset.protect', spec.dataset_id));
   const busy = rows.some((row) => row.running || row.asked !== null);
+  // Each table only when there is something to say about it: plain text, a job, or a last run.
+  const telling = rows.filter((row) => (row.plaintext?.files ?? 0) > 0 || (row.plaintext?.blocked_files ?? 0) > 0 || row.running || row.asked !== null || row.last !== null);
   return (
     <Panel className="overflow-hidden">
-      <PanelHeader
-        title="Rows already written"
-        description={summary(totals, rows.length)}
-        actions={
-          mayReprotect ? (
-            <Button size="sm" variant={totals.files > 0 ? 'primary' : 'secondary'} onClick={() => setConfirming(true)}>
-              <ShieldCheck className="size-3.5" />
-              Mask rows already written
-            </Button>
-          ) : null
-        }
-      />
-      <ul className="divide-y divide-[var(--color-line)]">
-        {rows.map((row) => (
-          <ReprotectRowItem key={`${row.dataset}.${row.table}`} row={row} />
-        ))}
-      </ul>
-      <p className="border-t border-[var(--color-line)] px-5 py-3 text-[12px] text-[var(--color-ink-muted)]">
-        Counted in each table’s current snapshot. Older snapshots keep the files a reprotect replaced, and time travel still reads them,
-        until they expire (Settings › Compaction &amp; retention) — unless the reprotect purges them.
-        {busy ? ' A reprotect asked for runs at each table’s next opportunity, one job at a time.' : ''}
-      </p>
+      <header className="flex flex-wrap items-start justify-between gap-3 px-5 pt-4 pb-3">
+        <div className="min-w-0">
+          <h2 className="text-[15px] font-semibold">Rows already written</h2>
+          <p className="mt-0.5 text-[13px] text-[var(--color-ink-muted)]">{summary(totals, rows.length)}</p>
+        </div>
+        {mayReprotect ? (
+          <Button size="sm" variant={totals.files > 0 ? 'primary' : 'ghost'} onClick={() => setConfirming(true)}>
+            <ShieldCheck className="size-3.5" />
+            Mask rows already written
+          </Button>
+        ) : null}
+      </header>
+      {telling.length > 0 ? (
+        <ul className="divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
+          {telling.map((row) => (
+            <ReprotectRowItem key={`${row.dataset}.${row.table}`} row={row} />
+          ))}
+        </ul>
+      ) : null}
+      <details className="border-t border-[var(--color-line)] px-5 py-2.5 text-[12px] text-[var(--color-ink-muted)]">
+        <summary className="cursor-pointer select-none text-[var(--color-ink-faint)] hover:text-[var(--color-ink-muted)]">How this is counted</summary>
+        <p className="mt-2 leading-relaxed">
+          In each table’s current snapshot. Older snapshots keep the files a reprotect replaced, and time travel still reads them, until
+          they expire (Settings, Compaction and retention), unless the reprotect purges them.
+          {busy ? ' A reprotect asked for runs at each table’s next opportunity, one job at a time.' : ''}
+        </p>
+      </details>
       <ReprotectDialog open={confirming} onClose={() => setConfirming(false)} materializationId={review.materialization_id} rows={rows} />
     </Panel>
   );
 }
 
 function summary(totals: ReturnType<typeof plaintextTotals>, tables: number): string {
-  if (totals.counted === 0) {
-    return 'Not counted yet: the maintenance app counts each table’s files when it records a new revision, and as it compacts.';
-  }
+  if (totals.counted === 0) return 'Not counted yet: each table is counted when it records a new revision, and as it compacts.';
   const parts: string[] = [];
   if (totals.files > 0) {
     parts.push(
-      `${formatExact(totals.files)} ${totals.files === 1 ? 'file' : 'files'} with ${formatExact(totals.rows)} ${totals.rows === 1 ? 'row' : 'rows'} ${totals.files === 1 ? 'holds' : 'hold'} in plain text values ${tables === 1 ? 'the table masks' : 'these tables mask'} now: they were written before the field was masked.`,
+      `${formatExact(totals.rows)} ${totals.rows === 1 ? 'row' : 'rows'} in ${formatExact(totals.files)} ${totals.files === 1 ? 'file' : 'files'} still ${totals.rows === 1 ? 'holds' : 'hold'} a value in plain text that ${tables === 1 ? 'the table masks' : 'these tables mask'} now.`,
     );
   } else {
-    parts.push(`No file holds in plain text a value ${tables === 1 ? 'the table masks' : 'these tables mask'} now.`);
+    parts.push('Nothing in plain text: every value masked now is masked in every file.');
   }
   if (totals.blockedFiles > 0) parts.push(`${formatExact(totals.blockedFiles)} more cannot be rewritten yet.`);
   return parts.join(' ');
@@ -126,7 +131,7 @@ function ReprotectRowItem({ row }: { row: ReprotectRow }): ReactNode {
     <li className="px-5 py-3 text-[13px]">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="flex min-w-0 items-center gap-2">
-          <code className="numeric truncate">
+          <code className="ident truncate">
             {row.dataset}.{row.table}
           </code>
           {row.kept ? <Badge>kept</Badge> : null}
@@ -257,7 +262,7 @@ function ReprotectDialog({
             type="checkbox"
             checked={purge}
             onChange={(event) => setPurge(event.target.checked)}
-            className="mt-[3px] size-3.5 shrink-0 cursor-pointer accent-[var(--color-accent)]"
+            className="mt-[3px] size-3.5 shrink-0 cursor-pointer accent-[var(--color-ink)]"
           />
           <span className="space-y-1.5">
             <span className="block text-[13px] font-medium">Purge the plain text now</span>

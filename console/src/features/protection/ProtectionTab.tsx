@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { PageBody } from '@/components/AppShell';
 import { RelativeTime } from '@/components/Inline';
 import { useToast } from '@/components/ui/Toast';
-import { Badge, Button, EmptyState, KeyValue, Panel, PanelHeader, Skeleton } from '@/components/ui/primitives';
+import { Button, EmptyState, Panel, PanelHeader, Skeleton } from '@/components/ui/primitives';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useMaterializationDefaults } from '@/lib/defaults';
@@ -83,34 +83,48 @@ export function ProtectionTab({ snapshot }: { snapshot: DetailSnapshot }): React
   const ruled = data.review.filter((table) => !behind(table));
   const pendingCount = pending.reduce((count, table) => count + table.would_change.length, 0);
   const rulesWouldChange = ruled.reduce((count, table) => count + table.would_change.length, 0);
+  const kinds = Object.keys(data.policy.kinds ?? {}).length;
+  const tableCount = Object.keys(data.tables).length;
+  const applying = data.revision > 0 && (data.members_behind.length > 0 || data.tables_behind.length > 0);
+  const latest = data.review.flatMap((table) => table.history).reduce<(typeof data.review)[number]['history'][number] | null>(
+    (newest, change) => (newest === null || change.revision > newest.revision ? change : newest),
+    null,
+  );
   return (
-    <PageBody className="space-y-4">
-      <Panel>
-        <PanelHeader
-          title="Data protection"
-          description="Sensitive values are masked before they are written: no query, engine or file ever holds them in plain text."
-          actions={data.revision > 0 ? <ProtectionStateBadge summary={data} /> : null}
-        />
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-4 p-5">
-          <KeyValue label="Policy" className="col-span-2">
-            <ProtectionChips policy={data.policy} catalog={catalog} />
-          </KeyValue>
-          <KeyValue label="Revision">{data.revision > 0 ? data.revision : 'None: created before data protection'}</KeyValue>
-          <KeyValue label="Chosen by">
-            {data.changed_by ?? '—'}
-            {data.reason === 'apply_rules' ? <span className="text-[var(--color-ink-muted)]"> · current rules applied</span> : null}
-          </KeyValue>
-          <KeyValue label="Members on it">
-            {data.members_reporting === 0 ? '—' : `${formatExact(data.members_reporting - data.members_behind.length)} of ${formatExact(data.members_reporting)}`}
-          </KeyValue>
-          <KeyValue label="Tables recording it">
-            {formatExact(Object.keys(data.tables).length - data.tables_behind.length)} of {formatExact(Object.keys(data.tables).length)}
-          </KeyValue>
-        </dl>
-        <p className="border-t border-[var(--color-line)] px-5 py-3 text-[12px] text-[var(--color-ink-muted)]">
-          A change applies to records written from then on, within seconds and without a restart. Rows already written keep
-          the values they were written with until a reprotect masks them.
+    <PageBody className="space-y-6">
+      {/* What it protects, and whether that is in force: the answer first. */}
+      <Panel className="px-5 py-5 sm:px-7 sm:py-6">
+        <div className="flex flex-wrap items-center gap-2">{data.revision > 0 ? <ProtectionStateBadge summary={data} /> : null}</div>
+        <p className="display mt-3 flex items-center gap-3 text-[28px] leading-tight font-semibold sm:text-[32px]">
+          <Shield className="size-6 shrink-0 text-[var(--color-ink-muted)]" aria-hidden />
+          {kinds === 0 ? 'Nothing masked' : `${kinds} ${kinds === 1 ? 'kind' : 'kinds'} masked`}
         </p>
+        <div className="mt-3">
+          <ProtectionChips policy={data.policy} catalog={catalog} />
+        </div>
+        <p className="mt-3 text-[14px] text-[var(--color-ink-muted)]">
+          Masked before anything is written, so no query, engine or file holds the plain value. A change reaches new records within
+          seconds.
+        </p>
+        <p className="mt-3 text-[12px] text-[var(--color-ink-faint)]">
+          {data.revision > 0 ? `Revision ${data.revision}` : 'Created before data protection'}
+          {data.changed_by ? ` · by ${data.changed_by}` : ''}
+          {latest?.at ? (
+            <>
+              {' · '}
+              <RelativeTime value={latest.at} />
+            </>
+          ) : null}
+          {data.reason === 'apply_rules' ? ' · the current rules applied' : ''}
+        </p>
+        {applying ? (
+          <p className="mt-3 text-[13px] text-[var(--color-dawn-ink)]">
+            Applying: {formatExact(tableCount - data.tables_behind.length)} of {formatExact(tableCount)} tables
+            {data.members_reporting > 0
+              ? `, ${formatExact(data.members_reporting - data.members_behind.length)} of ${formatExact(data.members_reporting)} workers`
+              : ''}
+          </p>
+        ) : null}
       </Panel>
 
       <ReprotectPanel review={data} detail={detail ?? null} />
@@ -143,9 +157,8 @@ export function ProtectionTab({ snapshot }: { snapshot: DetailSnapshot }): React
         </Panel>
       ) : null}
 
-      {data.review.map((table) => (
-        <TableProtectionPanel key={table.table} table={table} catalog={catalog} counters={data.tables[table.table]} revision={data.revision} />
-      ))}
+      <ProtectedFields tables={data.review} catalog={catalog} counters={data.tables} revision={data.revision} />
+      <History tables={data.review} catalog={catalog} />
       {data.hidden_tables > 0 ? (
         <p className="text-[12px] text-[var(--color-ink-muted)]">
           {data.hidden_tables} {data.hidden_tables === 1 ? 'table is' : 'tables are'} in datasets whose schemas you may not see.
@@ -164,7 +177,7 @@ function ReviewItems({ tables, catalog }: { tables: CpProtectionReviewTable[]; c
       {tables.flatMap((table) =>
         table.would_change.map((item) => (
           <li key={`${table.table}:${item.field_id}`} className="flex flex-wrap items-center justify-between gap-2 px-5 py-2.5 text-[13px]">
-            <code className="numeric">
+            <code className="ident">
               {table.dataset}.{table.table} · {item.name}
             </code>
             <span className="text-[12px] text-[var(--color-ink-muted)]">
@@ -179,103 +192,134 @@ function ReviewItems({ tables, catalog }: { tables: CpProtectionReviewTable[]; c
   );
 }
 
-function TableProtectionPanel({
-  table,
+/**
+ * Every protected field, by table: its kind, its mask and the schema it was protected from. Tables
+ * that protect nothing are named together, once.
+ */
+function ProtectedFields({
+  tables,
   catalog,
   counters,
   revision,
 }: {
-  table: CpProtectionReviewTable;
+  tables: CpProtectionReviewTable[];
   catalog: CpProtectionCatalog | null;
-  counters: { recorded_revision: number | null; protected_values: number; withheld_values: number } | undefined;
+  counters: Record<string, { recorded_revision: number | null; protected_values: number; withheld_values: number }>;
   revision: number;
 }): ReactNode {
-  const active = table.fields.filter((field) => field.active);
-  const plainAgain = table.fields.filter((field) => !field.active);
+  const withFields = tables.filter((table) => table.fields.length > 0);
+  const without = tables.filter((table) => table.created && table.fields.length === 0);
+  const waiting = tables.filter((table) => !table.created);
   return (
-    <Panel>
-      <PanelHeader
-        title={`${table.dataset}.${table.table}`}
-        description={
-          !table.created
-            ? 'Not created yet.'
-            : `${formatExact(active.length)} protected ${active.length === 1 ? 'field' : 'fields'} · ${formatExact(counters?.protected_values ?? 0)} values masked and ${formatExact(counters?.withheld_values ?? 0)} withheld so far`
-        }
-        actions={
-          table.created && (table.recorded_revision ?? 0) < revision ? (
-            <Badge tone="pending">Recording revision {revision}</Badge>
-          ) : table.created ? (
-            <Badge tone="neutral">Revision {table.recorded_revision}</Badge>
-          ) : null
-        }
-      />
-      {active.length === 0 && plainAgain.length === 0 ? (
-        <p className="px-5 py-4 text-[13px] text-[var(--color-ink-muted)]">
-          {table.created ? 'No field is protected: no field name matches a kind the policy masks.' : '—'}
-        </p>
-      ) : (
-        <table className="w-full text-[13px]">
-          <thead>
-            <tr className="border-b border-[var(--color-line)] text-left text-[11px] uppercase tracking-wide text-[var(--color-ink-faint)]">
-              <th className="px-5 py-2 font-medium">Field</th>
-              <th className="px-3 py-2 font-medium">Kind</th>
-              <th className="px-3 py-2 font-medium">Mask</th>
-              <th className="px-5 py-2 text-right font-medium">Since schema</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--color-line)]">
-            {active.map((field) => (
-              <tr key={field.field_id}>
-                <td className="px-5 py-2">
-                  <span className="inline-flex items-center gap-1.5">
-                    <Shield className="size-3.5 text-[var(--color-accent)]" aria-label="protected" />
-                    <code className="numeric">{field.name}</code>
-                  </span>
-                </td>
-                <td className="px-3 py-2">{kindLabel(catalog, field.kind)}</td>
-                <td className="px-3 py-2">{maskName(field.mask, catalog)}</td>
-                <td className="numeric px-5 py-2 text-right">{field.since_schema_id}</td>
-              </tr>
-            ))}
-            {plainAgain.map((field) => (
-              <tr key={field.field_id} className="text-[var(--color-ink-muted)]">
-                <td className="px-5 py-2">
-                  <span className="inline-flex items-center gap-1.5">
-                    <ShieldOff className="size-3.5" aria-label="written plain again" />
-                    <code className="numeric">{field.name}</code>
-                  </span>
-                </td>
-                <td className="px-3 py-2">{kindLabel(catalog, field.kind)}</td>
-                <td className="px-3 py-2">Plain since schema {field.until_schema_id}</td>
-                <td className="numeric px-5 py-2 text-right">{field.since_schema_id}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {table.history.length > 0 ? (
-        <div className="border-t border-[var(--color-line)] px-5 py-3">
-          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-[var(--color-ink-faint)]">History</p>
-          <ol className="space-y-1 text-[12px] text-[var(--color-ink-muted)]">
-            {[...table.history].reverse().map((change) => (
-              <li key={`${change.revision}:${change.at ?? ''}`}>
-                <span className="text-[var(--color-ink)]">Revision {change.revision}</span>
-                {change.at ? (
-                  <>
-                    {' · '}
-                    <RelativeTime value={change.at} />
-                  </>
+    <Panel className="overflow-hidden">
+      <header className="px-5 pt-4 pb-3">
+        <h2 className="text-[15px] font-semibold">Protected fields</h2>
+      </header>
+      {withFields.map((table) => {
+        const active = table.fields.filter((field) => field.active);
+        const plainAgain = table.fields.filter((field) => !field.active);
+        const counted = counters[table.table];
+        return (
+          <section key={table.table} className="border-t border-[var(--color-line)]">
+            <div className="flex flex-wrap items-baseline justify-between gap-2 px-5 pt-3 pb-1">
+              <p className="ident text-[13px]">
+                <span className="text-[var(--color-ink-muted)]">{table.dataset}.</span>
+                {table.table}
+              </p>
+              <p className="numeric text-[12px] text-[var(--color-ink-muted)]">
+                {formatExact(counted?.protected_values ?? 0)} masked · {formatExact(counted?.withheld_values ?? 0)} withheld
+                {table.created && (table.recorded_revision ?? 0) < revision ? (
+                  <span className="text-[var(--color-dawn-ink)]"> · recording revision {revision}</span>
                 ) : null}
-                {change.by ? ` · ${change.by}` : ''}
-                {change.schema_id !== null ? ` · schema ${change.schema_id}` : ''}
-                {' · '}
-                {describeChoice(choiceOf(change.policy, catalog), catalog)}
-                {change.reason === 'apply_rules' ? ' (current rules applied)' : ''}
-              </li>
-            ))}
-          </ol>
-        </div>
+              </p>
+            </div>
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="text-left text-[12px] text-[var(--color-ink-faint)]">
+                  <th className="px-5 py-1.5 font-normal">Field</th>
+                  <th className="px-3 py-1.5 font-normal">Kind</th>
+                  <th className="px-3 py-1.5 font-normal">Mask</th>
+                  <th className="px-5 py-1.5 text-right font-normal">Since schema</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-line)]">
+                {active.map((field) => (
+                  <tr key={field.field_id}>
+                    <td className="px-5 py-2">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Shield className="size-3.5 text-[var(--color-ink-muted)]" aria-label="protected" />
+                        <code className="ident">{field.name}</code>
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">{kindLabel(catalog, field.kind)}</td>
+                    <td className="px-3 py-2">{maskName(field.mask, catalog)}</td>
+                    <td className="numeric px-5 py-2 text-right">{field.since_schema_id}</td>
+                  </tr>
+                ))}
+                {plainAgain.map((field) => (
+                  <tr key={field.field_id} className="text-[var(--color-ink-muted)]">
+                    <td className="px-5 py-2">
+                      <span className="inline-flex items-center gap-1.5">
+                        <ShieldOff className="size-3.5" aria-label="written plain again" />
+                        <code className="ident">{field.name}</code>
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">{kindLabel(catalog, field.kind)}</td>
+                    <td className="px-3 py-2">Plain since schema {field.until_schema_id}</td>
+                    <td className="numeric px-5 py-2 text-right">{field.since_schema_id}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        );
+      })}
+      {without.length > 0 ? (
+        <p className="border-t border-[var(--color-line)] px-5 py-3 text-[13px] text-[var(--color-ink-muted)]">
+          {withFields.length > 0 ? 'Nothing matches in ' : 'No field matches a kind it masks, in '}
+          {without.map((table, index) => (
+            <span key={table.table}>
+              {index > 0 ? (index === without.length - 1 ? ' and ' : ', ') : ''}
+              <code className="ident">{table.table}</code>
+            </span>
+          ))}
+          .
+        </p>
       ) : null}
+      {waiting.length > 0 ? (
+        <p className="border-t border-[var(--color-line)] px-5 py-3 text-[13px] text-[var(--color-ink-muted)]">
+          {waiting.length === 1 ? 'One table is' : `${waiting.length} tables are`} not created yet.
+        </p>
+      ) : null}
+    </Panel>
+  );
+}
+
+/** Each revision once, newest first: who chose it, when, and what it masks. */
+function History({ tables, catalog }: { tables: CpProtectionReviewTable[]; catalog: CpProtectionCatalog | null }): ReactNode {
+  const byRevision = new Map<number, CpProtectionReviewTable['history'][number]>();
+  for (const change of tables.flatMap((table) => table.history)) {
+    if (!byRevision.has(change.revision)) byRevision.set(change.revision, change);
+  }
+  const changes = [...byRevision.values()].sort((left, right) => right.revision - left.revision);
+  if (changes.length === 0) return null;
+  return (
+    <Panel className="px-5 py-4">
+      <h2 className="text-[15px] font-semibold">History</h2>
+      <ol className="mt-3 space-y-2 text-[13px]">
+        {changes.map((change) => (
+          <li key={change.revision} className="flex flex-wrap items-baseline gap-x-2">
+            <span className="font-medium">Revision {change.revision}</span>
+            <span className="text-[12px] text-[var(--color-ink-muted)]">
+              {change.at ? <RelativeTime value={change.at} /> : null}
+              {change.by ? ` · ${change.by}` : ''}
+              {change.schema_id !== null ? ` · from schema ${change.schema_id}` : ''}
+              {change.reason === 'apply_rules' ? ' · the current rules applied' : ''}
+            </span>
+            <span className="w-full text-[12px] text-[var(--color-ink-faint)]">{describeChoice(choiceOf(change.policy, catalog), catalog)}</span>
+          </li>
+        ))}
+      </ol>
     </Panel>
   );
 }

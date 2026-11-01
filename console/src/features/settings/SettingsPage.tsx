@@ -476,7 +476,7 @@ function SettingsNav({
       <nav aria-label="Settings" className="hidden space-y-5 md:block">
         {SETTINGS_GROUPS.filter((group) => sections.some((section) => section.group === group.id)).map((group) => (
           <div key={group.id}>
-            <p className="px-2.5 pb-1.5 text-[11px] font-medium tracking-wide text-[var(--color-ink-faint)] uppercase">
+            <p className="px-2.5 pb-1.5 text-[12px] font-medium text-[var(--color-ink-faint)]">
               {group.label}
             </p>
             <ul className="space-y-0.5">

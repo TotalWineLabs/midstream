@@ -1,8 +1,9 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { cn } from '@/lib/cn';
 import { formatRelativeTime } from '@/lib/format';
 import { timeTicks, valueAxis } from '@/lib/ticks';
+import { useElementSize } from '@/lib/useElementSize';
 
 export interface ChartPoint {
   /** Epoch milliseconds. */
@@ -29,22 +30,6 @@ function clockLabel(t: number, seconds: boolean): string {
 }
 
 /** The element's size, kept current as it resizes. Zero until it has been measured. */
-function useElementSize(ref: RefObject<HTMLElement | null>): { width: number; height: number } {
-  const [size, setSize] = useState({ width: 0, height: 0 });
-  useEffect(() => {
-    const element = ref.current;
-    if (!element) return;
-    const box = element.getBoundingClientRect();
-    setSize({ width: box.width, height: box.height });
-    const observer = new ResizeObserver((entries) => {
-      const rect = entries[0]?.contentRect;
-      if (rect) setSize((current) => (current.width === rect.width && current.height === rect.height ? current : { width: rect.width, height: rect.height }));
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [ref]);
-  return size;
-}
 
 /**
  * One series over a window of time, with axes and a hover readout.
@@ -60,7 +45,7 @@ export function TimeSeriesChart({
   from,
   to,
   height: fixedHeight,
-  color = 'var(--color-accent)',
+  color = 'var(--color-current)',
   baseline = 'zero',
   formatValue,
   formatTick = formatValue,
@@ -174,7 +159,7 @@ export function TimeSeriesChart({
   return (
     <div
       ref={containerRef}
-      className={cn('relative outline-none focus-visible:rounded-[var(--radius-control)] focus-visible:ring-2 focus-visible:ring-[var(--color-accent-soft)]', className)}
+      className={cn('relative outline-none focus-visible:rounded-[var(--radius-control)] focus-visible:ring-2 focus-visible:ring-[var(--color-line-strong)]', className)}
       style={boxStyle}
       tabIndex={0}
       role="group"
@@ -238,7 +223,7 @@ export function TimeSeriesChart({
           </g>
 
           {last && !active ? (
-            <circle cx={x(last.t)} cy={y(last.value)} r={3.5} fill={color} stroke="var(--color-surface)" strokeWidth={2} />
+            <circle cx={x(last.t)} cy={y(last.value)} r={3.5} fill={color} stroke="var(--color-shelf)" strokeWidth={2} />
           ) : null}
           {active ? (
             <>
@@ -251,7 +236,7 @@ export function TimeSeriesChart({
                 strokeWidth={1}
                 shapeRendering="crispEdges"
               />
-              <circle cx={x(active.t)} cy={y(active.value)} r={4} fill={color} stroke="var(--color-surface)" strokeWidth={2} />
+              <circle cx={x(active.t)} cy={y(active.value)} r={4} fill={color} stroke="var(--color-shelf)" strokeWidth={2} />
             </>
           ) : null}
         </svg>

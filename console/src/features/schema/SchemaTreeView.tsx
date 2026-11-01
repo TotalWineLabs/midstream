@@ -167,7 +167,7 @@ export function SchemaTreeView({ fields }: { fields: CpSchemaField[] }): ReactNo
       <div
         className={cn(
           'flex items-center justify-between gap-4 border-b border-[var(--color-line)] bg-[var(--color-raised)] px-5 py-2',
-          'text-[11px] font-medium tracking-wide text-[var(--color-ink-muted)] uppercase',
+          'text-[12px] font-medium text-[var(--color-ink-muted)]',
         )}
       >
         <span>Structure</span>

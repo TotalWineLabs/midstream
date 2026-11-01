@@ -71,7 +71,7 @@ export function AccountSection(): ReactNode {
               if (held.length === 0) return null;
               return (
                 <div key={category.id} className="px-5 py-3">
-                  <p className="mb-1.5 text-[11px] font-medium tracking-wide text-[var(--color-ink-faint)] uppercase">{category.label}</p>
+                  <p className="mb-1.5 text-[12px] font-medium text-[var(--color-ink-faint)]">{category.label}</p>
                   <div className="flex flex-wrap gap-1.5">
                     {held.map((permission) => (
                       <span

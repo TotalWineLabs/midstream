@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { createContext, createElement, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { notifySessionLost } from './api';
 import { useAuth } from './auth';
@@ -72,9 +72,22 @@ function useEventStream<T>(url: string, eventName: string): LiveResult<T> {
   return { data, status };
 }
 
+const FleetStreamContext = createContext<LiveResult<ConsoleFleet> | null>(null);
+
+/**
+ * One fleet stream for everything inside it: the shell's badges and pins and the page's lists read
+ * the same frames, over one connection rather than one each.
+ */
+export function FleetStreamProvider({ children }: { children: ReactNode }): ReactNode {
+  const stream = useEventStream<ConsoleFleet>('/api/stream/fleet', 'fleet');
+  return createElement(FleetStreamContext.Provider, { value: stream }, children);
+}
+
 /** Every domain's fleet, live, as this person may see each (handbook 20). */
 export function useFleetStream(): LiveResult<ConsoleFleet> {
-  return useEventStream<ConsoleFleet>('/api/stream/fleet', 'fleet');
+  const shared = useContext(FleetStreamContext);
+  if (!shared) throw new Error('useFleetStream needs a FleetStreamProvider: the shell provides one');
+  return shared;
 }
 
 /** One materialization of the page's domain, live. */

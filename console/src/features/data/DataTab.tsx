@@ -641,8 +641,8 @@ export function DataTab({
                 disabled={starting}
                 title={running ? 'Stop the running query' : `Run (${RUN_HINT})`}
                 className={cn(
-                  'relative inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[var(--radius-control)] px-3.5 text-[12px] font-medium text-white transition-[filter]',
-                  'bg-[var(--color-accent)] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60',
+                  'relative inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[var(--radius-control)] px-3.5 text-[12px] font-medium text-[var(--color-on-primary)] transition-opacity',
+                  'bg-[var(--color-primary)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60',
                   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]',
                   dirty && !running && 'ring-2 ring-[var(--color-accent-soft)] ring-offset-1 ring-offset-[var(--color-surface)]',
                 )}

@@ -2,49 +2,121 @@
 
 @custom-variant dark (&:where(.dark, .dark *)); /* NOSONAR: Tailwind v4 directive */
 
+/*
+ * Current — the console's design language (docs/10-design-system.md).
+ *
+ * Deep-water neutrals carry the interface; one aqua signal, Current, means flowing or live and
+ * nothing else. The light theme is Shallows, the dark one Deep, and the operating system chooses
+ * between them unless the person has (index.html).
+ *
+ * The token names before Current (`canvas`, `ink`, `accent`, `phase-*`) keep working and now point
+ * at Current's values, so every screen adopts it without a rewrite.
+ *
+ * Contrast is part of each value: every text colour reads at 4.5:1 or more on every surface of its
+ * theme, and every colour a shape is drawn in at 3:1 (docs/10-design-system.md §10.3).
+ */
 @theme { /* NOSONAR: Tailwind v4 directive */
-  --font-sans:
-    ui-sans-serif, -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Inter, system-ui, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  --font-sans: 'Instrument Sans Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Bricolage Grotesque Variable', 'Instrument Sans Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Spline Sans Mono Variable', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
   --radius-control: 0.5rem;
-  --radius-panel: 0.875rem;
+  --radius-panel: 0.75rem;
+  --radius-pill: 999px;
 
-  --color-canvas: #ffffff;
-  --color-surface: #ffffff;
-  --color-raised: #fafafa;
-  --color-line: rgba(9, 9, 11, 0.08);
-  --color-line-strong: rgba(9, 9, 11, 0.14);
-  --color-ink: #09090b;
-  --color-ink-muted: #6b7280;
-  --color-ink-faint: #9ca3af;
-  --color-accent: #0a6cff;
-  --color-accent-soft: rgba(10, 108, 255, 0.1);
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --duration-quick: 140ms;
+  --duration-panel: 220ms;
+  --duration-roll: 520ms;
+  --duration-draw: 900ms;
 
-  --color-phase-running: #059669;
-  --color-phase-pending: #2563eb;
-  --color-phase-paused: #b45309;
-  --color-phase-failed: #dc2626;
-  --color-phase-idle: #6b7280;
+  /* Shallows: the light theme */
+  --color-abyss: #edf1f3;
+  --color-canvas: #edf1f3;
+  --color-surface: #fbfcfc;
+  --color-shelf: #ffffff;
+  --color-raised: #f1f4f6;
+  --color-ridge: #e5ebee;
+  --color-pop: #ffffff;
+  --color-line: rgba(16, 36, 56, 0.08);
+  --color-line-strong: rgba(16, 36, 56, 0.15);
+  --color-ink: #0a1218;
+  --color-ink-muted: #46525e;
+  --color-ink-faint: #5f6973;
+
+  --color-current: #009e76;
+  --color-current-ink: #007a5c;
+  --color-current-wash: rgba(0, 179, 134, 0.12);
+  --color-current-wash-2: rgba(0, 179, 134, 0.06);
+  --color-on-current: #03251d;
+  --color-dawn: #6d5ae6;
+  --color-dawn-ink: #5643d1;
+  --color-dawn-wash: rgba(109, 90, 230, 0.12);
+  --color-buoy: #bf7c00;
+  --color-buoy-ink: #9a5800;
+  --color-buoy-wash: rgba(242, 161, 0, 0.13);
+  --color-flare: #e5484d;
+  --color-flare-ink: #c2252b;
+  --color-flare-wash: rgba(229, 72, 77, 0.11);
+  --color-slate: #808c99;
+  --color-primary: #0a1218;
+  --color-on-primary: #ffffff;
+  --color-veil: rgba(16, 36, 56, 0.07);
+
+  /*
+   * Before Current: names still used across the screens. `accent` was the interaction colour —
+   * links, selection, focus, toggles — which in Current is ink, never aqua.
+   */
+  --color-accent: #0a1218;
+  --color-accent-soft: rgba(16, 36, 56, 0.08);
+  --color-phase-running: #007a5c;
+  --color-phase-pending: #5643d1;
+  --color-phase-paused: #9a5800;
+  --color-phase-failed: #c2252b;
+  --color-phase-idle: #6b7785;
 }
 
+/* Deep: the dark theme */
 .dark {
-  --color-canvas: #08080a;
-  --color-surface: #0f0f12;
-  --color-raised: #151519;
-  --color-line: rgba(255, 255, 255, 0.09);
-  --color-line-strong: rgba(255, 255, 255, 0.16);
-  --color-ink: #f4f4f5;
-  --color-ink-muted: #9ca3af;
-  --color-ink-faint: #6b7280;
-  --color-accent: #3b8cff;
-  --color-accent-soft: rgba(59, 140, 255, 0.14);
+  --color-abyss: #07090c;
+  --color-canvas: #07090c;
+  --color-surface: #0d1116;
+  --color-shelf: #12171e;
+  --color-raised: #141a21;
+  --color-ridge: #1a212a;
+  --color-pop: #161c24;
+  --color-line: rgba(150, 172, 198, 0.1);
+  --color-line-strong: rgba(150, 172, 198, 0.18);
+  --color-ink: #e7eef5;
+  --color-ink-muted: #8e9bac;
+  --color-ink-faint: #7f8a97;
 
-  --color-phase-running: #34d399;
-  --color-phase-pending: #60a5fa;
-  --color-phase-paused: #fbbf24;
-  --color-phase-failed: #f87171;
-  --color-phase-idle: #9ca3af;
+  --color-current: #3ef0c5;
+  --color-current-ink: #4ff5ce;
+  --color-current-wash: rgba(62, 240, 197, 0.12);
+  --color-current-wash-2: rgba(62, 240, 197, 0.06);
+  --color-dawn: #a799ff;
+  --color-dawn-ink: #b9aeff;
+  --color-dawn-wash: rgba(167, 153, 255, 0.14);
+  --color-buoy: #ffb224;
+  --color-buoy-ink: #ffc14d;
+  --color-buoy-wash: rgba(255, 178, 36, 0.13);
+  --color-flare: #ff6369;
+  --color-flare-ink: #ff8086;
+  --color-flare-wash: rgba(255, 99, 105, 0.13);
+  --color-slate: #6f7c8c;
+  --color-primary: #e7eef5;
+  --color-on-primary: #07090c;
+  --color-veil: rgba(150, 172, 198, 0.08);
+
+  --color-accent: #e7eef5;
+  --color-accent-soft: rgba(150, 172, 198, 0.12);
+  --color-phase-running: #4ff5ce;
+  --color-phase-pending: #b9aeff;
+  --color-phase-paused: #ffc14d;
+  --color-phase-failed: #ff8086;
+  --color-phase-idle: #8e9bac;
 }
 
 @layer base {
@@ -62,16 +134,16 @@
     background-color: var(--color-canvas);
     color: var(--color-ink);
     font-family: var(--font-sans);
-    font-feature-settings: 'cv02', 'cv03', 'cv04', 'ss01';
+    letter-spacing: -0.004em;
     overscroll-behavior-y: none;
   }
 
   ::selection {
-    background: var(--color-accent-soft);
+    background: var(--color-current-wash);
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--color-ink);
     outline-offset: 2px;
     border-radius: 4px;
   }
@@ -95,18 +167,64 @@
 
 @layer components {
   .panel {
-    background-color: var(--color-surface);
+    background-color: var(--color-shelf);
     border: 1px solid var(--color-line);
     border-radius: var(--radius-panel);
   }
 
+  /* Numbers that line up and change in place: the text face with tabular figures, never a code font. */
   .numeric {
-    font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.01em;
   }
+
+  /* Machine strings: ids, table and column names, code. */
+  .ident {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+    letter-spacing: -0.01em;
+  }
+
+  /* The display face, for page titles and the numbers that lead a screen. */
+  .display {
+    font-family: var(--font-display);
+    font-variation-settings: 'opsz' 96;
+    letter-spacing: -0.035em;
+  }
+
+  /* Links read as text with a quiet underline; aqua is kept for what is flowing or live. */
+  .link {
+    color: var(--color-ink);
+    text-decoration: underline;
+    text-decoration-color: var(--color-line-strong);
+    text-underline-offset: 3px;
+    transition: text-decoration-color var(--duration-quick) var(--ease-out);
+  }
+
+  .link:hover {
+    text-decoration-color: currentColor;
+  }
 }
 
+/* ---------------------------------------------------------------------------------------------
+ * Motion. Every animation here says something about the data; docs/10-design-system.md §10.7.
+ * ------------------------------------------------------------------------------------------- */
+
+/* Heartbeat: one soft pulse each time live data arrives, so the dot moves with the data. */
+@keyframes heartbeat {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-current) 55%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 7px transparent;
+  }
+}
+
+.heartbeat {
+  animation: heartbeat 900ms var(--ease-out) 1;
+}
+
+/* Breathing, for something live with no frames of its own to keep time with. */
 @keyframes console-pulse {
   0%,
   100% {
@@ -118,7 +236,48 @@
 }
 
 .live-dot {
-  animation: console-pulse 2s ease-in-out infinite;
+  animation: console-pulse 2.4s ease-in-out infinite;
+}
+
+/* Working: a light sweeping across the words, as a model's "thinking" does. */
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+.shimmer {
+  background-image: linear-gradient(
+    90deg,
+    currentColor 0%,
+    currentColor 38%,
+    color-mix(in srgb, currentColor 35%, var(--color-shelf)) 50%,
+    currentColor 62%,
+    currentColor 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 2.2s linear infinite;
+}
+
+/* A value that just changed: a wash that fades out. */
+@keyframes value-flash {
+  from {
+    background-color: var(--color-current-wash);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+.value-flash {
+  animation: value-flash 1.2s var(--ease-out) 1;
+  border-radius: 4px;
 }
 
 @keyframes console-fade-in {
@@ -133,14 +292,165 @@
 }
 
 .fade-in {
-  animation: console-fade-in 180ms ease-out both;
+  animation: console-fade-in 180ms var(--ease-out) both;
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.slide-in-right {
+  animation: slide-in-right var(--duration-panel) var(--ease-out) both;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/*
+ * The mark: the stream rises twice and settles into a line. It draws itself once when the console
+ * opens, left to right as a stream arrives; while the console waits on something it flows through,
+ * entering on the left and leaving on the right. The path's length is normalised to 100.
+ */
+@keyframes mark-draw {
+  from {
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.mark-draw {
+  stroke-dasharray: 100;
+  animation: mark-draw var(--duration-draw) var(--ease-out) both;
+}
+
+@keyframes mark-flow {
+  0% {
+    stroke-dashoffset: 100;
+  }
+  55% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -100;
+  }
+}
+
+.mark-flow {
+  stroke-dasharray: 100;
+  animation: mark-flow 1.8s var(--ease-in-out) infinite;
+}
+
+/*
+ * Ticker: each digit a strip of 0–9 three times over, moved to its digit on a line of its own, so a
+ * changing number rolls like an odometer: up as it grows, down as it shrinks. The strip rests in its
+ * middle run; the outer runs give a roll room to go either way.
+ */
+.ticker {
+  display: inline-flex;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Clipped rather than overflow-hidden, which would move the digit's baseline off the text's. */
+.ticker-digit {
+  position: relative;
+  display: inline-block;
+  clip-path: inset(0);
+}
+
+/* Digits fade at the edges only while they roll, so a tight line height never clips one at rest. */
+.ticker-digit.rolling {
+  mask-image: linear-gradient(to bottom, transparent 0, #000 16%, #000 84%, transparent 100%);
+}
+
+.ticker-digit > .ticker-rest {
+  visibility: hidden;
+}
+
+.ticker-strip {
+  position: absolute;
+  inset: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(calc(var(--pos) * -1lh));
+}
+
+.ticker-digit.rolling > .ticker-strip {
+  transition: transform var(--duration-roll) var(--ease-out);
+}
+
+.ticker-strip > span {
+  height: 1lh;
+  text-align: center;
+}
+
+/* Status glyphs: a flowing wave drifts downstream; a state on its way somewhere turns. */
+@keyframes glyph-flow {
+  from {
+    transform: translateX(-6.8px);
+  }
+  to {
+    transform: none;
+  }
+}
+
+.glyph-flow {
+  animation: glyph-flow 2.4s linear infinite;
+}
+
+.glyph-turn {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: spin 8s linear infinite;
+}
+
+/* The river: dots ride each strand at its own pace, set by its throughput (River.tsx). */
+@keyframes river-flow {
+  to {
+    stroke-dashoffset: -36;
+  }
+}
+
+.river-flow {
+  animation: river-flow 4s linear infinite;
+}
+
+/* A catch-up's ring fills as the backlog falls. */
+.glyph-fill {
+  transition: stroke-dasharray var(--duration-draw) var(--ease-out);
+}
+
+/* A digit or symbol the number has just grown: it rises into place. */
+@keyframes ticker-enter {
+  from {
+    opacity: 0;
+    transform: translateY(0.35lh);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.ticker-enter {
+  animation: ticker-enter var(--duration-roll) var(--ease-out) both;
 }
 
 /*
  * Catching up: the hourglass beside "records behind" rests, then turns, and rests again. Each turn
- * is a whole one, so it always rests upright, exactly where it started: resting upside down after
- * a half turn put the icon on a different sub-pixel grid, which showed as a nudge off centre and a
- * snap back when the loop began again.
+ * is a whole one, so it always rests upright, exactly where it started.
  */
 @keyframes hourglass-turn {
   0%,
@@ -159,9 +469,33 @@
 
 @media (prefers-reduced-motion: reduce) {
   .live-dot,
+  .heartbeat,
   .fade-in,
-  .hourglass-turn {
+  .slide-in-right,
+  .hourglass-turn,
+  .value-flash,
+  .mark-draw,
+  .mark-flow,
+  .ticker-enter,
+  .glyph-flow,
+  .glyph-turn,
+  .river-flow {
     animation: none;
+  }
+
+  .glyph-fill {
+    transition: none;
+  }
+
+  .ticker-digit.rolling > .ticker-strip {
+    transition: none;
+  }
+
+  /* Still says "working" in its words; only the sweep stops. */
+  .shimmer {
+    animation: none;
+    background-image: none;
+    -webkit-text-fill-color: currentColor;
   }
 }
 
@@ -169,26 +503,10 @@
  * Running indicator: a beam travelling the perimeter of whatever is being filled.
  *
  * Drawn as an overlay above the content rather than behind it, so nothing opaque inside the panel
- * — a header row, the column rail — can sit on top of the edge it runs along.
- *
- * The beam rides a motion path rather than a rotating conic gradient. A conic gradient turns at a
- * constant *angular* rate, which on anything but a square traces the perimeter at a wildly varying
- * *linear* rate: the head crawls along the long edges and snaps through the corners. On a grid
- * twice as wide as it is tall that reads as a stutter rather than as motion, which is what made
- * the old indicator look wrong. `offset-path` moves it at a constant linear speed on every edge —
- * measured at 39px per 1% of the lap on all four — so the beam travels the way the eye expects
- * whatever the panel's proportions.
- *
- * One lap is deliberately unhurried. The previous 1.6s lap put the head above 2,500px/s on a
- * full-width grid, which reads as frantic, as if something were going wrong. 5s is around 800px/s
- * at that size, which reads as "working".
- *
- * The base rule is the fallback, for browsers without basic shapes on `offset-path`: the original
- * conic sweep, reduced to a ring by the standard two-layer XOR mask — one layer over the padding
- * box, one over the content box, excluded from each other, leaving a band exactly as thick as the
- * padding. A mask was needed because a cover painted over the middle would have to match the
- * background of everything underneath, and anything opaque in the panel would sit on top of the
- * ring and hide it.
+ * can sit on top of the edge it runs along. The beam rides a motion path (constant linear speed on
+ * every edge) rather than a rotating conic gradient, whose speed varies with the panel's aspect.
+ * The base rule is the fallback for browsers without basic shapes on `offset-path`: the conic sweep
+ * reduced to a ring by a two-layer XOR mask.
  */
 @keyframes run-sweep {
   to {
@@ -234,27 +552,22 @@
   width: 220%;
   height: 220%;
   transform: translate(-50%, -50%);
-  /* A long, soft ramp rather than a hard-edged wedge: a rotating highlight hides the uneven
-     angular speed far better than a discrete head does. */
   background: conic-gradient(
     from 0deg,
     transparent 0deg 190deg,
-    color-mix(in srgb, var(--color-accent) 45%, transparent) 320deg,
-    var(--color-accent) 358deg,
+    color-mix(in srgb, var(--color-current) 45%, transparent) 320deg,
+    var(--color-current) 358deg,
     transparent 360deg
   );
   animation: run-sweep 4s linear infinite;
 }
 
 @supports (offset-path: inset(0 round 1px)) {
-  /* The beam supersedes the sweep, and with it the mask that made the sweep a ring. */
   .run-ring {
     padding: 0;
     -webkit-mask: none;
     mask: none;
-    /* A faint constant ring under the beam, so the panel reads as active between passes rather
-       than only at the instant the beam is on a given edge. */
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 22%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-current) 22%, transparent);
   }
 
   .run-ring::before {
@@ -267,29 +580,20 @@
     width: 180px;
     height: 2px;
     border-radius: 999px;
-    /* Inset by half the beam's thickness. `inset(0 …)` centres it on the border line, which the
-       panel's own `overflow: hidden` then cuts in half; one pixel in, the whole beam is visible. */
     offset-path: inset(1px round calc(var(--radius-panel) - 1px));
     offset-rotate: auto;
     offset-distance: 0%;
-    /* Brightest at the leading edge, fading back into a tail, so the direction of travel reads
-       without the beam needing a hard end. */
     background: linear-gradient(
       90deg,
       transparent 0%,
-      color-mix(in srgb, var(--color-accent) 35%, transparent) 55%,
-      var(--color-accent) 100%
+      color-mix(in srgb, var(--color-current) 35%, transparent) 55%,
+      var(--color-current) 100%
     );
     animation: run-travel 5s linear infinite;
   }
 }
 
-/*
- * Reduced motion gets no travel at all.
- *
- * Slowing a lap down still sends a bright object across the screen, which is the thing being
- * avoided. A ring that breathes in place carries the same "still working" meaning without moving.
- */
+/* Reduced motion gets no travel at all: a ring that breathes in place says "still working". */
 @media (prefers-reduced-motion: reduce) {
   .run-ring::before,
   .run-ring::after {
@@ -300,7 +604,7 @@
     padding: 0;
     -webkit-mask: none;
     mask: none;
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 40%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-current) 40%, transparent);
     animation: run-breathe 2.4s ease-in-out infinite;
   }
 }

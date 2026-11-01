@@ -23,7 +23,7 @@ export function StatCard({
   return (
     <div className={cn('panel flex flex-col overflow-hidden', className)}>
       <div className="px-4 pt-3.5 pb-3">
-        <p className="text-[11px] font-medium tracking-wide text-[var(--color-ink-faint)] uppercase">
+        <p className="text-[12px] font-medium text-[var(--color-ink-faint)]">
           {label}
         </p>
         <p className="mt-1.5 flex items-baseline gap-1">

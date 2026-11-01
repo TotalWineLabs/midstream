@@ -49,14 +49,15 @@ export function Switch({
         'disabled:cursor-not-allowed disabled:opacity-40',
         checked
           ? danger
-            ? 'border-transparent bg-[var(--color-phase-failed)]'
-            : 'border-transparent bg-[var(--color-accent)]'
+            ? 'border-transparent bg-[var(--color-flare-ink)] dark:bg-[var(--color-flare)]'
+            : 'border-transparent bg-[var(--color-primary)]'
           : 'border-[var(--color-line-strong)] bg-[var(--color-raised)]',
       )}
     >
       <span
         className={cn(
-          'inline-block size-3.5 rounded-full bg-white shadow-sm transition-transform',
+          'inline-block size-3.5 rounded-full shadow-sm transition-transform',
+          checked ? 'bg-[var(--color-on-primary)]' : 'bg-white dark:bg-[var(--color-ink-muted)]',
           checked ? 'translate-x-[18px]' : 'translate-x-[2px]',
         )}
       />

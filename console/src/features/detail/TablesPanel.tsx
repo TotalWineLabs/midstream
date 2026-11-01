@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 
 import { TABLE_PARAM } from '../tables/selectedTable';
 import { RelativeTime } from '@/components/Inline';
-import { Badge, Panel, PanelHeader } from '@/components/ui/primitives';
+import { Badge, Panel } from '@/components/ui/primitives';
 import { useAuth } from '@/lib/auth';
 import { formatBytes, formatCount, formatExact } from '@/lib/format';
 import type { CpDetail, CpLiveTable, CpTableSpec, CpTableSummary, TableState } from '@shared/types';
@@ -57,30 +57,26 @@ export function TablesPanel({ detail }: { detail: CpDetail }): ReactNode {
 
   return (
     <Panel className="overflow-hidden">
-      <PanelHeader
-        title={`Tables (${detail.materialization.tables.length}${kept ? ` · ${kept} kept` : ''})`}
-        description={
-          <>
-            One per source topic, each in its dataset: SQL reads each as <code className="numeric">&lt;dataset&gt;.&lt;table&gt;</code>,
-            and so does any engine on the catalog. One runtime writes them all
-            {kept ? '; a kept table is no longer written, and stays readable' : ''}.
-          </>
-        }
-      />
+      <header className="px-5 pt-4 pb-3">
+        <h2 className="text-[15px] font-semibold">
+          Tables <span className="numeric font-normal text-[var(--color-ink-faint)]">{detail.materialization.tables.length}</span>
+          {kept ? <span className="text-[13px] font-normal text-[var(--color-ink-muted)]"> · {kept} kept, no longer written</span> : null}
+        </h2>
+      </header>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[760px] text-[12px]">
           <thead>
-            <tr className="border-b border-[var(--color-line)] bg-[var(--color-raised)] text-left text-[11px] tracking-wide text-[var(--color-ink-muted)] uppercase">
-              <th className="px-5 py-2 font-medium">Table · topic</th>
-              <th className="px-2 py-2 text-right font-medium">Rows</th>
-              <th className="px-2 py-2 text-right font-medium">Size</th>
-              <th className="px-2 py-2 text-right font-medium">Files</th>
-              <th className="px-2 py-2 text-right font-medium" title="Records on the topic the runtime has not yet committed">
+            <tr className="border-y border-[var(--color-line)] text-left text-[12px] whitespace-nowrap text-[var(--color-ink-faint)]">
+              <th className="px-5 py-2 font-normal">Table · topic</th>
+              <th className="px-2 py-2 text-right font-normal">Rows</th>
+              <th className="px-2 py-2 text-right font-normal">Size</th>
+              <th className="px-2 py-2 text-right font-normal">Files</th>
+              <th className="px-2 py-2 text-right font-normal" title="Records on the topic the runtime has not yet committed">
                 Lag
               </th>
-              <th className="px-2 py-2 font-medium">Schema</th>
-              <th className="px-2 py-2 font-medium">Last commit</th>
-              <th className="px-5 py-2 font-medium">Status</th>
+              <th className="px-2 py-2 font-normal">Schema</th>
+              <th className="px-2 py-2 font-normal">Last commit</th>
+              <th className="px-5 py-2 font-normal">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--color-line)]">
@@ -99,26 +95,26 @@ export function TablesPanel({ detail }: { detail: CpDetail }): ReactNode {
                       {canSeeDatasets ? (
                         <Link
                           to={domainPath(`/datasets/${encodeURIComponent(spec.dataset)}`)}
-                          className="numeric text-[var(--color-ink-muted)] hover:text-[var(--color-accent)] hover:underline"
+                          className="ident text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] hover:underline"
                           title={`Dataset ${spec.dataset}`}
                         >
                           {spec.dataset}.
                         </Link>
                       ) : (
-                        <span className="numeric text-[var(--color-ink-muted)]">{spec.dataset}.</span>
+                        <span className="ident text-[var(--color-ink-muted)]">{spec.dataset}.</span>
                       )}
                       {!readable ? (
-                        <span className="numeric -ml-1.5 font-medium line-through decoration-[var(--color-ink-faint)]">{spec.name}</span>
+                        <span className="ident -ml-1.5 font-medium line-through decoration-[var(--color-ink-faint)]">{spec.name}</span>
                       ) : queryable ? (
                         <Link
                           to={linkTo('data', spec.name)}
-                          className="numeric -ml-1.5 font-medium text-[var(--color-ink)] hover:text-[var(--color-accent)] hover:underline"
+                          className="ident -ml-1.5 font-medium text-[var(--color-ink)] hover:underline"
                           title={`Query ${qualified} in the Data tab`}
                         >
                           {spec.name}
                         </Link>
                       ) : (
-                        <span className="numeric -ml-1.5 font-medium">{spec.name}</span>
+                        <span className="ident -ml-1.5 font-medium">{spec.name}</span>
                       )}
                       {locked ? (
                         <span title={`Dataset ${spec.dataset} is locked to you: its schemas and data need a role on it`}>
@@ -133,13 +129,13 @@ export function TablesPanel({ detail }: { detail: CpDetail }): ReactNode {
                     </span>
                     <span className="numeric block break-all text-[11px] text-[var(--color-ink-muted)]">{spec.source_topic}</span>
                   </td>
-                  <td className="numeric px-2 py-2 text-right">{record ? formatExact(record.totals.records ?? 0) : '—'}</td>
-                  <td className="numeric px-2 py-2 text-right">{record ? formatBytes(record.totals.bytes ?? 0) : '—'}</td>
-                  <td className="numeric px-2 py-2 text-right text-[var(--color-ink-muted)]">{record ? formatExact(record.totals.files ?? 0) : '—'}</td>
-                  <td className="numeric px-2 py-2 text-right" title={topicLag?.error ?? (written ? undefined : 'Not read any more')}>
+                  <td className="numeric px-2 py-2 text-right whitespace-nowrap">{record ? formatExact(record.totals.records ?? 0) : '—'}</td>
+                  <td className="numeric px-2 py-2 text-right whitespace-nowrap">{record ? formatBytes(record.totals.bytes ?? 0) : '—'}</td>
+                  <td className="numeric px-2 py-2 text-right whitespace-nowrap text-[var(--color-ink-muted)]">{record ? formatExact(record.totals.files ?? 0) : '—'}</td>
+                  <td className="numeric px-2 py-2 text-right whitespace-nowrap" title={topicLag?.error ?? (written ? undefined : 'Not read any more')}>
                     {topicLag?.error ? <span className="text-[var(--color-phase-paused)]">?</span> : written ? formatCount(topicLag?.total_lag ?? null) : '—'}
                   </td>
-                  <td className="numeric px-2 py-2 text-[var(--color-ink-muted)]">{record?.schema_id != null ? `schema ${record.schema_id}` : '—'}</td>
+                  <td className="numeric px-2 py-2 whitespace-nowrap text-[var(--color-ink-muted)]">{record?.schema_id != null ? `schema ${record.schema_id}` : '—'}</td>
                   <td className="px-2 py-2 whitespace-nowrap text-[var(--color-ink-muted)]">
                     <RelativeTime value={record?.last_commit_at ?? block?.last_commit_at ?? null} />
                   </td>
@@ -209,5 +205,5 @@ function TableStatus({ record, block, state }: { record: CpTableSummary | null; 
       </span>
     );
   }
-  return <Badge tone="running">ok</Badge>;
+  return <span className="text-[var(--color-ink-muted)]">Written</span>;
 }

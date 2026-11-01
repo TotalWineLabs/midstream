@@ -8,6 +8,7 @@ import { SsoOutcomeToast } from './features/auth/SsoOutcome';
 import { DatasetPage } from './features/datasets/DatasetPage';
 import { DatasetsPage } from './features/datasets/DatasetsPage';
 import { DetailPage } from './features/detail/DetailPage';
+import { CreateMaterializationPage } from './features/materializations/CreateMaterializationPage';
 import { MaterializationsPage } from './features/materializations/MaterializationsPage';
 import { OverviewPage } from './features/overview/OverviewPage';
 import { SearchPage } from './features/search/SearchPage';
@@ -63,6 +64,14 @@ function DomainRoutes(): ReactNode {
     <Routes>
       <Route index element={<Overview />} />
       <Route path="materializations" element={<Materializations />} />
+      <Route
+        path="materializations/new"
+        element={
+          <RequirePermission permission="materializations.create" what="creating a materialization">
+            <CreateMaterializationPage />
+          </RequirePermission>
+        }
+      />
       <Route
         path="materializations/:materializationId"
         element={

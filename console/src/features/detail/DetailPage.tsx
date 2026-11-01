@@ -1,9 +1,9 @@
-import { ArrowLeft, Lock, Pencil, Play, Square, Trash2 } from 'lucide-react';
+import { Lock, MoreHorizontal, Pencil, Pin, Play, Square, Trash2 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { EditMaterializationDialog } from './EditMaterializationDialog';
-import { DetailOverviewTab } from './OverviewTab';
+import { DetailOverviewTab } from './MaterializationOverview';
 import { RuntimeTab } from './RuntimeTab';
 import { TableTab } from './TableTab';
 import { canDelete, canEdit, canResume, canStop, useLifecycleActions } from '../materializations/actions';
@@ -11,17 +11,19 @@ import { DataTab } from '../data/DataTab';
 import { ProtectionTab } from '../protection/ProtectionTab';
 import { SchemaTab } from '../schema/SchemaTab';
 import { LiveIndicator, PageBody, PageHeader } from '@/components/AppShell';
-import { Identifier } from '@/components/Inline';
-import { HealthBadge, PhaseBadge } from '@/components/PhaseBadge';
+import { StatusPill } from '@/components/Status';
+import { Popover } from '@/components/ui/Popover';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button, Panel, Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/cn';
-import { displayName, humanize, topicsLabel } from '@/lib/format';
+import { displayName, formatCount } from '@/lib/format';
+import { isPinned, togglePin, usePins } from '@/lib/pins';
+import { statusOf } from '@/lib/status';
 import { TABLE_PARAM } from '../tables/selectedTable';
 import { useAuth } from '@/lib/auth';
 import { useDetailStream } from '@/lib/live';
 import { readableTables, type CpDetail, type CpTableSpec } from '@shared/types';
-import { useDomainPath } from '@/lib/domains';
+import { useDomain, useDomainPath } from '@/lib/domains';
 
 /**
  * Each tab, and the dataset permission it needs, beyond seeing the materialization at all, on at
@@ -32,9 +34,9 @@ const TABS = [
   { key: '', label: 'Overview', permission: null },
   { key: 'schema', label: 'Schema', permission: 'dataset.view_schema' },
   { key: 'data', label: 'Data', permission: 'data.query' },
-  { key: 'table', label: 'Table', permission: null },
+  { key: 'table', label: 'Tables', permission: null },
   { key: 'protection', label: 'Protection', permission: 'dataset.view_schema' },
-  { key: 'runtime', label: 'Runtime', permission: null },
+  { key: 'runtime', label: 'Diagnostics', permission: null },
 ] as const;
 
 /** Every table a delete removes - written, kept, or still being dropped - in its dataset. */
@@ -53,9 +55,9 @@ export function DetailPage(): ReactNode {
   const { data, status } = useDetailStream(materializationId ?? '');
   const { run, pending } = useLifecycleActions();
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [confirmStop, setConfirmStop] = useState(false);
   const [editing, setEditing] = useState(false);
   const { can } = useAuth();
+  const { id: domainId } = useDomain();
 
   if (!materializationId) return <Navigate to={domainPath('/materializations')} replace />;
 
@@ -82,52 +84,34 @@ export function DetailPage(): ReactNode {
   return (
     <>
       <PageHeader
-        title={detail ? displayName(detail.materialization) : materializationId}
-        subtitle={
-          detail ? (
-            <span className="break-all" title={detail.materialization.source_topics.join('\n')}>
-              {topicsLabel(detail.materialization.source_topics)}
-            </span>
-          ) : (
-            'Loading…'
-          )
+        crumbs={
+          <Link to={domainPath('/materializations')} className="transition-colors hover:text-[var(--color-ink)]">
+            Materializations
+          </Link>
         }
+        title={detail ? displayName(detail.materialization) : materializationId}
         meta={
-          <>
-            <Link
-              to={domainPath('/materializations')}
-              className="inline-flex items-center gap-1 text-[12px] text-[var(--color-ink-muted)] transition-colors hover:text-[var(--color-ink)]"
-            >
-              <ArrowLeft className="size-3.5" />
-              All materializations
-            </Link>
-            <Identifier value={materializationId} />
-            {detail ? (
-              <>
-                <PhaseBadge
-                  phase={detail.status.observed_phase}
-                  reason={detail.status.phase_reason}
-                />
-                <HealthBadge
-                  level={detail.status.runtime_health.level}
-                  reason={detail.status.runtime_health.message ?? detail.status.runtime_health.reason}
-                />
-                {detail.status.desired_phase !== detail.status.observed_phase ? (
-                  <span className="text-[12px] text-[var(--color-ink-muted)]">
-                    Reconciling toward {humanize(detail.status.desired_phase)}
-                  </span>
-                ) : null}
-              </>
-            ) : null}
-            <LiveIndicator status={status} generatedAt={data?.generatedAt} error={data?.error ?? null} />
-          </>
+          detail && activeTab !== '' ? (
+            <>
+              <StatusPill status={headerStatus(detail)} animate={false} />
+              <LiveIndicator status={status} generatedAt={data?.generatedAt} error={data?.error ?? null} compact />
+            </>
+          ) : null
         }
         actions={
           detail ? (
             <>
+              <PinButton domain={domainId} id={materializationId} label={displayName(detail.materialization)} />
+              {canEdit(detail) && can('materializations.edit') ? (
+                <Button variant="ghost" onClick={() => setEditing(true)}>
+                  <Pencil className="size-3.5" />
+                  Edit
+                </Button>
+              ) : null}
               {canResume(detail) && can('materializations.resume') ? (
                 <Button
-                  onClick={() => run('resume', materializationId)}
+                  variant="primary"
+                  onClick={() => run('resume', materializationId, undefined, displayName(detail.materialization))}
                   loading={pending === 'resume'}
                 >
                   <Play className="size-4" />
@@ -135,28 +119,44 @@ export function DetailPage(): ReactNode {
                 </Button>
               ) : null}
               {canStop(detail) && can('materializations.stop') ? (
-                <Button onClick={() => setConfirmStop(true)} loading={pending === 'stop'}>
+                <Button onClick={() => run('stop', materializationId, undefined, displayName(detail.materialization))} loading={pending === 'stop'}>
                   <Square className="size-3.5" />
                   Stop
                 </Button>
               ) : null}
-              {canEdit(detail) && can('materializations.edit') ? (
-                <Button variant="ghost" onClick={() => setEditing(true)}>
-                  <Pencil className="size-3.5" />
-                  Edit
-                </Button>
-              ) : null}
               {canDelete(detail) && can('materializations.delete') ? (
-                <Button variant="ghost" onClick={() => setConfirmDelete(true)}>
-                  <Trash2 className="size-4" />
-                  Delete
-                </Button>
+                <Popover
+                  align="end"
+                  width={200}
+                  trigger={({ open, toggle, id }) => (
+                    <Button variant="ghost" onClick={toggle} aria-expanded={open} aria-controls={id} aria-label="More actions" className="px-2.5">
+                      <MoreHorizontal className="size-4" />
+                    </Button>
+                  )}
+                >
+                  {({ close }) => (
+                    <div className="p-1.5" role="menu">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          close();
+                          setConfirmDelete(true);
+                        }}
+                        className="flex w-full items-center gap-2.5 rounded-[var(--radius-control)] px-2.5 py-2 text-left text-[13px] text-[var(--color-flare-ink)] transition-colors hover:bg-[var(--color-raised)]"
+                      >
+                        <Trash2 className="size-4" />
+                        Delete…
+                      </button>
+                    </div>
+                  )}
+                </Popover>
               ) : null}
             </>
           ) : null
         }
       >
-        <div className="mx-auto max-w-[1400px] px-6">
+        <div className="mx-auto max-w-[1400px] overflow-x-auto px-4 sm:px-6">
           <nav className="-mb-px flex gap-1" role="tablist">
             {tabs.map((item) => {
               const active = activeTab === item.key;
@@ -175,7 +175,7 @@ export function DetailPage(): ReactNode {
                     });
                   }}
                   className={cn(
-                    'border-b-2 px-3 pb-2.5 text-[13px] font-medium transition-colors',
+                    'border-b-2 px-3 pb-2.5 text-[13px] font-medium whitespace-nowrap transition-colors',
                     active
                       ? 'border-[var(--color-ink)] text-[var(--color-ink)]'
                       : 'border-transparent text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]',
@@ -211,51 +211,14 @@ export function DetailPage(): ReactNode {
       {detail ? (
         <>
           <EditMaterializationDialog open={editing} onClose={() => setEditing(false)} detail={detail} />
-          <Dialog
-            open={confirmStop}
-            onClose={() => setConfirmStop(false)}
-            title={`Stop ${displayName(detail.materialization)}?`}
-            description={`Its runtime is scaled to zero replicas: it stops consuming ${topicsLabel(detail.materialization.source_topics, 5)} and writes no new data. Its tables stay readable, and the maintenance app goes on compacting them and expiring old snapshots. Resume scales it back to ${replicaCount(detail.materialization.replicas)}.`}
-            footer={
-              <>
-                <Button variant="ghost" onClick={() => setConfirmStop(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  loading={pending === 'stop'}
-                  onClick={() => {
-                    run('stop', materializationId);
-                    setConfirmStop(false);
-                  }}
-                >
-                  Stop
-                </Button>
-              </>
-            }
-          >
-            <div className="space-y-3 text-[13px] leading-relaxed">
-              {/*
-                The table's own snapshots record the offsets committed to it, and a runtime resumes
-                from them, so a stop loses nothing it had only staged and duplicates nothing.
-              */}
-              <p className="text-[var(--color-ink-muted)]">
-                Everything it already committed stays queryable. A resumed runtime continues from the
-                offsets the table records, so rows still being batched when it stops are read again
-                and written exactly once.
-              </p>
-            </div>
-          </Dialog>
         </>
       ) : null}
 
       <Dialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
-        title="Delete materialization?"
-        description={`The runtime, its Kafka topics and its consumer group are removed, and so ${
-          removed.length > 1 ? `are its ${removed.length} Iceberg tables` : 'is its Iceberg table'
-        } with every file in them — unless the control plane has destination cleanup turned off, when the tables leave their datasets but their files stay. The source topics themselves are not touched. This cannot be undone.`}
+        title={`Delete ${detail ? displayName(detail.materialization) : materializationId}?`}
+        description={`This permanently deletes ${removed.length === 1 ? 'its table and its data' : `its ${removed.length} tables and their data`}. Queries on ${removed.length === 1 ? 'it' : 'them'} stop working. The source topics are not touched.`}
         footer={
           <>
             <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
@@ -266,7 +229,7 @@ export function DetailPage(): ReactNode {
               loading={pending === 'delete'}
               disabled={unwritable.length > 0}
               onClick={() => {
-                run('delete', materializationId);
+                run('delete', materializationId, undefined, detail ? displayName(detail.materialization) : materializationId);
                 setConfirmDelete(false);
               }}
             >
@@ -276,31 +239,29 @@ export function DetailPage(): ReactNode {
         }
       >
         <div className="space-y-3 text-[13px] leading-relaxed">
-          <div>
-            <p className="text-[var(--color-ink-muted)]">
-              {removed.length === 1 ? 'This table leaves its dataset' : 'These tables leave their datasets'}, and anyone’s queries of them
-              stop working; their names are free to be used again:
-            </p>
-            <ul className="mt-1.5 space-y-0.5">
-              {removed.map((spec) => (
-                <li key={`${spec.dataset}.${spec.name}`} className="flex items-center gap-1.5">
-                  <code className="numeric">
+          {/* Every table it removes, named, with what it holds: the consequence, before it happens. */}
+          <ul className="divide-y divide-[var(--color-line)] rounded-[var(--radius-control)] border border-[var(--color-line)]">
+            {removed.map((spec) => {
+              const record = detail?.tables.find((table) => table.name === spec.name);
+              return (
+                <li key={`${spec.dataset}.${spec.name}`} className="flex items-center gap-2 px-3 py-2">
+                  <code className="ident min-w-0 flex-1 truncate">
                     {spec.dataset}.{spec.name}
                   </code>
                   {can('dataset.write', spec.dataset_id) ? null : <Lock className="size-3 text-[var(--color-ink-faint)]" aria-label="no write access" />}
+                  {record ? <span className="numeric shrink-0 text-[var(--color-ink-muted)]">{formatCount(record.totals.records ?? 0)} rows</span> : null}
                 </li>
-              ))}
-            </ul>
-          </div>
+              );
+            })}
+          </ul>
           {unwritable.length > 0 ? (
-            <p className="text-[var(--color-phase-failed)]">
-              Deleting needs write access to {unwritable.join(' and ')}, which you do not have: ask {unwritable.length === 1 ? 'its' : 'their'}{' '}
-              owners.
+            <p className="text-[var(--color-flare-ink)]">
+              Deleting needs write access to {unwritable.join(' and ')}: ask {unwritable.length === 1 ? 'its' : 'their'} owners.
             </p>
           ) : (
-            <p className="text-[var(--color-ink-muted)]">
-              Deletion is asynchronous and multi-stage: runtime teardown, observation confirmation, Kafka cleanup, then
-              control-plane record removal.
+            <p className="text-[12px] text-[var(--color-ink-faint)]">
+              Where the control plane keeps deleted tables' files, they stay in storage, out of every dataset. Their names are
+              free to use again.
             </p>
           )}
         </div>
@@ -309,7 +270,32 @@ export function DetailPage(): ReactNode {
   );
 }
 
-function replicaCount(replicas: number | undefined): string {
-  const count = replicas ?? 1;
-  return `${count} replica${count === 1 ? '' : 's'}`;
+/** The state the header shows on every tab but the overview, whose readout says it. */
+function headerStatus(detail: CpDetail) {
+  return statusOf({
+    desired: detail.status.desired_phase,
+    observed: detail.status.observed_phase,
+    reason: detail.status.phase_reason,
+    health: detail.status.runtime_health.level,
+    healthReason: detail.status.runtime_health.reason,
+    everRan: detail.status.last_heartbeat != null || detail.status.runtime_progress !== undefined,
+  });
+}
+
+/** Keep it in the sidebar, to come back to. */
+function PinButton({ domain, id, label }: { domain: string; id: string; label: string }): ReactNode {
+  const pins = usePins();
+  const pinned = isPinned(pins, { kind: 'materialization', domain, id });
+  return (
+    <Button
+      variant="ghost"
+      onClick={() => togglePin({ kind: 'materialization', domain, id, label })}
+      aria-pressed={pinned}
+      aria-label={pinned ? 'Unpin from the sidebar' : 'Pin to the sidebar'}
+      title={pinned ? 'Unpin from the sidebar' : 'Pin to the sidebar'}
+      className={cn('px-2.5', pinned && 'text-[var(--color-ink)]')}
+    >
+      <Pin className={cn('size-4', pinned && 'fill-current')} />
+    </Button>
+  );
 }

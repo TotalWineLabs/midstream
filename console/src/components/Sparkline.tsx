@@ -18,7 +18,7 @@ export function Sparkline({
   className,
   height = 40,
   strokeWidth = 1.5,
-  color = 'var(--color-accent)',
+  color = 'var(--color-current)',
   showArea = true,
 }: {
   points: SparklinePoint[];
@@ -86,32 +86,5 @@ export function Sparkline({
         vectorEffect="non-scaling-stroke"
       />
     </svg>
-  );
-}
-
-/** Horizontal proportion bar used for partition and phase distributions. */
-export function DistributionBar({
-  segments,
-  className,
-}: {
-  segments: { label: string; value: number; color: string }[];
-  className?: string;
-}): ReactNode {
-  const total = segments.reduce((sum, segment) => sum + segment.value, 0);
-  if (total === 0) {
-    return <div className={cn('h-1.5 rounded-full bg-[var(--color-raised)]', className)} />;
-  }
-  return (
-    <div className={cn('flex h-1.5 gap-0.5 overflow-hidden rounded-full', className)}>
-      {segments
-        .filter((segment) => segment.value > 0)
-        .map((segment) => (
-          <div
-            key={segment.label}
-            title={`${segment.label}: ${segment.value}`}
-            style={{ width: `${(segment.value / total) * 100}%`, backgroundColor: segment.color }}
-          />
-        ))}
-    </div>
   );
 }

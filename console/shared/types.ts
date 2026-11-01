@@ -867,10 +867,22 @@ export interface LagSample {
   /** When the control plane measured it, epoch milliseconds. */
   t: number;
   lag: number;
+  /**
+   * Records that had arrived on the source topics by this measurement, counted from the console's
+   * first: a running total, so two samples' difference is what arrived between them. Absent when
+   * the control plane did not report the topics' end offsets.
+   */
+  arrived?: number;
 }
 
 export interface MaterializationSummary extends CpListItem {
   runtimeHealth: RuntimeHealthLevel;
+  /** Which way consumer lag is heading (`lagTrend.ts`): `draining` is a backlog clearly falling. */
+  lagState: 'caught-up' | 'draining' | 'growing' | 'steady' | 'stale' | 'unknown';
+  /** While draining: the time left at the current pace. */
+  lagEtaMs: number | null;
+  /** While draining: how far it has come from the backlog's peak, 0 to 1. */
+  catchUp: number | null;
   lastHeartbeat: string | null;
   /** Rows in its tables' current snapshots, as their committer last reported them; null before any table is reported. */
   rowsCommitted: number | null;

@@ -1,257 +1,209 @@
-import { AlertTriangle } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
+import { River, type Strand } from './River';
 import { HiddenDomains } from '../domains/HiddenDomains';
 import { NewMaterialization } from '../domains/NewMaterialization';
-import { LiveIndicator, PageBody, PageHeader } from '@/components/AppShell';
-import { DomainChip } from '@/components/DomainChip';
-import { PhaseBadge } from '@/components/PhaseBadge';
-import { DistributionBar } from '@/components/Sparkline';
-import { StatCard } from '@/components/StatCard';
-import { TimeSeriesChart } from '@/components/TimeSeriesChart';
-import { EmptyState, Panel, PanelHeader, Skeleton } from '@/components/ui/primitives';
-import { RelativeTime } from '@/components/Inline';
-import {
-  displayName,
-  formatBytes,
-  formatBytesRate,
-  formatCount,
-  formatRate,
-  humanize,
-  topicsLabel,
-} from '@/lib/format';
+import { MaterializationRow } from '../materializations/MaterializationRow';
+import { PageBody, PageHeader } from '@/components/AppShell';
+import { Mark } from '@/components/Logo';
+import { Readout, formatReadoutRate } from '@/components/Readout';
+import { StatusGlyph, StatusPill } from '@/components/Status';
+import { Panel, Skeleton } from '@/components/ui/primitives';
+import { displayName, formatCount } from '@/lib/format';
 import { domainPath, useManyDomains, useOptionalDomain } from '@/lib/domains';
 import { useFleet, type DomainMaterialization } from '@/lib/fleet';
+import { itemStatus, statusGroup, type Status, type StatusGroup } from '@/lib/status';
 import { isDeletedPhase, type DomainFleet } from '@shared/types';
 
-const ATTENTION_PHASES = new Set(['failed', 'degraded']);
+/** Rows the Overview lists before "See all". */
+const LISTED = 8;
+const GROUP_ORDER: StatusGroup[] = ['needs-you', 'in-progress', 'flowing', 'stopped'];
 
-/** Health and throughput of every domain's materializations, or of the page's domain (handbook 20). */
+interface Entry {
+  item: DomainMaterialization;
+  status: Status;
+}
+
+/**
+ * Is everything flowing? (docs/10-design-system.md §10.5) The fleet's rows a second lead, with what
+ * needs someone and what's on track; the river shows each materialization's share; what needs you
+ * says so once, with the way in; then the materializations, the ones that need you first.
+ */
 export function OverviewPage(): ReactNode {
   const scope = useOptionalDomain();
-  const { data, status } = useFleet(scope?.id ?? null);
+  const { data } = useFleet(scope?.id ?? null);
   const manyDomains = useManyDomains();
   const showDomain = !scope && manyDomains;
 
-  // Deleted materializations remain in the fleet payload for the recently-deleted view,
-  // so every overview panel works off the active subset.
-  const activeItems = useMemo(
-    () => (data?.items ?? []).filter((item) => !isDeletedPhase(item)),
+  // Deleted materializations stay in the fleet for a while; nothing here is about them.
+  const entries = useMemo<Entry[]>(
+    () =>
+      (data?.items ?? [])
+        .filter((item) => !isDeletedPhase(item))
+        .map((item) => ({ item, status: itemStatus(item) }))
+        .sort((left, right) => GROUP_ORDER.indexOf(statusGroup(left.status)) - GROUP_ORDER.indexOf(statusGroup(right.status))),
     [data?.items],
   );
-
-  const rowSeries = useMemo(
-    () => (data?.series ?? []).map((point) => ({ t: point.t, value: point.rowsPerSecond })),
-    [data?.series],
-  );
-  const byteSeries = useMemo(
-    () => (data?.series ?? []).map((point) => ({ t: point.t, value: point.bytesPerSecond })),
-    [data?.series],
-  );
-
-  const attention = useMemo(
+  const needing = entries.filter((entry) => statusGroup(entry.status) === 'needs-you');
+  const tables = entries.reduce((sum, entry) => sum + entry.item.tables.length, 0);
+  const topics = new Set(entries.flatMap((entry) => entry.item.source_topics.map((topic) => `${entry.item.domain}/${topic}`))).size;
+  const rows = data?.totals.rowsCommitted ?? 0;
+  const strands = useMemo<Strand[]>(
     () =>
-      activeItems.filter(
-        (item) =>
-          ATTENTION_PHASES.has(item.observed_phase) ||
-          item.runtimeHealth === 'degraded' ||
-          item.runtimeHealth === 'unreachable' ||
-          item.desired_phase !== item.observed_phase,
-      ),
-    [activeItems],
+      entries.map(({ item, status }) => ({
+        key: `${item.domain}/${item.materialization_id}`,
+        label: displayName(item),
+        status,
+        rate: item.rowsPerSecond,
+        to: domainPath(item.domain, `/materializations/${encodeURIComponent(item.materialization_id)}`),
+      })),
+    [entries],
   );
-
-  const busiest = useMemo(
-    () =>
-      [...activeItems]
-        .filter((item) => (item.rowsPerSecond ?? 0) > 0 || (item.rowsCommitted ?? 0) > 0)
-        .sort((a, b) => (b.rowsPerSecond ?? 0) - (a.rowsPerSecond ?? 0) || (b.rowsCommitted ?? 0) - (a.rowsCommitted ?? 0))
-        .slice(0, 8),
-    [activeItems],
-  );
-
-  const totals = data?.totals;
 
   return (
     <>
-      <PageHeader
-        title={scope ? scope.name : 'Overview'}
-        subtitle={
-          scope
-            ? `Health and throughput of every materialization in ${scope.name}.`
-            : showDomain
-              ? 'Health and throughput across every domain and materialization.'
-              : 'Fleet-wide health and throughput across every materialization.'
-        }
-        meta={
-          <LiveIndicator
-            status={status}
-            generatedAt={data?.generatedAt}
-            error={data?.controlPlaneError ?? null}
-          />
-        }
-        actions={<NewMaterialization materializations={data?.items} />}
-      />
+      <PageHeader title={scope ? scope.name : 'Overview'} actions={<NewMaterialization materializations={data?.items} />} />
 
       <PageBody className="space-y-6">
         {!data ? (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {Array.from({ length: 4 }, (_, index) => (
-              <Skeleton key={index} className="h-[132px]" />
-            ))}
-          </div>
+          <>
+            <Skeleton className="h-[360px]" />
+            <Skeleton className="h-48" />
+          </>
         ) : (
           <>
             <HiddenDomains hidden={data.hidden} what="materializations" />
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <StatCard
-                label="Materializations"
-                value={formatCount(totals?.materializations ?? 0)}
-                hint={
-                  <span className="space-y-2">
-                    <DistributionBar
-                      className="w-full"
-                      segments={[
-                        { label: 'Running', value: totals?.running ?? 0, color: 'var(--color-phase-running)' },
-                        { label: 'Pending', value: totals?.pending ?? 0, color: 'var(--color-phase-pending)' },
-                        { label: 'Stopped', value: totals?.stopped ?? 0, color: 'var(--color-phase-paused)' },
-                        { label: 'Failing', value: totals?.failing ?? 0, color: 'var(--color-phase-failed)' },
-                      ]}
-                    />
-                    <span className="block">
-                      {totals?.running ?? 0} running · {totals?.pending ?? 0} pending ·{' '}
-                      {totals?.stopped ?? 0} stopped · {totals?.failing ?? 0} failing
-                    </span>
-                  </span>
-                }
-              />
-              <StatCard
-                label="Ingest rate"
-                value={formatRate(totals?.rowsPerSecond ?? null, '')}
-                unit="rows/s"
-                hint="Every runtime member · 1-min window"
-                series={rowSeries}
-                color="var(--color-accent)"
-              />
-              <StatCard
-                label="Write rate"
-                value={formatBytesRate(totals?.bytesPerSecond ?? null)}
-                hint="Parquet · 15-min trend"
-                series={byteSeries}
-                color="var(--color-phase-running)"
-              />
-              <StatCard
-                label="Materialized"
-                value={formatCount(totals?.rowsCommitted ?? 0)}
-                unit="rows"
-                hint={`${formatBytes(totals?.tableBytes ?? 0)} · ${formatCount(totals?.tableFiles ?? 0)} parquet files · ${formatCount(totals?.recordsSkipped ?? 0)} skipped`}
-              />
-            </div>
-
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-              <Panel>
-                <PanelHeader
-                  title="Fleet throughput"
-                  description="Rows per second across every materialization, measured per runtime member between its own heartbeats."
-                />
-                <div className="px-3 pt-3 pb-2">
-                  <TimeSeriesChart
-                    points={rowSeries}
-                    from={Math.max(data.series[0]?.t ?? 0, (Date.parse(data.generatedAt) || Date.now()) - 30 * 60_000)}
-                    to={Date.parse(data.generatedAt) || Date.now()}
-                    height={190}
-                    formatValue={(value) => formatRate(value, 'rows/s')}
-                    formatTick={formatCount}
-                    label="Fleet ingest rate"
-                    empty="Collecting — rates appear once every runtime member has reported twice."
-                  />
-                </div>
-              </Panel>
-
-              <Panel className="overflow-hidden">
-                <PanelHeader
-                  title="Needs attention"
-                  description={
-                    attention.length === 0
-                      ? 'Everything is converged.'
-                      : `${attention.length} materialization${attention.length === 1 ? '' : 's'} not in a steady state.`
-                  }
-                />
-                {attention.length === 0 ? (
-                  <EmptyState
-                    title="All clear"
-                    description="No failures, degraded runtimes, or pending reconciliation."
-                    className="py-12"
-                  />
-                ) : (
-                  <ul className="divide-y divide-[var(--color-line)]">
-                    {attention.slice(0, 6).map((item) => (
-                      <AttentionRow key={`${item.domain}/${item.materialization_id}`} item={item} showDomain={showDomain} />
-                    ))}
-                  </ul>
-                )}
-              </Panel>
-            </div>
-
-            {showDomain && data.domains.length > 1 ? <DomainsPanel domains={data.domains} /> : null}
-
-            <Panel className="overflow-hidden">
-              <PanelHeader
-                title="Busiest materializations"
-                description="Ranked by current ingest rate."
-                actions={
-                  <Link
-                    to={scope ? domainPath(scope.id, '/materializations') : '/materializations'}
-                    className="text-[12px] font-medium text-[var(--color-accent)] hover:underline"
+            {entries.length === 0 ? (
+              <EmptyFleet items={data.items} />
+            ) : (
+              <>
+                <Panel className="px-5 pt-5 pb-4 sm:px-7 sm:pt-6">
+                  <Readout
+                    pills={
+                      <>
+                        {needing.length > 0 ? (
+                          <StatusPill status={{ kind: needing.some((entry) => entry.status.kind === 'failed') ? 'failed' : 'attention', label: `${needing.length} need${needing.length === 1 ? 's' : ''} you`, reason: null, moving: false }} />
+                        ) : null}
+                        {entries.length > needing.length ? (
+                          <StatusPill
+                            status={{
+                              kind: 'flowing',
+                              label: needing.length === 0 ? (entries.length === 1 ? 'On track' : `All ${entries.length} on track`) : `${entries.length - needing.length} on track`,
+                              reason: null,
+                              moving: true,
+                            }}
+                            animate={false}
+                          />
+                        ) : null}
+                      </>
+                    }
+                    value={data.totals.rowsPerSecond}
+                    format={formatReadoutRate}
+                    unit="rows a second"
+                    context={
+                      <>
+                        into {formatCount(tables)} {tables === 1 ? 'table' : 'tables'} · {formatCount(rows)} rows committed
+                      </>
+                    }
                   >
-                    View all
-                  </Link>
-                }
-              />
-              {busiest.length === 0 ? (
-                <EmptyState
-                  title="No throughput yet"
-                  description="Runtimes report progress once they commit their first parquet batch."
-                  className="py-12"
-                />
-              ) : (
-                <ul className="divide-y divide-[var(--color-line)]">
-                  {busiest.map((item) => (
-                    <li key={`${item.domain}/${item.materialization_id}`}>
-                      <Link
-                        to={domainPath(item.domain, `/materializations/${item.materialization_id}`)}
-                        className="grid grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))] items-center gap-4 px-5 py-3 transition-colors hover:bg-[var(--color-raised)]"
-                      >
-                        <div className="min-w-0">
-                          <p className="flex items-center gap-2 truncate text-[13px] font-medium">
-                            <span className="truncate">{displayName(item)}</span>
-                            {showDomain ? <DomainChip name={item.domainName} id={item.domain} /> : null}
-                          </p>
-                          <p className="truncate text-[12px] text-[var(--color-ink-muted)]" title={item.source_topics.join('\n')}>
-                            {topicsLabel(item.source_topics, 2)}
-                          </p>
-                        </div>
-                        <span className="numeric text-right text-[13px]">
-                          {formatRate(item.rowsPerSecond, 'rows/s')}
-                        </span>
-                        <span className="numeric text-right text-[13px] text-[var(--color-ink-muted)]">
-                          {formatBytesRate(item.bytesPerSecond)}
-                        </span>
-                        <span className="numeric text-right text-[13px] text-[var(--color-ink-muted)]">
-                          {formatCount(item.rowsCommitted)} rows
-                        </span>
+                    <River
+                      strands={strands}
+                      rows={data.totals.rowsCommitted}
+                      kafka={
+                        <>
+                          <b className="font-semibold text-[var(--color-ink)]">Kafka</b> · {formatCount(topics)} {topics === 1 ? 'topic' : 'topics'}
+                        </>
+                      }
+                      midstream={
+                        <>
+                          <b className="font-semibold text-[var(--color-ink)]">Midstream</b> · {formatCount(entries.length)}
+                        </>
+                      }
+                      lake={
+                        <>
+                          <b className="font-semibold text-[var(--color-ink)]">Lake</b> · {formatCount(rows)} rows
+                        </>
+                      }
+                    />
+                  </Readout>
+                </Panel>
+
+                {needing.length > 0 ? <NeedsYou entries={needing} showDomain={showDomain} /> : null}
+
+                <Panel className="overflow-hidden">
+                  <header className="flex items-center justify-between gap-4 px-4 pt-4 pb-2 sm:px-5">
+                    <h2 className="text-[15px] font-semibold">
+                      Materializations <span className="numeric font-normal text-[var(--color-ink-faint)]">{formatCount(entries.length)}</span>
+                    </h2>
+                    {entries.length > LISTED ? (
+                      <Link to={scope ? domainPath(scope.id, '/materializations') : '/materializations'} className="link text-[13px]">
+                        See all
                       </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Panel>
+                    ) : null}
+                  </header>
+                  <div className="divide-y divide-[var(--color-line)] pb-1">
+                    {entries.slice(0, LISTED).map(({ item }) => (
+                      <MaterializationRow key={`${item.domain}/${item.materialization_id}`} item={item} showDomain={showDomain} />
+                    ))}
+                  </div>
+                </Panel>
+
+                {showDomain && data.domains.length > 1 ? <DomainsPanel domains={data.domains} /> : null}
+              </>
+            )}
           </>
         )}
       </PageBody>
-
     </>
+  );
+}
+
+/** What needs someone, said once each, with the way in. Gone on a good day. */
+function NeedsYou({ entries, showDomain }: { entries: Entry[]; showDomain: boolean }): ReactNode {
+  return (
+    <section aria-label="Needs you" className="space-y-2">
+      {entries.slice(0, 4).map(({ item, status }) => (
+        <Link
+          key={`${item.domain}/${item.materialization_id}`}
+          to={domainPath(item.domain, `/materializations/${encodeURIComponent(item.materialization_id)}`)}
+          className="flex items-center gap-3 rounded-[var(--radius-panel)] px-4 py-3 transition-opacity hover:opacity-90 sm:px-5"
+          style={{ background: status.kind === 'failed' ? 'var(--color-flare-wash)' : 'var(--color-buoy-wash)' }}
+        >
+          <StatusGlyph status={status} size={14} />
+          <p className="min-w-0 flex-1 text-[14px]">
+            <span className="font-semibold">{displayName(item)}</span>
+            {showDomain ? <span className="text-[var(--color-ink-muted)]"> in {item.domainName}</span> : null}
+            <span className="text-[var(--color-ink-muted)]">
+              {' '}
+              · {status.label}
+              {status.reason ? `: ${status.reason}` : ''}
+            </span>
+          </p>
+          <span className="flex shrink-0 items-center gap-1 text-[13px] font-medium">
+            Open <ArrowRight className="size-3.5" />
+          </span>
+        </Link>
+      ))}
+    </section>
+  );
+}
+
+/** Nothing to show yet: what a materialization is, once, and the way to make the first. */
+function EmptyFleet({ items }: { items: DomainMaterialization[] }): ReactNode {
+  return (
+    <Panel className="flex flex-col items-center px-6 py-16 text-center">
+      <Mark size={44} working className="text-[var(--color-current)]" />
+      <h2 className="display mt-5 text-[22px] font-semibold">Nothing is flowing yet</h2>
+      <p className="mt-2 max-w-md text-[14px] leading-relaxed text-[var(--color-ink-muted)]">
+        A materialization reads Kafka topics and keeps each in an Iceberg table. Its rows show here within seconds, and in
+        every engine after each commit.
+      </p>
+      <div className="mt-6">
+        <NewMaterialization materializations={items} />
+      </div>
+    </Panel>
   );
 }
 
@@ -259,57 +211,31 @@ export function OverviewPage(): ReactNode {
 function DomainsPanel({ domains }: { domains: readonly DomainFleet[] }): ReactNode {
   return (
     <Panel className="overflow-hidden">
-      <PanelHeader title="Domains" description="Each domain's materializations and throughput." />
-      <ul className="divide-y divide-[var(--color-line)]">
+      <header className="px-4 pt-4 pb-2 sm:px-5">
+        <h2 className="text-[15px] font-semibold">Domains</h2>
+      </header>
+      <div className="divide-y divide-[var(--color-line)]">
         {domains.map((entry) => {
           const totals = entry.snapshot!.totals;
           return (
-            <li key={entry.domain}>
-              <Link
-                to={domainPath(entry.domain)}
-                className="grid grid-cols-[minmax(0,1.6fr)_repeat(4,minmax(0,1fr))] items-center gap-4 px-5 py-3 transition-colors hover:bg-[var(--color-raised)]"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-[13px] font-medium">{entry.name}</p>
-                  <p className="numeric truncate text-[12px] text-[var(--color-ink-muted)]">{entry.domain}</p>
-                </div>
-                <span className="text-right text-[13px]">
-                  {formatCount(totals.materializations)}{' '}
-                  <span className="text-[var(--color-ink-muted)]">{totals.materializations === 1 ? 'materialization' : 'materializations'}</span>
-                </span>
-                <span className="text-right text-[13px] text-[var(--color-ink-muted)]">
-                  {totals.running} running · {totals.failing} failing
-                </span>
-                <span className="numeric text-right text-[13px]">{formatRate(totals.rowsPerSecond, 'rows/s')}</span>
-                <span className="numeric text-right text-[13px] text-[var(--color-ink-muted)]">{formatCount(totals.rowsCommitted)} rows</span>
-              </Link>
-            </li>
+            <Link
+              key={entry.domain}
+              to={domainPath(entry.domain)}
+              className="grid grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))] items-center gap-4 px-4 py-3 transition-colors hover:bg-[var(--color-raised)] sm:px-5"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-[14px] font-medium">{entry.name}</p>
+                <p className="ident truncate text-[12px] text-[var(--color-ink-muted)]">{entry.domain}</p>
+              </div>
+              <span className="text-right text-[13px]">
+                {formatCount(totals.materializations)} <span className="text-[var(--color-ink-muted)]">{totals.materializations === 1 ? 'materialization' : 'materializations'}</span>
+              </span>
+              <span className="numeric text-right text-[13px]">{totals.rowsPerSecond === null ? '—' : `${formatReadoutRate(totals.rowsPerSecond)}/s`}</span>
+              <span className="numeric text-right text-[13px] text-[var(--color-ink-muted)]">{formatCount(totals.rowsCommitted)} rows</span>
+            </Link>
           );
         })}
-      </ul>
+      </div>
     </Panel>
-  );
-}
-
-function AttentionRow({ item, showDomain }: { item: DomainMaterialization; showDomain: boolean }): ReactNode {
-  return (
-    <li>
-      <Link
-        to={domainPath(item.domain, `/materializations/${item.materialization_id}`)}
-        className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-[var(--color-raised)]"
-      >
-        <AlertTriangle className="size-4 shrink-0 text-[var(--color-phase-paused)]" />
-        <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-2 truncate text-[13px] font-medium">
-            <span className="truncate">{displayName(item)}</span>
-            {showDomain ? <DomainChip name={item.domainName} id={item.domain} /> : null}
-          </p>
-          <p className="truncate text-[12px] text-[var(--color-ink-muted)]">
-            {humanize(item.phase_reason)} · <RelativeTime value={item.updated_at} />
-          </p>
-        </div>
-        <PhaseBadge phase={item.observed_phase} reason={item.phase_reason} />
-      </Link>
-    </li>
   );
 }

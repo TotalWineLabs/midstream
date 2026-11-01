@@ -181,7 +181,8 @@ Do not add a charting library.
   (`baseline="zero"` for rates, `"auto"` to fit large slow-moving values), a clock-time axis, and a
   crosshair readout on hover and on the arrow keys. Give it a window (`from`, `to`) and points
   `{ t, value }`; nulls break the line.
-- Proportions → reuse `DistributionBar`.
+- A state → `StatusGlyph`, `StatusLabel` or `StatusPill` from `lib/status.ts::statusOf` (10 §10.6).
+- A live number → `Ticker` (10 §10.7).
 - Something genuinely new → write it as SVG in `components/`, use design tokens for colour, and
   render a "Collecting…" placeholder below two data points.
 

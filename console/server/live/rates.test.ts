@@ -17,7 +17,7 @@ const dataDir = await mkdtemp(join(tmpdir(), 'console-rates-'));
 process.env.CONSOLE_DATA_DIR = dataDir;
 
 const { RateTracker, windowRate, windowSlope } = await import('./rates.ts');
-const { appendLag, appendSample } = await import('./store.ts');
+const { appendLag, appendSample, countArrivals } = await import('./store.ts');
 
 import type { CpMemberProgress, CpRuntimeProgress, LagSample, ThroughputSample } from '../../shared/types.ts';
 
@@ -201,5 +201,30 @@ describe('series', () => {
     const lastHour = history.filter((point) => point.t >= 5 * 3_600_000);
     assert.equal(lastHour.length, 241, 'the newest hour is at full resolution');
     assert.equal(history[0]?.t, 0, 'and the oldest point is still there');
+  });
+});
+
+describe('countArrivals', () => {
+  const measured = (ends: Record<string, Record<string, number>>) => ({
+    topics: Object.fromEntries(Object.entries(ends).map(([topic, end_offsets]) => [topic, { end_offsets }])),
+  });
+
+  it('keeps a running total of what arrived on the source topics', () => {
+    const first = countArrivals(undefined, measured({ orders: { '0': 100, '1': 50 } }));
+    assert.deepEqual(first, { ends: { orders: 150 }, arrived: 0 });
+    const second = countArrivals(first ?? undefined, measured({ orders: { '0': 130, '1': 60 } }));
+    assert.equal(second?.arrived, 40);
+  });
+
+  it('counts neither a topic just added nor one whose offsets started over', () => {
+    const first = countArrivals(undefined, measured({ orders: { '0': 1_000 } }));
+    const added = countArrivals(first ?? undefined, measured({ orders: { '0': 1_010 }, refunds: { '0': 5_000_000 } }));
+    assert.equal(added?.arrived, 10);
+    const recreated = countArrivals(added ?? undefined, measured({ orders: { '0': 3 }, refunds: { '0': 5_000_020 } }));
+    assert.equal(recreated?.arrived, 30);
+  });
+
+  it('has nothing to count without end offsets', () => {
+    assert.equal(countArrivals(undefined, { total_lag: 5 }), null);
   });
 });

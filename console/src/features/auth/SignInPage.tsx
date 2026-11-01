@@ -3,6 +3,7 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { PasswordInput } from './PasswordInput';
+import { Mark } from '@/components/Logo';
 import { SsoOutcomePanel, useSsoOutcome } from './SsoOutcome';
 import { Button, Field, Input, Select, Spinner } from '@/components/ui/primitives';
 import { ApiError } from '@/lib/api';
@@ -92,13 +93,12 @@ export function SignInPage(): ReactNode {
   };
 
   return (
-    <div className="flex min-h-full items-center justify-center bg-[var(--color-raised)] px-4 py-12">
+    <div className="flex min-h-full items-center justify-center bg-[var(--color-canvas)] px-4 py-12">
       <div className="w-full max-w-[380px]">
         <div className="mb-6 flex flex-col items-center text-center">
-          <span className="grid size-10 place-items-center rounded-[11px] bg-[var(--color-ink)]">
-            <span className="size-3.5 rounded-[3px] bg-[var(--color-canvas)]" />
-          </span>
-          <h1 className="mt-4 text-[20px] font-semibold tracking-tight">
+          {/* The app icon draws itself in, and the stream flows through it while signing in. */}
+          <Mark size={52} tile working={submitting} label="Midstream" className="rounded-[13px]" />
+          <h1 className="display mt-5 text-[24px] font-semibold">
             {pathDomain && many && domain ? `Sign in to ${domain.name}` : 'Sign in to Midstream'}
           </h1>
           <p className="mt-1 text-[13px] text-[var(--color-ink-muted)]">
@@ -127,7 +127,7 @@ export function SignInPage(): ReactNode {
                   Sign in with {provider.label}
                 </Button>
               ))}
-              <p className="flex items-center gap-3 pt-2 text-[11px] tracking-wide text-[var(--color-ink-faint)] uppercase">
+              <p className="flex items-center gap-3 pt-2 text-[12px] text-[var(--color-ink-faint)]">
                 <span className="h-px flex-1 bg-[var(--color-line)]" />
                 or with a password
                 <span className="h-px flex-1 bg-[var(--color-line)]" />

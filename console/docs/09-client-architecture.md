@@ -227,7 +227,7 @@ so the UI never renders `NaN` or `undefined`.
 
 | State | Owner | Persistence |
 |-------|-------|-------------|
-| Fleet snapshot | `useFleetStream` hook instance | None — re-derived on reconnect |
+| Fleet snapshot | `FleetStreamProvider` in the shell: one stream that the shell's count and pins and the page share (`useFleetStream`, `useFleet`) | None — re-derived on reconnect |
 | Detail snapshot | `useDetailStream` hook instance | None |
 | Schema versions / diff / dataset | TanStack Query cache | In-memory, keyed |
 | Schema timeline | TanStack Query `['schema-timeline', id, table, snapshot]` | In-memory; a new snapshot is a new key, so a commit re-reads it |
@@ -236,12 +236,13 @@ so the UI never renders `NaN` or `undefined`.
 | Pages of a run | TanStack Query, keyed by run, offset and readiness | Complete pages never change, so they are cached for good and the next one is prefetched |
 | SQL editor height, column rail width | `localStorage` (`console.data.sqlHeight`, `console.data.railWidth`) | Survives reload; guarded for private browsing |
 | JSON layout for exports and the row drawer's copy | `localStorage` (`console.data.jsonShape`: `nested` or `flat`) | Survives reload; nested when unset |
-| Consumer-lag window, throughput metric | `DetailOverviewTab` local state | Lost on navigation |
-| Search text, phase filter, sort | `MaterializationsPage` local state | Lost on navigation |
+| Consumer-lag window, throughput metric | `StateReadout` and `DiagnosticsPanels` local state | Lost on navigation |
+| Search text, recently deleted | `MaterializationsPage` local state | Lost on navigation |
 | Selected schema version, compare version, field filter | `SchemaTab` local state | Lost on navigation |
 | Who is signed in | TanStack Query `['session']`, from the HttpOnly session cookie | The cookie persists until sign-out or the session's maximum length |
 | Users, groups, roles, the permission catalog, the audit log | TanStack Query (`['users']`, `['user', id]`, `['groups']`, `['group', id]`, `['roles']`, `['role', id]`, `['permissions']`, `['audit', …]`) | In-memory; every directory change invalidates all of them and reloads the session |
-| Theme | `localStorage['console.theme']` + `documentElement.classList` | Persistent |
+| Appearance | `localStorage['console.theme']` (`light`, `dark`, absent for the system's; `lib/appearance.ts`) + `documentElement.classList`, applied before first paint by `index.html` | Persistent |
+| Pins | `localStorage['console.pins']` (`lib/pins.ts`), shared across tabs through the `storage` event | Persistent, per browser |
 | Toasts | `ToastProvider` context | Auto-dismiss |
 | Settings and their history | TanStack Query (`['settings']`, `['settings-history']`) | In-memory. Re-read after a save, and every 5 s on the Runtimes section while a rollout is applying |
 | Unsaved settings edits, conflict notice | `SettingsPage` local state | Lost on reload; leaving the page with edits asks first (`beforeunload`) |
@@ -262,11 +263,16 @@ blocking storage still gets working panes, just not remembered ones.
 
 ```
 features/
-  overview/OverviewPage.tsx                 Fleet dashboard
+  overview/OverviewPage.tsx                 Is everything flowing? The readout, the river, what needs you, the rows
+  overview/River.tsx                        The fleet as strands from Kafka through Midstream to the lake
+  overview/riverEngine.ts                   The river's particles, how they move, and its bed (2D canvas)
+  overview/riverLake.ts                     The lake: its current, settled rows and moving surface
+  overview/riverWater.ts                    The river's water: every particle a comet, drawn with WebGL 2
   materializations/
-    MaterializationsPage.tsx                Live list: search, filter, sort
-    CreateMaterializationDialog.tsx         Create form
-    actions.ts                              useLifecycleActions + phase predicates
+    MaterializationsPage.tsx                Grouped by state, the ones that need you first; search; recently deleted
+    CreateMaterializationPage.tsx           Create: the topics, name, protection and options beside the plan
+    actions.ts                              useLifecycleActions (stop acts at once, with Undo) + phase predicates
+    MaterializationRow.tsx                  A list row: the state's glyph, name, word and reason, one fact (rowFact)
   detail/
     DetailPage.tsx                          Header, actions, tab shell, stop and delete confirmations
     EditMaterializationDialog.tsx           Changes the topics, the replica count and the data protection: each removed topic's table kept or dropped, kept tables dropped; shows what is fixed at creation
@@ -274,8 +280,8 @@ features/
     TablesPanel.tsx                         The Overview's tables: written, kept, being dropped; what runs on each
     TableTab.tsx                            One table: figures, snapshots, maintenance and Run now, partitions, properties, Connect
     connect.ts                              No React: the Connect snippets per engine, following the location's scheme and its storage profile (tested)
-    OverviewTab.tsx                         Rates, committed data, throughput, reconciliation, lag, spec
-    lagTrend.ts                             Which way consumer lag is heading, how fast, and the time left
+    MaterializationOverview.tsx             The Overview tab: the readout by state, four facts, tables, properties
+    OverviewTab.tsx                         DiagnosticsPanels: reconciliation, lag, throughput, specification, skipped records
     RuntimeTab.tsx                          KasprApp observation, agents, binding
   schema/
     SchemaTab.tsx                           Version rail (dated by the data) + fields/changes/timeline switch
