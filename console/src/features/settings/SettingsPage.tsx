@@ -115,10 +115,8 @@ export function SettingsPage(): ReactNode {
     if (!hasEdits) return;
     const warn = (event: BeforeUnloadEvent): void => event.preventDefault();
     window.addEventListener('beforeunload', warn);
-    // Keep toasts, such as a failed save's, clear of the save bar and its button; on a phone the bar
-    // sits above the navigation.
-    const phone = window.matchMedia('(max-width: 767px)').matches;
-    document.documentElement.style.setProperty('--toast-offset', phone ? 'calc(8.5rem + env(safe-area-inset-bottom))' : '4.5rem');
+    // Keep toasts, such as a failed save's, clear of the save bar and its button.
+    document.documentElement.style.setProperty('--toast-offset', '4.5rem');
     return () => {
       window.removeEventListener('beforeunload', warn);
       document.documentElement.style.removeProperty('--toast-offset');

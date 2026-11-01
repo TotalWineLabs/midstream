@@ -7,7 +7,7 @@ import { refusal, waitForOutcome } from '../auth/outcomes.ts';
 import { config } from '../config.ts';
 import { assertSafeIdentifier, badRequest } from '../errors.ts';
 import type { Domain } from '../domains/domain.ts';
-import { visibleDetail } from '../live/store.ts';
+import { HISTORY_SPACING_MS, visibleDetail } from '../live/store.ts';
 import { datasetNameProblem, labelProblem, tableNameProblem } from '../../shared/tableNames.ts';
 import { PARTITION_GRANULARITIES, type CpAccepted } from '../../shared/types.ts';
 
@@ -204,6 +204,15 @@ export async function registerMaterializationRoutes(app: FastifyInstance): Promi
     const id = materializationId(request);
     const detail = await live.getDetail(id);
     return visibleDetail({ ...live.detailSnapshot(id), detail }, authOf(request).state.principal);
+  });
+
+  /**
+   * Its throughput a minute apart, for the charts' longer windows: asked when a window wider than
+   * the stream's series is chosen, so the stream's every frame stays small.
+   */
+  app.get('/materializations/:materializationId/throughput', { preHandler: permit('materializations.view_details') }, async (request) => {
+    const { live } = domainOf(request);
+    return { spacingMs: HISTORY_SPACING_MS, series: live.throughputHistory(materializationId(request)) };
   });
 
   /**

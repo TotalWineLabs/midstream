@@ -68,6 +68,8 @@ export class LiveStore {
   private readonly schemas = new Map<string, Map<string, CpSchema>>();
   private readonly schemaErrors = new Map<string, Map<string, string>>();
   private readonly series = new Map<string, ThroughputSample[]>();
+  /** The same samples a minute apart, kept for `seriesHistoryMs`: the charts' longer windows. */
+  private readonly history = new Map<string, ThroughputSample[]>();
   private readonly rateTrackers = new Map<string, RateTracker>();
   private readonly rates = new Map<string, CurrentRates>();
   private readonly lagHistory = new Map<string, LagSample[]>();
@@ -398,6 +400,12 @@ export class LiveStore {
       lag: detail.status.consumer_lag?.total_lag ?? null,
     };
     this.series.set(id, appendSample(this.series.get(id) ?? [], sample));
+    this.history.set(id, appendSample(this.history.get(id) ?? [], sample, HISTORY_SPACING_MS, Math.ceil(config.seriesHistoryMs / HISTORY_SPACING_MS)));
+  }
+
+  /** A materialization's throughput a minute apart, as long as `seriesHistoryMs` keeps it. */
+  throughputHistory(materializationId: string): ThroughputSample[] {
+    return this.history.get(materializationId) ?? [];
   }
 
   /** One point per lag measurement, kept by when the control plane measured it rather than when it was polled. */
@@ -454,6 +462,7 @@ export class LiveStore {
     this.schemas.delete(id);
     this.schemaErrors.delete(id);
     this.series.delete(id);
+    this.history.delete(id);
     this.rateTrackers.delete(id);
     this.rates.delete(id);
     this.lagHistory.delete(id);
@@ -481,6 +490,9 @@ function rateWindows(): { rowsMs: number; bytesMs: number; staleMs: number } {
     staleMs: Math.max(120_000, config.ingestRateWindowMs * 2),
   };
 }
+
+/** Spacing of the longer throughput history: a day of it is 1,440 points. */
+export const HISTORY_SPACING_MS = 60_000;
 
 /**
  * Add `sample` to a series whose points are at least `seriesSampleMs` apart.

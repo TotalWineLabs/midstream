@@ -51,6 +51,7 @@ export function TimeSeriesChart({
   formatTick = formatValue,
   label,
   empty = 'Collecting…',
+  projection = null,
   className,
 }: {
   points: ChartPoint[];
@@ -71,6 +72,12 @@ export function TimeSeriesChart({
   label: string;
   /** Shown instead of a chart with fewer than two values in the window. */
   empty?: ReactNode;
+  /**
+   * Where the series is heading at its current pace: a dotted line from its last value to this
+   * point, which may lie past `to` (the line then leaves the plot at its edge). `label` says it in
+   * words, for the accessible name: a backlog's *reaches zero around 4:30 PM*.
+   */
+  projection?: { t: number; value: number; label: string } | null;
   className?: string;
 }): ReactNode {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -96,7 +103,11 @@ export function TimeSeriesChart({
   );
   const inside = useMemo(() => valued.filter((point) => point.t >= from), [valued, from]);
 
-  const axis = useMemo(() => valueAxis(inside.map((point) => point.value), { baseline }), [inside, baseline]);
+  // A projection's end is on the axis too, so a backlog's line can be seen to reach zero.
+  const axis = useMemo(
+    () => valueAxis([...inside.map((point) => point.value), ...(projection ? [projection.value] : [])], { baseline }),
+    [inside, baseline, projection],
+  );
   const left = Math.ceil(Math.max(...axis.ticks.map((tick) => formatTick(tick).length), 1) * CHAR_PX) + 12;
   const plotWidth = Math.max(1, width - left - MARGIN.right);
   const plotHeight = Math.max(1, height - MARGIN.top - MARGIN.bottom);
@@ -163,7 +174,7 @@ export function TimeSeriesChart({
       style={boxStyle}
       tabIndex={0}
       role="group"
-      aria-label={`${label}: ${last ? formatValue(last.value) : 'no data'}. Use the left and right arrow keys to read earlier values.`}
+      aria-label={`${label}: ${last ? formatValue(last.value) : 'no data'}${projection ? `, ${projection.label}` : ''}. Use the left and right arrow keys to read earlier values.`}
       onPointerMove={(event) => pick(event.clientX)}
       onPointerLeave={() => setHover(null)}
       onFocus={() => setHover((current) => current ?? valued.length - 1)}
@@ -220,7 +231,22 @@ export function TimeSeriesChart({
                 strokeLinejoin="round"
               />
             ))}
+            {projection && last ? (
+              // Dots, not a line: what is measured is drawn solid, what is expected only dotted.
+              <path
+                d={`M ${x(last.t).toFixed(1)},${y(last.value).toFixed(1)} L ${x(projection.t).toFixed(1)},${y(projection.value).toFixed(1)}`}
+                fill="none"
+                stroke={color}
+                strokeOpacity={0.75}
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeDasharray="0 6"
+              />
+            ) : null}
           </g>
+          {projection && last && projection.t <= to ? (
+            <circle cx={x(projection.t)} cy={y(projection.value)} r={3.5} fill="var(--color-shelf)" stroke={color} strokeWidth={2} />
+          ) : null}
 
           {last && !active ? (
             <circle cx={x(last.t)} cy={y(last.value)} r={3.5} fill={color} stroke="var(--color-shelf)" strokeWidth={2} />

@@ -8,6 +8,8 @@ import { Badge, KeyValue, Panel, PanelHeader, SegmentedControl } from '@/compone
 import { cn } from '@/lib/cn';
 import { useAutoscaling, useMaterializationDefaults } from '@/lib/defaults';
 import { ProtectionChips, ProtectionStateBadge } from '../protection/ProtectionSummary';
+import { THROUGHPUT_WINDOWS, type ThroughputWindow } from './throughputHistory';
+import { useThroughput } from './useThroughput';
 import {
   formatBytes,
   formatBytesRate,
@@ -85,20 +87,15 @@ export function DiagnosticsPanels({ snapshot }: { snapshot: DetailSnapshot }): R
   const progress = detail?.status.runtime_progress;
   const consumerLag = detail?.status.consumer_lag;
   const [metric, setMetric] = useState<ThroughputMetric>('rows');
+  const [throughputWindow, setThroughputWindow] = useState<ThroughputWindow>('1h');
+  const series = useThroughput(snapshot.materializationId, snapshot.series, throughputWindow);
   const autoscalingPolicy = useAutoscaling();
   const protectionCatalog = useMaterializationDefaults().defaults?.protection ?? null;
   const liveTables = Object.values(progress?.tables ?? {});
 
   const now = Date.parse(snapshot.generatedAt) || Date.now();
-  const rowSeries = useMemo<ChartPoint[]>(
-    () => snapshot.series.map((point) => ({ t: point.t, value: point.rowsPerSecond })),
-    [snapshot.series],
-  );
-  const byteSeries = useMemo<ChartPoint[]>(
-    () => snapshot.series.map((point) => ({ t: point.t, value: point.bytesPerSecond })),
-    [snapshot.series],
-  );
-  const seriesFrom = snapshot.series[0]?.t ?? now;
+  const rowSeries = useMemo<ChartPoint[]>(() => series.map((point) => ({ t: point.t, value: point.rowsPerSecond })), [series]);
+  const byteSeries = useMemo<ChartPoint[]>(() => series.map((point) => ({ t: point.t, value: point.bytesPerSecond })), [series]);
   const recordsSkipped = progress?.cumulative_records_skipped ?? progress?.records_skipped ?? null;
 
   if (!detail) return null;
@@ -164,20 +161,27 @@ export function DiagnosticsPanels({ snapshot }: { snapshot: DetailSnapshot }): R
           <PanelHeader
             title="Throughput"
             actions={
-              <SegmentedControl
-                value={metric}
-                onChange={setMetric}
-                options={[
-                  { value: 'rows', label: 'Rows' },
-                  { value: 'bytes', label: 'Bytes' },
-                ]}
-              />
+              <span className="flex flex-wrap items-center justify-end gap-2">
+                <SegmentedControl
+                  value={metric}
+                  onChange={setMetric}
+                  options={[
+                    { value: 'rows', label: 'Rows' },
+                    { value: 'bytes', label: 'Bytes' },
+                  ]}
+                />
+                <SegmentedControl
+                  value={throughputWindow}
+                  onChange={setThroughputWindow}
+                  options={(Object.keys(THROUGHPUT_WINDOWS) as ThroughputWindow[]).map((value) => ({ value, label: value }))}
+                />
+              </span>
             }
           />
           <div className="min-h-[220px] flex-1 px-3 pt-3 pb-2">
             <TimeSeriesChart
               points={metric === 'rows' ? rowSeries : byteSeries}
-              from={Math.max(seriesFrom, now - 30 * 60_000)}
+              from={now - THROUGHPUT_WINDOWS[throughputWindow]}
               to={now}
               formatValue={metric === 'rows' ? (value) => formatRate(value, 'rows/s') : formatBytesRate}
               formatTick={metric === 'rows' ? formatCount : (value) => formatBytes(value)}
@@ -198,7 +202,7 @@ export function DiagnosticsPanels({ snapshot }: { snapshot: DetailSnapshot }): R
             <KeyValue label="Location" className="col-span-2">
               <span className="ident block break-all">{materializationLocation(detail)}</span>
             </KeyValue>
-            <KeyValue label="Replicas">
+            <KeyValue label="Workers">
               {detail.materialization.replicas ?? 1}
               {detail.status.desired_phase === 'stopped' ? (
                 <span className="text-[var(--color-ink-muted)]"> · none running while stopped</span>
@@ -209,7 +213,7 @@ export function DiagnosticsPanels({ snapshot }: { snapshot: DetailSnapshot }): R
             {detail.materialization.autoscaling !== undefined ? (
               <KeyValue label="Autoscaling">{autoscalingLabel(detail.materialization.autoscaling, autoscalingPolicy)}</KeyValue>
             ) : null}
-            <KeyValue label="Storage per replica">{detail.materialization.storage_size ?? '—'}</KeyValue>
+            <KeyValue label="Storage per worker">{detail.materialization.storage_size ?? '—'}</KeyValue>
             <KeyValue label="Namespace" mono>{detail.materialization.namespace}</KeyValue>
             <KeyValue label="Runtime mode">{detail.materialization.runtime_mode}</KeyValue>
             <KeyValue label="Runtime name" mono>

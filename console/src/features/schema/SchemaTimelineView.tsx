@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { FieldName, TypeChip } from './SchemaFieldTable';
 import { buildTimeline, dayOf, formatSpan, type TimelineEntry, type TimelineGroup } from './timeline';
 import { Button, EmptyState, Panel, PanelHeader, Skeleton } from '@/components/ui/primitives';
+import { cn } from '@/lib/cn';
 import { formatCount } from '@/lib/format';
 import type { CpSchemaField, PartitionGranularity, SchemaTimeline, TimeSpan } from '@shared/types';
 
@@ -114,14 +115,6 @@ const ICONS: Record<TimelineEntry['kind'], ReactNode> = {
   unmapped: <Inbox className="size-3.5" />,
 };
 
-const TONES: Record<TimelineEntry['kind'], string> = {
-  added: 'var(--color-phase-running)',
-  forked: 'var(--color-accent)',
-  collapsed: 'var(--color-phase-paused)',
-  stopped: 'var(--color-ink-faint)',
-  unmapped: 'var(--color-phase-pending)',
-};
-
 function TimelineRow({
   entry,
   group,
@@ -135,7 +128,7 @@ function TimelineRow({
   const own = dayOf(entry.span.to) !== dayOf(group.to);
   return (
     <li className="flex min-w-0 items-start gap-2.5 text-[12px]">
-      <span className="mt-[3px] shrink-0" style={{ color: TONES[entry.kind] }} aria-hidden>
+      <span className={cn('mt-[3px] shrink-0', entry.kind === 'stopped' ? 'text-[var(--color-ink-faint)]' : 'text-[var(--color-ink-muted)]')} aria-hidden>
         {ICONS[entry.kind]}
       </span>
       <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">

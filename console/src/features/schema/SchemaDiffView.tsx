@@ -4,58 +4,50 @@ import { useState, type ReactNode } from 'react';
 
 import { FieldName, TypeChip } from './SchemaFieldTable';
 import { EmptyState, Panel, PanelHeader, SegmentedControl, Skeleton } from '@/components/ui/primitives';
-import { cn } from '@/lib/cn';
 import { humanize } from '@/lib/format';
 import { useApi } from '@/lib/domains';
 import type { SchemaChangeKind, SchemaDiffEntry } from '@shared/types';
 
-const KIND_STYLE: Record<SchemaChangeKind, { icon: ReactNode; label: string; accent: string; hint: string }> = {
+/** Each kind of change, told apart by its shape and its word; neutral, since none is a state (§10.3). */
+const KIND_STYLE: Record<SchemaChangeKind, { icon: ReactNode; label: string; hint: string }> = {
   added: {
     icon: <Plus className="size-3" />,
     label: 'Added',
-    accent: 'var(--color-phase-running)',
     hint: 'A new field, for a key the topic started sending.',
   },
   forked: {
     icon: <GitFork className="size-3" />,
     label: 'Forked',
-    accent: 'var(--color-accent)',
     hint: 'A new field for an existing key, whose values changed to a type the old field cannot hold. Both stay readable as one column.',
   },
   collapsed: {
     icon: <Braces className="size-3" />,
     label: 'Collapsed',
-    accent: 'var(--color-phase-paused)',
     hint: 'From here on the key’s values are kept as JSON text: its type changed too often, or its object grew too wide.',
   },
   type_widened: {
     icon: <ArrowUpRight className="size-3" />,
     label: 'Widened',
-    accent: 'var(--color-phase-pending)',
     hint: 'The field’s type was promoted in place, which readers handle without a fork.',
   },
   required_changed: {
     icon: <ShieldCheck className="size-3" />,
     label: 'Required changed',
-    accent: 'var(--color-phase-pending)',
     hint: 'The field became optional or required.',
   },
   superseded: {
     icon: <Replace className="size-3" />,
     label: 'Superseded',
-    accent: 'var(--color-ink-muted)',
     hint: 'A newer fork took the key’s values over; this field keeps the rows written before.',
   },
   removed: {
     icon: <Minus className="size-3" />,
     label: 'Removed',
-    accent: 'var(--color-phase-failed)',
     hint: 'The field is gone from the schema. The materializer never removes one; another engine did.',
   },
   unchanged: {
     icon: null,
     label: 'Unchanged',
-    accent: 'var(--color-ink-faint)',
     hint: '',
   },
 };
@@ -152,7 +144,7 @@ export function SchemaDiffView({
 function Summary({ kind, count }: { kind: SchemaChangeKind; count: number }): ReactNode {
   if (count === 0) return null;
   return (
-    <span className="inline-flex items-center gap-1" style={{ color: KIND_STYLE[kind].accent }} title={KIND_STYLE[kind].hint}>
+    <span className="inline-flex items-center gap-1 text-[var(--color-ink-muted)]" title={KIND_STYLE[kind].hint}>
       {KIND_STYLE[kind].icon}
       {count} {KIND_STYLE[kind].label.toLowerCase()}
     </span>
@@ -167,11 +159,7 @@ function DiffRow({ entry }: { entry: SchemaDiffEntry }): ReactNode {
   return (
     <li className="flex items-start gap-3 px-5 py-3">
       <span
-        className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-md"
-        style={{
-          color: style.accent,
-          backgroundColor: `color-mix(in srgb, ${style.accent} 14%, transparent)`,
-        }}
+        className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-md bg-[var(--color-raised)] text-[var(--color-ink-muted)]"
         title={style.hint || style.label}
       >
         {style.icon}
@@ -180,7 +168,7 @@ function DiffRow({ entry }: { entry: SchemaDiffEntry }): ReactNode {
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <FieldName name={entry.name} />
-          {physical !== entry.name ? <span className="numeric text-[11px] text-[var(--color-ink-faint)]">{physical}</span> : null}
+          {physical !== entry.name ? <span className="ident text-[11px] text-[var(--color-ink-faint)]">{physical}</span> : null}
           {field ? <TypeChip type={field.type} json={field.kind === 'json'} /> : null}
           <span className="numeric text-[11px] text-[var(--color-ink-faint)]" title="Iceberg field id">
             id {entry.field_id}
@@ -192,15 +180,18 @@ function DiffRow({ entry }: { entry: SchemaDiffEntry }): ReactNode {
             {entry.changes.map((change) => (
               <li key={change.attribute} className="text-[12px] text-[var(--color-ink-muted)]">
                 {humanize(change.attribute)}:{' '}
-                <span className="numeric text-[var(--color-phase-failed)] line-through">{renderValue(change.from)}</span>{' '}
-                <span className="numeric text-[var(--color-phase-running)]">{renderValue(change.to)}</span>
+                <span className="ident text-[var(--color-ink-faint)] line-through decoration-[var(--color-line-strong)]">{renderValue(change.from)}</span>
+                <span className="px-1 text-[var(--color-ink-faint)]" aria-label="to">
+                  →
+                </span>
+                <span className="ident text-[var(--color-ink)]">{renderValue(change.to)}</span>
               </li>
             ))}
           </ul>
         ) : null}
       </div>
 
-      <span className={cn('shrink-0 text-[11px] font-medium')} style={{ color: style.accent }} title={style.hint || undefined}>
+      <span className="shrink-0 text-[11px] font-medium text-[var(--color-ink-muted)]" title={style.hint || undefined}>
         {style.label}
       </span>
     </li>

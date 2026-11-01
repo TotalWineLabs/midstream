@@ -209,6 +209,11 @@ const tunableDeployment = {
    */
   seriesSampleMs: int('CONSOLE_SERIES_SAMPLE_MS', 5_000),
   /**
+   * How long each materialization's throughput is kept at one point a minute, for the charts'
+   * longer windows. In memory, like the series above: a restart starts it again.
+   */
+  seriesHistoryMs: int('CONSOLE_SERIES_HISTORY_MS', 24 * 60 * 60 * 1000),
+  /**
    * The spans ingest and write rates are measured over, per runtime member.
    *
    * Members report their counters on their own heartbeats (30 s by default). A member's rate is
@@ -256,6 +261,11 @@ const tunableDeployment = {
   exportRowLimit: int('CONSOLE_EXPORT_ROW_LIMIT', 1_000_000),
   /** Most rows one page request may return. */
   pageRowLimit: int('CONSOLE_PAGE_ROW_LIMIT', 1_000),
+  /**
+   * The most data a table's view may scan to run by itself when its filters, time range or order
+   * change; a bigger one shows its size and waits for Run. 0: it never runs by itself.
+   */
+  autoRunMaxBytes: int('CONSOLE_AUTO_RUN_MAX_BYTES', 256 * 1024 * 1024),
 
   /**
    * The live tail: a run of a table, every materialization's, also reads the records newer than its

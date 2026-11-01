@@ -277,7 +277,7 @@ that would take a metadata column's name keeps it (`payload._kafka_offset`). Lin
 **What is the difference between nested and flat JSON exports?**
 Flat keeps one key per column, `{"customer.email": …}`, exactly as the grid shows it. Nested rebuilds
 the record — `{"customer": {"email": …}, "items": [{"sku": …}]}` — with `json` fields decoded.
-The choice under **Export** is remembered and also applies to the row drawer's JSON copy.
+The choice under **Export** is remembered and also applies to the row properties' JSON copy.
 
 **Why are there no `schema_version` or `ingest_date` columns?**
 They were 0.x storage layout, not data. A row's Kafka timestamp, partition, offset, key and headers
@@ -452,7 +452,7 @@ one control plane at `localhost:6065`), and it works unchanged. Nothing under `/
 | `midstream_session-flow` cookie (HttpOnly, `/api/auth/sso` only) | A provider's sign-in in progress, for up to 10 minutes |
 | `localStorage['console.data.sqlHeight']` | SQL editor height, px |
 | `localStorage['console.data.railWidth']` | Column rail width, px (264–720) |
-| `localStorage['console.data.jsonShape']` | JSON layout for exports and the row drawer: `nested` or `flat` |
+| `localStorage['console.data.jsonShape']` | JSON layout for exports and the row properties' copy: `nested` or `flat` |
 | The settings home's `settings` table, `console` scope | This console's settings overrides; the console keeps no copy on disk |
 | `<CONSOLE_DATA_DIR>/parquet-cache/<profile>/<container>/<key>` | Mirrored Parquet of cached storage profiles |
 | `<CONSOLE_DATA_DIR>/runs/<run id>/` | One statement run's result, removed with the run |

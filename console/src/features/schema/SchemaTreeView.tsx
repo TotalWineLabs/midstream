@@ -127,7 +127,7 @@ export function SchemaTreeView({ fields }: { fields: CpSchemaField[] }): ReactNo
               <span className="size-4 shrink-0" />
             )}
 
-            <span className="numeric flex min-w-0 flex-1 items-center gap-1.5 text-[12px] text-[var(--color-ink)]">
+            <span className="ident flex min-w-0 flex-1 items-center gap-1.5 text-[12px] text-[var(--color-ink)]">
               <span className="truncate">
                 {node.name}
                 {list ? <span className="text-[var(--color-ink-faint)]">[]</span> : null}

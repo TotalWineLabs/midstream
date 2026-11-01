@@ -104,6 +104,7 @@ These four variables define the entire real-time behaviour. See
 | `CONSOLE_TOPIC_CATALOG_MIN_REFRESH_MS` | int | `5000` | Floor between topic-list refreshes, however many browsers ask |
 | `CONSOLE_SERIES_POINTS` | int | `240` | Points kept in every throughput series |
 | `CONSOLE_SERIES_SAMPLE_MS` | int | `5000` | Least spacing between those points; the newest point still follows every poll |
+| `CONSOLE_SERIES_HISTORY_MS` | int | `86400000` (24 h) | How long each materialization's throughput is also kept a point a minute, for the charts' 1h, 6h and 24h windows. In memory: a restart starts it again |
 | `CONSOLE_INGEST_RATE_WINDOW_MS` | int | `60000` | Span each runtime member's row rate is measured over, between its own heartbeats |
 | `CONSOLE_WRITE_RATE_WINDOW_MS` | int | `900000` | Span each member's Parquet byte rate is fitted over (a least-squares slope) |
 | `CONSOLE_LAG_HISTORY_MS` | int | `21600000` (6 h) | How long consumer-lag history is kept, one point per measurement |
@@ -170,6 +171,7 @@ old `schema-history/` directory can be deleted. See
 | `CONSOLE_RESULT_ROW_LIMIT` | int | `1000000` | Rows a statement's result keeps for paging and export. Its total is always counted in full |
 | `CONSOLE_EXPORT_ROW_LIMIT` | int | `1000000` | Most rows one export contains |
 | `CONSOLE_PAGE_ROW_LIMIT` | int | `1000` | Most rows one page request returns |
+| `CONSOLE_AUTO_RUN_MAX_BYTES` | int | `268435456` (256 MiB) | The most a table's view may scan to run by itself as its filters, time range or order change; a bigger one says its size and waits for Run. `0`: every change waits for Run |
 
 ### Threads, the worker pool, and scan width
 
@@ -338,7 +340,8 @@ on the Settings page, without a restart (§3.10).
 |------|--------|
 | Reduce control-plane load | Raise `CONSOLE_LIST_POLL_MS` and `CONSOLE_FLEET_DETAIL_POLL_MS` |
 | Snappier detail view | Lower `CONSOLE_DETAIL_POLL_MS` (also shortens the series window) |
-| Longer charts | Raise `CONSOLE_SERIES_POINTS` or `CONSOLE_SERIES_SAMPLE_MS` |
+| Longer charts | Raise `CONSOLE_SERIES_HISTORY_MS` for the wider windows; `CONSOLE_SERIES_POINTS` or `CONSOLE_SERIES_SAMPLE_MS` for the stream's own points |
+| Fewer scans started by edits | Lower `CONSOLE_AUTO_RUN_MAX_BYTES`, or set it to `0` |
 | Steadier or more responsive rates | Raise or lower `CONSOLE_INGEST_RATE_WINDOW_MS` |
 | Large fleet, slow refresh | Raise `CONSOLE_DETAIL_CONCURRENCY` — but that multiplies concurrent control-plane requests |
 | Bigger statement results or exports | Raise `CONSOLE_RESULT_ROW_LIMIT` / `CONSOLE_EXPORT_ROW_LIMIT`; results are stored on disk under `CONSOLE_RUN_DIR` |
@@ -354,8 +357,8 @@ and what a reset returns to.
 
 | Section | Key → variable |
 |---------|----------------|
-| Live updates | `listPollIntervalMs` → `CONSOLE_LIST_POLL_MS`, `detailPollIntervalMs` → `CONSOLE_DETAIL_POLL_MS`, `fleetDetailPollIntervalMs` → `CONSOLE_FLEET_DETAIL_POLL_MS`, `idlePollIntervalMs` → `CONSOLE_IDLE_POLL_MS`, `detailConcurrency` → `CONSOLE_DETAIL_CONCURRENCY`, `seriesRetention` → `CONSOLE_SERIES_POINTS`, `seriesSampleMs` → `CONSOLE_SERIES_SAMPLE_MS`, `ingestRateWindowMs` → `CONSOLE_INGEST_RATE_WINDOW_MS`, `writeRateWindowMs` → `CONSOLE_WRITE_RATE_WINDOW_MS`, `lagHistoryMs` → `CONSOLE_LAG_HISTORY_MS` |
-| Data explorer | `dataAccessEnabled` → `CONSOLE_DATA_ACCESS_ENABLED`, `pageRowLimit` → `CONSOLE_PAGE_ROW_LIMIT`, `resultRowLimit` → `CONSOLE_RESULT_ROW_LIMIT`, `exportRowLimit` → `CONSOLE_EXPORT_ROW_LIMIT`, `queryStatsTimeoutMs` → `CONSOLE_QUERY_STATS_TIMEOUT_MS`, `runIdleRetentionMs` → `CONSOLE_RUN_RETENTION_MS`, `snapshotCacheMs` → `CONSOLE_SNAPSHOT_CACHE_MS`, `tableMetadataFreshMs` → `CONSOLE_TABLE_METADATA_FRESH_MS`, `catalogMaxStaleMs` → `CONSOLE_CATALOG_MAX_STALE_MS`, `cachedModeMaxFiles` → `CONSOLE_CACHED_MODE_MAX_FILES`, `cachedModeMaxBytes` → `CONSOLE_CACHED_MODE_MAX_BYTES` |
+| Live updates | `listPollIntervalMs` → `CONSOLE_LIST_POLL_MS`, `detailPollIntervalMs` → `CONSOLE_DETAIL_POLL_MS`, `fleetDetailPollIntervalMs` → `CONSOLE_FLEET_DETAIL_POLL_MS`, `idlePollIntervalMs` → `CONSOLE_IDLE_POLL_MS`, `detailConcurrency` → `CONSOLE_DETAIL_CONCURRENCY`, `seriesRetention` → `CONSOLE_SERIES_POINTS`, `seriesSampleMs` → `CONSOLE_SERIES_SAMPLE_MS`, `seriesHistoryMs` → `CONSOLE_SERIES_HISTORY_MS`, `ingestRateWindowMs` → `CONSOLE_INGEST_RATE_WINDOW_MS`, `writeRateWindowMs` → `CONSOLE_WRITE_RATE_WINDOW_MS`, `lagHistoryMs` → `CONSOLE_LAG_HISTORY_MS` |
+| Data explorer | `dataAccessEnabled` → `CONSOLE_DATA_ACCESS_ENABLED`, `pageRowLimit` → `CONSOLE_PAGE_ROW_LIMIT`, `autoRunMaxBytes` → `CONSOLE_AUTO_RUN_MAX_BYTES`, `resultRowLimit` → `CONSOLE_RESULT_ROW_LIMIT`, `exportRowLimit` → `CONSOLE_EXPORT_ROW_LIMIT`, `queryStatsTimeoutMs` → `CONSOLE_QUERY_STATS_TIMEOUT_MS`, `runIdleRetentionMs` → `CONSOLE_RUN_RETENTION_MS`, `snapshotCacheMs` → `CONSOLE_SNAPSHOT_CACHE_MS`, `tableMetadataFreshMs` → `CONSOLE_TABLE_METADATA_FRESH_MS`, `catalogMaxStaleMs` → `CONSOLE_CATALOG_MAX_STALE_MS`, `cachedModeMaxFiles` → `CONSOLE_CACHED_MODE_MAX_FILES`, `cachedModeMaxBytes` → `CONSOLE_CACHED_MODE_MAX_BYTES` |
 | Topics & Kafka | `topicCatalogTtlMs` → `CONSOLE_TOPIC_CATALOG_TTL_MS`, `topicCatalogMinRefreshMs` → `CONSOLE_TOPIC_CATALOG_MIN_REFRESH_MS` |
 | Diagnostics | `logLevel` → `LOG_LEVEL`, `controlPlaneTimeoutMs` → `CONTROL_PLANE_TIMEOUT_MS` |
 | Security | `sessionCheckMs` → `CONSOLE_SESSION_CHECK_MS`, `signInAttemptsPerMinute` → `CONSOLE_SIGN_IN_ATTEMPTS_PER_MINUTE` |

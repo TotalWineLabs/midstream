@@ -146,6 +146,19 @@ export const CONSOLE_SETTINGS: readonly ConsoleSettingDefinition[] = [
     maximum: DAY,
   },
   {
+    key: 'seriesHistoryMs',
+    envVar: 'CONSOLE_SERIES_HISTORY_MS',
+    section: 'live',
+    label: 'Throughput history',
+    description:
+      'How long each materialization’s throughput is kept, a point a minute, for the charts’ longer ' +
+      'windows. Kept in memory: a restart of the console starts it again.',
+    kind: 'integer',
+    unit: 'ms',
+    minimum: HOUR,
+    maximum: 7 * DAY,
+  },
+  {
     key: 'lagHistoryMs',
     envVar: 'CONSOLE_LAG_HISTORY_MS',
     section: 'live',
@@ -178,6 +191,20 @@ export const CONSOLE_SETTINGS: readonly ConsoleSettingDefinition[] = [
     unit: 'rows',
     minimum: 10,
     maximum: 10_000,
+  },
+  {
+    key: 'autoRunMaxBytes',
+    envVar: 'CONSOLE_AUTO_RUN_MAX_BYTES',
+    section: 'data',
+    label: 'Run as you edit, up to',
+    description:
+      'The most data a table’s view may scan to run by itself as its filters, time range or order ' +
+      'change. A bigger one shows how much it would read and waits for Run. 0: views wait for Run.',
+    kind: 'integer',
+    unit: 'bytes',
+    minimum: 0,
+    maximum: 64 * GIB,
+    effect: 'the next change to a view',
   },
   {
     key: 'resultRowLimit',

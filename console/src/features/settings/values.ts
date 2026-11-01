@@ -274,6 +274,8 @@ const UNIT_LABELS: Record<string, string> = {
   hours: 'h',
   days: 'days',
   bytes: 'bytes',
+  // An older control plane counts a runtime's members as replicas; the console says workers (10 §10.9).
+  replicas: 'workers',
 };
 
 /** The short unit shown beside a number field. */
@@ -310,7 +312,7 @@ export function formatValue(
     if (setting.unit === 'days') return value === 1 ? '1 day' : `${formatNumber(value)} days`;
     if (setting.unit === 'attempts' && value === 1) return '1 attempt';
     if (setting.unit === 'bytes') return humanizeBytes(value);
-    return setting.unit ? `${formatNumber(value)} ${setting.unit}` : formatNumber(value);
+    return setting.unit ? `${formatNumber(value)} ${UNIT_LABELS[setting.unit] ?? setting.unit}` : formatNumber(value);
   }
   return String(value);
 }

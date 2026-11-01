@@ -152,7 +152,7 @@ runtime whose members keep restarting is not shown as such.
 than 100,000 records behind that would take longer than 30 minutes to catch up gets up to 16 members
 until it has (07 §7.12a). Check that the cluster has room for that many members of the runtimes most
 likely to fall behind — each member requests what the runtime spec says, its CPU then set by the
-VPA — or lower *Autoscaling maximum replicas*, or turn *Autoscale runtimes* off, before the upgrade
+VPA — or lower *Most workers when behind*, or turn *Add workers when far behind* off, before the upgrade
 (Settings › Materializations, or `CONTROL_PLANE_RUNTIME_AUTOSCAL…` in the manifest).
 
 ### Adding the protection key
@@ -800,9 +800,9 @@ once the runtime has caught up.
 
 ### Autoscaling
 
-A runtime more than *Lag worth scaling for* (100,000) records behind, that would take longer than
+A runtime more than *Behind enough to add workers* (100,000) records behind, that would take longer than
 the *Catch-up target* (30 minutes) at its pace, gets the members that pace says it needs — at most
-*Autoscaling maximum replicas* (16), and no more than its topics' partitions keep busy — and goes
+*Most workers when behind* (16), and no more than its topics' partitions keep busy — and goes
 back to its own replica count after three measurements under the floor (07 §7.12a). Only a runtime
 running and healthy is scaled up, and changes are at least *Time between scaling steps* (5 minutes)
 apart. The materialization's detail says how it is scaled and why (`autoscale`, 04 §4.6); the
@@ -814,7 +814,7 @@ curl -X PATCH localhost:6065/materializations/$MAT -H 'Content-Type: application
      -H "$AUTH" -d '{"autoscaling": false}'
 ```
 
-Off for every materialization: Settings › Materializations › *Autoscale runtimes*; scaled runtimes go
+Off for every materialization: Settings › Materializations › *Add workers when far behind*; scaled runtimes go
 back within a minute. Each change of members rebalances the runtime's consumer group, as a change of
 replicas does. The control plane logs each change as `control_plane_runtime_autoscaled`.
 
@@ -1201,7 +1201,7 @@ under 8 MiB, so it does not grow with the topic: on a test cluster a runtime tha
 records used 72 KiB of it (2026-10-23). The control plane's own volume and the maintenance app's are
 their KasprApps' `storage` (1Gi), unchanged. Batches are staged in the
 container's filesystem, on the node's disk, which bounds them instead. The size is the deployment's,
-not the request's: a changed setting (Settings › Materializations › Storage per replica) applies to
+not the request's: a changed setting (Settings › Materializations › Storage per worker) applies to
 runtimes created after it, and one created earlier keeps its own (`1Gi` before 4.0).
 
 ### Scaling notes

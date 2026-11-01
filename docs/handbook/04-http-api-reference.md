@@ -431,7 +431,7 @@ applies to materializations created after it.
 | `destination_uri` | `default_destination_uri`. The tables are created at `<destination_uri>/<storage_prefix>/<materialization_id>/<table>`, one directory each (11 §11.1) | Materializations › Destination |
 | `namespace` | `default_namespace`: where the runtime's KasprApp runs | read-only |
 | `runtime_name` | `<runtime_name_prefix>-<materialization_id>`, bounded to a Kubernetes name (`runtime/naming.py`); the record's `resolved_runtime_name` | — |
-| `storage_size` | `default_runtime_storage_size` (`64Mi`): each runtime member's persistent volume, which holds only its state table (10 §10.8). The control plane's and the maintenance app's own volumes are their manifests' (1Gi) | Materializations › Storage per replica |
+| `storage_size` | `default_runtime_storage_size` (`64Mi`): each runtime member's persistent volume, which holds only its state table (10 §10.8). The control plane's and the maintenance app's own volumes are their manifests' (1Gi) | Materializations › Storage per worker |
 
 The destination is a storage URI, and its scheme names the object store the tables live in, for good
 (11 §11.1):
@@ -1358,10 +1358,10 @@ value comes from, plus the deployment's read-only settings:
       "key": "max_runtime_replicas",
       "scope": "control-plane",
       "section": "materializations",
-      "label": "Maximum replicas",
-      "description": "The most replicas a create or an edit may ask for. …",
+      "label": "Maximum workers",
+      "description": "The most workers a create or an edit may ask for. …",
       "kind": "integer",
-      "unit": "replicas",
+      "unit": "workers",
       "minimum": 1,
       "maximum": 1024,
       "nullable": false,
@@ -1458,7 +1458,7 @@ A change that alters nothing applies without a new revision.
 
 ```json
 { "error": { "code": "invalid_request",
-             "message": "Default replicas (20) cannot exceed maximum replicas (16)",
+             "message": "Default workers (20) cannot exceed maximum workers (16)",
              "details": { "field": "default_runtime_replicas" } } }
 ```
 

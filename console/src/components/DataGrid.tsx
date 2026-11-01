@@ -25,8 +25,10 @@ export interface DataGridProps {
   sort?: { column: string; direction: 'asc' | 'desc' } | null;
   onSortChange?: (column: string) => void;
   onCellClick?: (column: string, value: unknown) => void;
-  /** Opens the row detail view. Enables the leading gutter when provided. */
+  /** Opens a row's properties. Enables the leading gutter when provided. */
   onRowExpand?: (index: number) => void;
+  /** The row whose properties are open, marked in the grid. */
+  selectedIndex?: number | null;
   /** Absolute index of the first row, so numbering continues across pages. */
   rowNumberOffset?: number;
   /** Display labels keyed by column name; falls back to the raw name. */
@@ -71,6 +73,7 @@ export function DataGrid({
   onSortChange,
   onCellClick,
   onRowExpand,
+  selectedIndex = null,
   rowNumberOffset = 0,
   labels,
   pinnedColumn,
@@ -330,6 +333,7 @@ export function DataGrid({
                 {rows.slice(start, end).map((row, offset) => {
                   const index = start + offset;
                   const isLive = live?.has(index) ?? false;
+                  const selected = index === selectedIndex;
                   const key = keys[index] ?? null;
                   const shown = (
                     <div
@@ -337,19 +341,24 @@ export function DataGrid({
                       className={cn(
                         'group/row grid border-b border-[var(--color-line)] last:border-b-0 hover:bg-[var(--color-raised)]',
                         isLive && LIVE_GROUND,
+                        selected && 'bg-[var(--color-raised)]',
                         key !== null && fresh?.has(key) && 'row-arrive',
                       )}
+                      aria-current={selected ? 'true' : undefined}
                       style={{ gridTemplateColumns: layout.template, height: ROW_HEIGHT }}
                     >
                       {onRowExpand ? (
                         <button
                           type="button"
                           onClick={() => onRowExpand(index)}
-                          title={isLive ? 'Open row detail · live, not committed yet' : 'Open row detail'}
+                          title={isLive ? 'Open the row · live, not committed yet' : 'Open the row'}
                           aria-label={`Open row ${rowNumberOffset + index + 1}${isLive ? ', live' : ''}`}
+                          aria-pressed={selected}
                           className={cn(
                             'sticky left-0 z-10 flex items-center justify-end gap-1 border-r border-[var(--color-line)] px-2 transition-colors group-hover/row:bg-[var(--color-raised)] hover:text-[var(--color-ink)]',
                             isLive ? `${LIVE_GROUND} text-[var(--color-current-ink)]` : 'bg-[var(--color-surface)] text-[var(--color-ink-muted)]',
+                            // The open row's gutter carries a bar in ink, as a selected list item does.
+                            selected && 'bg-[var(--color-raised)] font-semibold text-[var(--color-ink)] shadow-[inset_2px_0_0_var(--color-ink)]',
                           )}
                         >
                           <Maximize2 className="size-3 opacity-0 transition-opacity group-hover/row:opacity-100" />
@@ -360,7 +369,9 @@ export function DataGrid({
                         const column = columns[columnIndex] as QueryColumn;
                         const value = row[column.name];
                         const empty = value === null || value === undefined;
-                        const text = empty ? 'null' : displayCell(value, column.type);
+                        const masked = column.protection !== undefined;
+                        // A withheld field is not stored at all: its absence is the mask, not a null.
+                        const text = empty ? (column.protection?.mask === 'redact' ? 'withheld' : 'null') : displayCell(value, column.type);
                         const local = !empty && typeof value === 'string' && isInstantType(column.type);
                         const pinned = isPinned(columnIndex);
                         const cell = (
@@ -382,12 +393,15 @@ export function DataGrid({
                             }
                             style={pinned ? { left: gutter } : undefined}
                             className={
-                              (empty
-                                ? 'numeric flex items-center overflow-hidden px-3 text-[12px] whitespace-nowrap text-[var(--color-ink-faint)] italic'
-                                : 'numeric flex items-center overflow-hidden px-3 text-[12px] whitespace-nowrap text-[var(--color-ink)]') +
-                              (onCellClick ? ' cursor-copy focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]' : '') +
+                              'flex items-center overflow-hidden px-3 whitespace-nowrap' +
+                              (masked
+                                ? ` veil${empty ? ' italic' : ''}`
+                                : empty
+                                  ? ' numeric text-[12px] text-[var(--color-ink-faint)] italic'
+                                  : ' numeric text-[12px] text-[var(--color-ink)]') +
+                              (onCellClick ? ' cursor-copy focus-visible:ring-2 focus-visible:ring-[var(--color-ink)]' : '') +
                               (pinned
-                                ? ` sticky z-10 border-r border-[var(--color-line)] ${isLive ? LIVE_GROUND : 'bg-[var(--color-surface)]'} group-hover/row:bg-[var(--color-raised)]`
+                                ? ` sticky z-10 border-r border-[var(--color-line)] ${selected ? 'bg-[var(--color-raised)]' : isLive ? LIVE_GROUND : 'bg-[var(--color-surface)]'} group-hover/row:bg-[var(--color-raised)]`
                                 : '')
                             }
                           >
