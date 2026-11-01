@@ -53,7 +53,6 @@ export function DetailPage(): ReactNode {
   const { data, status } = useDetailStream(materializationId ?? '');
   const { run, pending } = useLifecycleActions();
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [confirmStop, setConfirmStop] = useState(false);
   const [editing, setEditing] = useState(false);
   const { can } = useAuth();
 
@@ -127,7 +126,7 @@ export function DetailPage(): ReactNode {
             <>
               {canResume(detail) && can('materializations.resume') ? (
                 <Button
-                  onClick={() => run('resume', materializationId)}
+                  onClick={() => run('resume', materializationId, undefined, displayName(detail.materialization))}
                   loading={pending === 'resume'}
                 >
                   <Play className="size-4" />
@@ -135,7 +134,7 @@ export function DetailPage(): ReactNode {
                 </Button>
               ) : null}
               {canStop(detail) && can('materializations.stop') ? (
-                <Button onClick={() => setConfirmStop(true)} loading={pending === 'stop'}>
+                <Button onClick={() => run('stop', materializationId, undefined, displayName(detail.materialization))} loading={pending === 'stop'}>
                   <Square className="size-3.5" />
                   Stop
                 </Button>
@@ -211,41 +210,6 @@ export function DetailPage(): ReactNode {
       {detail ? (
         <>
           <EditMaterializationDialog open={editing} onClose={() => setEditing(false)} detail={detail} />
-          <Dialog
-            open={confirmStop}
-            onClose={() => setConfirmStop(false)}
-            title={`Stop ${displayName(detail.materialization)}?`}
-            description={`Its runtime is scaled to zero replicas: it stops consuming ${topicsLabel(detail.materialization.source_topics, 5)} and writes no new data. Its tables stay readable, and the maintenance app goes on compacting them and expiring old snapshots. Resume scales it back to ${replicaCount(detail.materialization.replicas)}.`}
-            footer={
-              <>
-                <Button variant="ghost" onClick={() => setConfirmStop(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  loading={pending === 'stop'}
-                  onClick={() => {
-                    run('stop', materializationId);
-                    setConfirmStop(false);
-                  }}
-                >
-                  Stop
-                </Button>
-              </>
-            }
-          >
-            <div className="space-y-3 text-[13px] leading-relaxed">
-              {/*
-                The table's own snapshots record the offsets committed to it, and a runtime resumes
-                from them, so a stop loses nothing it had only staged and duplicates nothing.
-              */}
-              <p className="text-[var(--color-ink-muted)]">
-                Everything it already committed stays queryable. A resumed runtime continues from the
-                offsets the table records, so rows still being batched when it stops are read again
-                and written exactly once.
-              </p>
-            </div>
-          </Dialog>
         </>
       ) : null}
 
@@ -266,7 +230,7 @@ export function DetailPage(): ReactNode {
               loading={pending === 'delete'}
               disabled={unwritable.length > 0}
               onClick={() => {
-                run('delete', materializationId);
+                run('delete', materializationId, undefined, detail ? displayName(detail.materialization) : materializationId);
                 setConfirmDelete(false);
               }}
             >
@@ -307,9 +271,4 @@ export function DetailPage(): ReactNode {
       </Dialog>
     </>
   );
-}
-
-function replicaCount(replicas: number | undefined): string {
-  const count = replicas ?? 1;
-  return `${count} replica${count === 1 ? '' : 's'}`;
 }

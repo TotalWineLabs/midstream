@@ -1,5 +1,5 @@
 // Type-only, so `node --test` can load this module without the bundler's path aliases.
-import type { LifecyclePhase, RuntimeHealthLevel } from '@shared/types';
+import type { LifecyclePhase, MaterializationSummary, RuntimeHealthLevel } from '@shared/types';
 
 /**
  * The six states a materialization is in, each a shape, a colour and a word: eleven phases, four
@@ -133,6 +133,20 @@ export function statusOf(input: StatusInput): Status {
   }
   if (catchingUp) return said('catching-up', 'Catching up', null, true);
   return said('flowing', 'Flowing', null, true);
+}
+
+/** A fleet row's state, from what the list carries: its phases, reason and health level. */
+export function itemStatus(
+  item: Pick<MaterializationSummary, 'desired_phase' | 'observed_phase' | 'phase_reason' | 'runtimeHealth'>,
+  catchingUp = false,
+): Status {
+  return statusOf({
+    desired: item.desired_phase,
+    observed: item.observed_phase,
+    reason: item.phase_reason,
+    health: item.runtimeHealth,
+    catchingUp,
+  });
 }
 
 /** Groups a list reads in, by what someone does about them: the ones that need you first. */

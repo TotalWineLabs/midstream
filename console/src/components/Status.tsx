@@ -76,8 +76,8 @@ export function StatusGlyph({
         </defs>
         <g mask={`url(#${fade}-m)`} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round">
           <g className={animate ? 'glyph-flow' : undefined}>
-            <path d={`M-6.8 4.4${WAVE}`} />
-            <path d={`M-5.1 8.4${WAVE}`} />
+            <path d={`M-6.8 4.2${WAVE}`} />
+            <path d={`M-6.8 8.4${WAVE}`} />
           </g>
         </g>
       </svg>

@@ -15,15 +15,18 @@ import { cn } from '@/lib/cn';
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 type ButtonSize = 'sm' | 'md';
 
+/**
+ * The primary action is ink, never Current: aqua means flowing (docs/10-design-system.md §10.3).
+ * Danger is Flare at a depth white or Abyss text reads on at 4.5:1 in each theme.
+ */
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
-  primary:
-    'bg-[var(--color-ink)] text-[var(--color-canvas)] hover:opacity-90 disabled:opacity-40 shadow-sm',
+  primary: 'bg-[var(--color-primary)] text-[var(--color-on-primary)] hover:opacity-90 disabled:opacity-40',
   secondary:
-    'bg-[var(--color-surface)] text-[var(--color-ink)] border border-[var(--color-line-strong)] hover:bg-[var(--color-raised)] disabled:opacity-40',
+    'bg-[var(--color-shelf)] text-[var(--color-ink)] border border-[var(--color-line-strong)] hover:bg-[var(--color-raised)] disabled:opacity-40',
   ghost:
     'text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] hover:bg-[var(--color-raised)] disabled:opacity-40',
   danger:
-    'bg-[var(--color-phase-failed)] text-white hover:opacity-90 disabled:opacity-40 shadow-sm',
+    'bg-[var(--color-flare-ink)] text-white dark:bg-[var(--color-flare)] dark:text-[var(--color-abyss)] hover:opacity-90 disabled:opacity-40',
 };
 
 const BUTTON_SIZES: Record<ButtonSize, string> = {
@@ -113,11 +116,11 @@ type BadgeTone = 'neutral' | 'accent' | 'running' | 'pending' | 'paused' | 'fail
 
 const BADGE_TONES: Record<BadgeTone, string> = {
   neutral: 'text-[var(--color-ink-muted)] bg-[var(--color-raised)] border-[var(--color-line)]',
-  accent: 'text-[var(--color-accent)] bg-[var(--color-accent-soft)] border-transparent',
-  running: 'text-[var(--color-phase-running)] bg-[color-mix(in_srgb,var(--color-phase-running)_12%,transparent)] border-transparent',
-  pending: 'text-[var(--color-phase-pending)] bg-[color-mix(in_srgb,var(--color-phase-pending)_12%,transparent)] border-transparent',
-  paused: 'text-[var(--color-phase-paused)] bg-[color-mix(in_srgb,var(--color-phase-paused)_14%,transparent)] border-transparent',
-  failed: 'text-[var(--color-phase-failed)] bg-[color-mix(in_srgb,var(--color-phase-failed)_12%,transparent)] border-transparent',
+  accent: 'text-[var(--color-current-ink)] bg-[var(--color-current-wash)] border-transparent',
+  running: 'text-[var(--color-current-ink)] bg-[var(--color-current-wash)] border-transparent',
+  pending: 'text-[var(--color-dawn-ink)] bg-[var(--color-dawn-wash)] border-transparent',
+  paused: 'text-[var(--color-buoy-ink)] bg-[var(--color-buoy-wash)] border-transparent',
+  failed: 'text-[var(--color-flare-ink)] bg-[var(--color-flare-wash)] border-transparent',
 };
 
 export function Badge({
@@ -135,7 +138,7 @@ export function Badge({
     <span
       title={title}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-medium',
+        'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium',
         BADGE_TONES[tone],
         className,
       )}
@@ -149,9 +152,9 @@ export function Badge({
 
 /** Shared by every text-like control, including custom triggers that must look like an input. */
 export const FIELD_BASE =
-  'w-full rounded-[var(--radius-control)] border border-[var(--color-line-strong)] bg-[var(--color-surface)] ' +
+  'w-full rounded-[var(--radius-control)] border border-[var(--color-line-strong)] bg-[var(--color-shelf)] ' +
   'px-3 text-sm text-[var(--color-ink)] placeholder:text-[var(--color-ink-faint)] ' +
-  'transition-colors focus:border-[var(--color-accent)] focus:outline-none disabled:opacity-50';
+  'transition-colors focus:border-[var(--color-ink-muted)] focus:outline-none disabled:opacity-50';
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input(
   { className, ...props },
@@ -244,7 +247,7 @@ export function SegmentedControl<T extends string>({
           className={cn(
             'rounded-[6px] px-2.5 py-1 text-[12px] font-medium transition-colors',
             option.value === value
-              ? 'bg-[var(--color-surface)] text-[var(--color-ink)] shadow-sm'
+              ? 'bg-[var(--color-shelf)] text-[var(--color-ink)] shadow-sm'
               : 'text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]',
           )}
         >
@@ -305,9 +308,7 @@ export function KeyValue({
 }): ReactNode {
   return (
     <div className={cn('min-w-0 space-y-1', className)}>
-      <dt className="text-[11px] font-medium tracking-wide text-[var(--color-ink-faint)] uppercase">
-        {label}
-      </dt>
+      <dt className="text-[12px] text-[var(--color-ink-faint)]">{label}</dt>
       <dd className={cn('truncate text-[13px] text-[var(--color-ink)]', mono && 'numeric')}>{children}</dd>
     </div>
   );

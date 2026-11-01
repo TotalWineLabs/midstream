@@ -10,15 +10,22 @@ import {
 
 import { cn } from '@/lib/cn';
 
+/** A way back, or forward: Undo after an action that acted at once (docs/10-design-system.md §10.10). */
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 interface Toast {
   id: number;
   tone: 'success' | 'error';
   title: string;
   description?: string;
+  action?: ToastAction;
 }
 
 interface ToastApi {
-  success: (title: string, description?: string) => void;
+  success: (title: string, description?: string, action?: ToastAction) => void;
   error: (title: string, description?: string) => void;
 }
 
@@ -32,17 +39,18 @@ export function ToastProvider({ children }: { children: ReactNode }): ReactNode 
   }, []);
 
   const push = useCallback(
-    (tone: Toast['tone'], title: string, description?: string) => {
+    (tone: Toast['tone'], title: string, description?: string, action?: ToastAction) => {
       const id = Date.now() + Math.random();
-      setToasts((current) => [...current.slice(-3), { id, tone, title, description }]);
-      setTimeout(() => dismiss(id), tone === 'error' ? 8000 : 4500);
+      setToasts((current) => [...current.slice(-3), { id, tone, title, description, action }]);
+      // Time to read it, and longer when it offers a way back.
+      setTimeout(() => dismiss(id), tone === 'error' || action ? 8000 : 4500);
     },
     [dismiss],
   );
 
   const api = useMemo<ToastApi>(
     () => ({
-      success: (title, description) => push('success', title, description),
+      success: (title, description, action) => push('success', title, description, action),
       error: (title, description) => push('error', title, description),
     }),
     [push],
@@ -62,13 +70,13 @@ export function ToastProvider({ children }: { children: ReactNode }): ReactNode 
             role="status"
             className={cn(
               'fade-in pointer-events-auto flex items-start gap-3 rounded-[var(--radius-panel)] border p-3.5',
-              'border-[var(--color-line)] bg-[var(--color-surface)] shadow-lg shadow-black/10 dark:shadow-black/40',
+              'border-[var(--color-line-strong)] bg-[var(--color-pop)] shadow-lg shadow-black/10 dark:shadow-black/40',
             )}
           >
             {toast.tone === 'success' ? (
-              <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[var(--color-phase-running)]" />
+              <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[var(--color-ink-muted)]" />
             ) : (
-              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--color-phase-failed)]" />
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--color-flare-ink)]" />
             )}
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-medium">{toast.title}</p>
@@ -78,6 +86,18 @@ export function ToastProvider({ children }: { children: ReactNode }): ReactNode 
                 </p>
               ) : null}
             </div>
+            {toast.action ? (
+              <button
+                type="button"
+                onClick={() => {
+                  dismiss(toast.id);
+                  toast.action?.onClick();
+                }}
+                className="-my-0.5 shrink-0 rounded-[var(--radius-control)] px-2 py-0.5 text-[13px] font-semibold text-[var(--color-ink)] transition-colors hover:bg-[var(--color-raised)]"
+              >
+                {toast.action.label}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => dismiss(toast.id)}

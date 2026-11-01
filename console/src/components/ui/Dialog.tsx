@@ -50,8 +50,8 @@ export function Dialog({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          'fade-in relative my-auto w-full rounded-[18px] border border-[var(--color-line)]',
-          'bg-[var(--color-surface)] shadow-2xl shadow-black/10 dark:shadow-black/50',
+          'fade-in relative my-auto w-full rounded-[16px] border border-[var(--color-line-strong)]',
+          'bg-[var(--color-pop)] shadow-2xl shadow-black/10 dark:shadow-black/50',
           size === 'lg' ? 'max-w-3xl' : 'max-w-lg',
         )}
       >

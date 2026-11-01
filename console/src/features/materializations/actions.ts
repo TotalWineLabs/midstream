@@ -8,10 +8,15 @@ import type { CpDetail } from '@shared/types';
 
 export type LifecycleAction = 'stop' | 'resume' | 'delete';
 
-const LABELS: Record<LifecycleAction, { verb: string; done: string }> = {
-  stop: { verb: 'Stopping', done: 'Stop requested' },
-  resume: { verb: 'Resuming', done: 'Resume requested' },
-  delete: { verb: 'Deleting', done: 'Delete requested' },
+/** What each action says once accepted, and when it fails, about the materialization by name. */
+const WORDS: Record<LifecycleAction, { done: (name: string) => string; detail?: string; failed: (name: string) => string }> = {
+  stop: {
+    done: (name) => `${name} is stopping`,
+    detail: 'Nothing is lost: its tables stay readable, and Resume picks up where it left off.',
+    failed: (name) => `${name} could not be stopped`,
+  },
+  resume: { done: (name) => `${name} is resuming`, failed: (name) => `${name} could not be resumed` },
+  delete: { done: (name) => `Deleting ${name}`, failed: (name) => `${name} could not be deleted` },
 };
 
 /**
@@ -21,8 +26,11 @@ const LABELS: Record<LifecycleAction, { verb: string; done: string }> = {
  * state — it relies on the live stream to reflect what actually happened.
  */
 export function useLifecycleActions(): {
-  /** Act on a materialization of `domain`: the page's own, inside a domain. */
-  run: (action: LifecycleAction, materializationId: string, domain?: string) => void;
+  /**
+   * Act on a materialization of `domain` (the page's own, inside a domain), called `name` in what
+   * the console says back. A stop acts at once and offers Undo rather than asking first.
+   */
+  run: (action: LifecycleAction, materializationId: string, domain?: string, name?: string) => void;
   pending: LifecycleAction | null;
 } {
   const scope = useOptionalDomain();
@@ -30,32 +38,34 @@ export function useLifecycleActions(): {
   const [pending, setPending] = useState<LifecycleAction | null>(null);
 
   const mutation = useMutation({
-    mutationFn: async ({ action, id, domain }: { action: LifecycleAction; id: string; domain: string }) => {
+    mutationFn: async ({ action, id, domain }: { action: LifecycleAction; id: string; domain: string; name: string }) => {
       const api = domainApi(domain);
       if (action === 'stop') return api.stop(id);
       if (action === 'resume') return api.resume(id);
       return api.remove(id);
     },
-    onSuccess: (accepted, variables) => {
-      toast.success(
-        LABELS[variables.action].done,
-        `${accepted.materialization_id} → ${accepted.desired_phase}. Watch the phase for convergence.`,
-      );
+    onSuccess: (_accepted, variables) => {
+      const words = WORDS[variables.action];
+      const undo =
+        variables.action === 'stop'
+          ? { label: 'Undo', onClick: () => mutation.mutate({ ...variables, action: 'resume' }) }
+          : undefined;
+      toast.success(words.done(variables.name), words.detail, undo);
     },
     onError: (error: unknown, variables) => {
       toast.error(
-        `${LABELS[variables.action].verb} failed`,
-        error instanceof ApiError ? error.message : 'The control plane rejected the request.',
+        WORDS[variables.action].failed(variables.name),
+        error instanceof ApiError ? error.message : 'The control plane refused it.',
       );
     },
     onSettled: () => setPending(null),
   });
 
   const run = useCallback(
-    (action: LifecycleAction, materializationId: string, domain: string | undefined = scope?.id) => {
+    (action: LifecycleAction, materializationId: string, domain: string | undefined = scope?.id, name: string = materializationId) => {
       if (!domain) throw new Error('say which domain the materialization is in');
       setPending(action);
-      mutation.mutate({ action, id: materializationId, domain });
+      mutation.mutate({ action, id: materializationId, domain, name });
     },
     [mutation, scope?.id],
   );
