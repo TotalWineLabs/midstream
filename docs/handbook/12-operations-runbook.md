@@ -493,7 +493,7 @@ successful commit clears it, unless another table still has an error (08 §8.5).
 | `commit_failed` | the committer's log names the object store's error (§12.12a) or the lost compare-and-swap; an engine committing through the REST facade in a tight loop must back off. Failing again and again on an S3-compatible server: run the conformance suite against it (§12.12a) |
 | `schema_evolution_failed` | 09 §9.12 |
 | `schema_field_limit` | the schema is at `max_schema_fields`; new fields' values go to `_unmapped`. Raise the limit (Settings → Schema) if they matter |
-| `compaction_failed` | a partition failed compaction five times and is paused; the maintenance history has the error, the maintenance app's log `maintenance_compaction_failed`. Fix the cause, then **Run now** on the Table tab, or `POST …/maintenance {"job":"compaction"}`, to retry |
+| `compaction_failed` | a partition failed compaction five times and is paused; the maintenance history has the error, the maintenance app's log `maintenance_compaction_failed`. Fix the cause, then **Run now** on the table's History tab in the console, or `POST …/maintenance {"job":"compaction"}`, to retry |
 | `drop_failed` | a table being dropped could not be, after its retries (07 §7.9a); it stays `dropping`. Fix the cause (the store's delete permission, say), then resume the materialization: the apply drops it again |
 | `table_unavailable` | the committer could not load the table: as `waiting_for_table` above |
 | `protection_commit_failed` | the committer could not record a delivered protection policy in the table; it tries again on every event. Its member's log has `Recording protection revision …`; the writers keep the policy the table records meanwhile (22 §22.13) |
@@ -677,7 +677,7 @@ lake_ls "$LOC/data/" | tail
 
 Expected latency with defaults, record to table: the batch's age (`max_open_file_age_seconds`,
 120 s, once it holds 10,000 rows or 8 MiB; the 600 s ceiling on a quiet topic), then the seal and
-upload, then the next commit (`commit_interval_seconds`, 30 s). The Table tab's **Complete through**
+upload, then the next commit (`commit_interval_seconds`, 30 s). A table's page in the console says **complete through**
 (`valid_through`) says up to when every partition's records are in.
 
 ## 12.5 Querying the table
@@ -695,14 +695,14 @@ SELECT count(*) FROM iceberg_scan('<location>');
 ```
 
 An S3-compatible server's secret adds `ENDPOINT '<host>:<port>'` (without the scheme),
-`URL_STYLE 'path'` for path-style addressing and, over plain HTTP, `USE_SSL false`. The Table tab's
-**Connect** panel prints these for the table's backend, filled with the console's own profile for it:
+`URL_STYLE 'path'` for path-style addressing and, over plain HTTP, `USE_SSL false`. A table's
+**Connect** tab in the console prints these for the table's backend, filled with the console's own profile for it:
 the endpoint, region and path style, never a credential.
 
 Through the REST catalog, with an access token (`catalog.read` on the table's dataset, §12.7):
 DuckDB's `ATTACH 'warehouse' AS lake (TYPE ICEBERG, …, ENDPOINT '<control plane>/catalog')`, then
-`lake.<dataset>.<table>`, or PyIceberg's `RestCatalog`. The console's Data tab and its Table tab's
-**Connect** panel are the quickest way.
+`lake.<dataset>.<table>`, or PyIceberg's `RestCatalog`. A table's Data tab in the console, and its
+**Connect** tab, are the quickest way.
 
 Useful queries:
 
@@ -1059,7 +1059,7 @@ kafka-console-consumer --bootstrap-server $BROKERS --topic $RT-commits --max-mes
 | `degraded` / `commits_stalled` that never clears; `last_commit_at` stopped; the committer's log quiet | the committer ignores a member's announcements as stale: after that member restarted, on a runtime that predates session epochs (10 §10.5) | restart the committer member (§12.3) |
 | Commits take many seconds | ~2 s plus ~16 ms per file (13 §13.8); a backfill commits hundreds of files at once | expected; raise `commit_interval_seconds` to commit less often |
 | `commit_failed` again and again on an S3-compatible server, lost compare-and-swaps that no other writer explains | the server does not honour conditional writes | run the conformance suite against it (§12.12a); a server that fails it must not hold tables |
-| Thousands of small files per day during a backfill | each seal writes a file per partition its rows touch; compaction works through past days a job a tick, 1 GiB at a time | expected; watch the Table tab's partitions shrink (11 §11.6) |
+| Thousands of small files per day during a backfill | each seal writes a file per partition its rows touch; compaction works through past days a job a tick, 1 GiB at a time | expected; watch the table's partitions shrink in its Connect tab (11 §11.6) |
 | An external engine's query fails on a snapshot with delete files | the console refuses delete files; an engine with `catalog.write` committed row-level deletes | 14 §14.2 |
 | Scheduled work never arrives | Scheduler topic-name mismatch base vs dev | See [14](./14-known-gaps-and-roadmap.md) |
 | Delete stuck > 480 s | Consumer group never empties | Look for stray pods; check the group |
@@ -1274,15 +1274,15 @@ Then resume the materialization. Check `metadata_location` against the table rec
 
 ## 12.12 Table maintenance
 
-The maintenance app runs it, one long job at a time per member by default (10 §10.10, 11 §11.6); the
-Table tab shows the history and the running job, and every job is a `maintenance_completed` table
+The maintenance app runs it, one long job at a time per member by default (10 §10.10, 11 §11.6); a
+table's History tab in the console shows the history and the running job, and every job is a `maintenance_completed` table
 event and a protocol event in the app's log (`kubectl logs -n $NS <maintenance pod> -c kaspr | grep maintenance_`).
 
 | You see | It means | Do |
 |---|---|---|
 | Many small files in past partitions | waiting for the next compaction; a job takes whole small partitions, up to 1 GiB, and the next starts at the next minute's tick | nothing; or **Run now** |
 | Many small files in today's (this hour's) partition | the hot-partition delay: it is compacted an hour after its last commit | nothing; **Run now** compacts it anyway |
-| Small files in this month's partition (a month-partitioned table) | each waits until it is an hour old, then joins the next compaction; the Table tab marks the partition due once enough have | nothing; **Run now** takes them without waiting |
+| Small files in this month's partition (a month-partitioned table) | each waits until it is an hour old, then joins the next compaction; the table's Connect tab marks the partition due once enough have | nothing; **Run now** takes them without waiting |
 | `compaction_failed` on a partition | five failures in a row; it is paused until compaction is asked for again | read the error in the history; fix it; **Run now** |
 | A job of several partitions failed "(its partitions are compacted one at a time from now on)" | which partition failed is unknown, so each is compacted alone until it succeeds | nothing; a partition that fails alone backs off and gives up as above |
 | `metadata.json` large, many snapshots | retention keeps every snapshot of the last hour, then one an hour, for 72 hours | lower `snapshot_retention_hours` or `snapshot_keep_all_minutes` (Settings → Maintenance) |

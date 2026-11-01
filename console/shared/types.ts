@@ -1364,6 +1364,17 @@ export interface RunPage {
   offset: number;
   rows: Record<string, unknown>[];
   columns: QueryColumn[];
+  /**
+   * A browse run's rows on this page read from the live tail — records the runtime has not
+   * committed yet — as `[from, to)` ranges of the page. Absent for a statement.
+   */
+  live?: Array<[number, number]>;
+  /**
+   * Where on this page a browse run's committed rows meet the live tail's, 0 to `rows.length`, or
+   * null when that is not on this page or not known yet: newest first, every row before it is the
+   * tail's; oldest first, every row from it on. Absent for a statement.
+   */
+  waterline?: number | null;
   /** False while more rows may still arrive in this page's range. */
   complete: boolean;
   /** The run's row count when the page was read, and whether it was final. */

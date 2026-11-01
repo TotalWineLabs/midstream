@@ -299,6 +299,30 @@ describe('a browse run with a live tail', () => {
     }
   });
 
+  it('marks the tail’s rows on each page, and where committed rows meet them', async () => {
+    const newest = await started();
+    const pages = await Promise.all([0, 3, 6].map((offset) => newest.readPage(offset, 3)));
+    assert.deepEqual(
+      pages.map((page) => page.live),
+      [[[0, 3]], [[0, 1]], []],
+    );
+    assert.deepEqual(
+      pages.map((page) => page.waterline),
+      [null, 1, null],
+      'newest first, just past the tail’s last row',
+    );
+
+    const oldest = await started({ order: 'oldest' });
+    const last = await oldest.readPage(12, 4);
+    assert.deepEqual([last.live, last.waterline], [[[0, 4]], 0], 'oldest first, just before the tail’s first row');
+    const before = await oldest.readPage(9, 3);
+    assert.deepEqual([before.live, before.waterline], [[], 3], 'at the foot of the page it ends');
+
+    const committed = await started({ liveTail: false });
+    const first = await committed.readPage(0, 5);
+    assert.deepEqual([first.live, first.waterline], [[], 0], 'nothing live: it tops the newest page');
+  });
+
   it('prunes the tail by its time bounds like any file, and filters count it', async () => {
     const tail = answer('orders', 0);
     const inTail = await started({ range: { from: tail.time_min, to: null } });

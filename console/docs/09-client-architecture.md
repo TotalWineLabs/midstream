@@ -73,13 +73,13 @@ Settings sections are URL segments too (`/settings/domains`, `/d/domain_a/settin
 a page and an unknown section redirect to the first section the person may see. Moving between
 sections keeps the same `SettingsPage` mounted, so unsaved edits survive it.
 
-Detail tabs are URL segments, so `/d/domain_a/materializations/mat-x/schema` is bookmarkable,
+Detail tabs are URL segments, so `/d/domain_a/materializations/mat-x/protection` is bookmarkable,
 shareable, and survives a reload. `DetailPage` reads `tab` from params, defaults to `''` (Overview),
 and switches tabs with `navigate(..., { replace: true })` so tab changes do not fill the history
-stack. The table a tab shows is `?table=` (`features/tables/selectedTable.ts`: `useSelectedTable`
-resolves it against the materialization's tables — the written ones, then the kept ones
-(`readableTables`) — the first when absent or unknown); switching tabs keeps it, so the Schema, Data
-and Table tabs stay on one table, and the Tables panel links into them with it set.
+stack. A table has a page of its own, `/d/domain_a/datasets/sales/tables/orders[/schema|history|connect]`
+(`features/tables/TablePage.tsx`, `lib/paths.ts::tablePath`), whose tabs show that table and no
+other (`selectedTable.ts::namedTable`). The materialization's old `data`, `schema` and `table` tabs
+redirect to it, `?table=` naming which (`resolveTable`: the first when absent or unknown).
 
 The server's SPA fallback (`main.ts`) is what makes deep links work on a cold load; the old
 hostnames' redirect (handbook 20 §20.3) lands on `/d/<domain>/<path>`.
@@ -265,6 +265,7 @@ blocking storage still gets working panes, just not remembered ones.
 features/
   overview/OverviewPage.tsx                 Is everything flowing? The readout, the river, what needs you, the rows
   overview/River.tsx                        The fleet as strands from Kafka through Midstream to the lake
+  tables/TablePage.tsx                      A table: its Data, Schema, History and Connect tabs, under its dataset
   overview/riverEngine.ts                   The river's particles, how they move, and its bed (2D canvas)
   overview/riverLake.ts                     The lake: its current, settled rows and moving surface
   overview/riverWater.ts                    The river's water: every particle a comet, drawn with WebGL 2

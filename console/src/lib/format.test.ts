@@ -4,7 +4,15 @@ import { test } from 'node:test';
 // Before any date is made: the zone is read when the first one is formatted.
 process.env.TZ = 'America/Los_Angeles';
 
-const { displayCell, formatInstant, isInstantType } = await import('./format.ts');
+const { displayCell, formatInstant, formatMoment, isInstantType } = await import('./format.ts');
+
+test('a moment says its day only when it is not today, and its year only when not this one', () => {
+  const now = new Date('2026-11-01T22:00:00Z');
+  assert.match(formatMoment('2026-11-01T22:41:04Z', now), /^2:41:04\sPM$/);
+  assert.match(formatMoment('2026-10-31T21:41:04Z', now), /^Oct 31, 2:41:04\sPM$/);
+  assert.match(formatMoment('2025-10-31T21:41:04Z', now), /^Oct 31, 2025, 2:41:04\sPM$/);
+  assert.equal(formatMoment(null, now), '—');
+});
 
 test('instants render in local time with milliseconds', () => {
   assert.equal(formatInstant('2026-10-04T23:59:58.604Z'), '2026-10-04 16:59:58.604');

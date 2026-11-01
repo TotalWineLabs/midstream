@@ -1,18 +1,16 @@
 import type { SearchResult } from '@shared/types';
 
-import { domainPath } from '../../lib/paths.ts';
+import { domainPath, tablePath } from '../../lib/paths.ts';
 
-/** Where a result opens: in its domain, a materialization's page, a table on its Table tab, a dataset's page. */
+/** Where a result opens: in its domain, a materialization's page, a table's page, a dataset's page. */
 export function resultPath(result: SearchResult): string {
   switch (result.kind) {
     case 'materialization':
       return domainPath(result.domain, `/materializations/${encodeURIComponent(result.id)}`);
     case 'table': {
-      const table = result.id.split('.').at(-1) ?? result.id;
-      return domainPath(
-        result.domain,
-        `/materializations/${encodeURIComponent(result.materializationId ?? '')}/table?table=${encodeURIComponent(table)}`,
-      );
+      // `<dataset>.<table>`: a dataset's name has no dot.
+      const dot = result.id.indexOf('.');
+      return domainPath(result.domain, tablePath(result.id.slice(0, dot), result.id.slice(dot + 1)));
     }
     case 'dataset':
       return domainPath(result.domain, `/datasets/${encodeURIComponent(result.id)}`);

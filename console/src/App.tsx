@@ -13,6 +13,7 @@ import { MaterializationsPage } from './features/materializations/Materializatio
 import { OverviewPage } from './features/overview/OverviewPage';
 import { SearchPage } from './features/search/SearchPage';
 import { SettingsPage } from './features/settings/SettingsPage';
+import { TablePage } from './features/tables/TablePage';
 import { DomainScope, domainPath, useDomain } from './lib/domains';
 
 /**
@@ -102,6 +103,22 @@ function DomainRoutes(): ReactNode {
         element={
           <RequirePermission permission="datasets.view" what="datasets">
             <DatasetPage />
+          </RequirePermission>
+        }
+      />
+      <Route
+        path="datasets/:name/tables/:table"
+        element={
+          <RequirePermission permission="datasets.view" what="datasets">
+            <TablePage />
+          </RequirePermission>
+        }
+      />
+      <Route
+        path="datasets/:name/tables/:table/:tab"
+        element={
+          <RequirePermission permission="datasets.view" what="datasets">
+            <TablePage />
           </RequirePermission>
         }
       />

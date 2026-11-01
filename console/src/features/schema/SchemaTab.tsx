@@ -7,8 +7,7 @@ import { SchemaFieldTable } from './SchemaFieldTable';
 import { SchemaTimelineView } from './SchemaTimelineView';
 import { SchemaTreeView } from './SchemaTreeView';
 import { formatSpan, versionDataSpans } from './timeline';
-import { useSelectedTable } from '../tables/selectedTable';
-import { TablePicker } from '../tables/TablePicker';
+import { namedTable } from '../tables/selectedTable';
 import { PageBody } from '@/components/AppShell';
 import { RelativeTime } from '@/components/Inline';
 import {
@@ -26,7 +25,7 @@ import { cn } from '@/lib/cn';
 import { useAuth } from '@/lib/auth';
 import { formatCount, formatTimestamp } from '@/lib/format';
 import { useApi } from '@/lib/domains';
-import type { CpSchema, CpSchemaVersionRef, CpTableSpec, DetailSnapshot, SchemaTimeline, TimeSpan } from '@shared/types';
+import { readableTables, type CpSchema, type CpSchemaVersionRef, type CpTableSpec, type DetailSnapshot, type SchemaTimeline, type TimeSpan } from '@shared/types';
 
 type Mode = 'fields' | 'changes' | 'timeline';
 type FieldLayout = 'table' | 'tree';
@@ -53,63 +52,47 @@ const FIELD_LAYOUTS: { value: FieldLayout; label: ReactNode }[] = [
 ];
 
 /**
- * The schema of one of the materialization's tables: every version it has had, its fields, and what
- * changed between two. Each table evolves on its own, as its topic's records do.
+ * A table's schema, on its page: every version it has had, its fields, and what changed between two.
+ * Each table evolves on its own, as its topic's records do.
  */
 export function SchemaTab({
   materializationId,
   snapshot,
+  table: name,
 }: {
   materializationId: string;
   snapshot: DetailSnapshot;
+  /** The table: its name in its materialization, which writes it. */
+  table: string;
 }): ReactNode {
   const { can } = useAuth();
-  // Only the schemas of tables whose datasets the person may read; the others are listed, locked.
-  const readable = (spec: CpTableSpec): boolean => can('dataset.view_schema', spec.dataset_id);
-  const { table, tables, select } = useSelectedTable(snapshot.detail, readable);
+  const tables = snapshot.detail ? readableTables(snapshot.detail.materialization) : [];
+  // Only a table whose dataset the person may read the schemas of.
+  const table = namedTable(tables, name, (spec) => can('dataset.view_schema', spec.dataset_id));
   if (!snapshot.detail || !table) {
     return (
       <PageBody>
         <EmptyState
-          title={snapshot.detail ? 'No schemas you may see' : 'Not found'}
+          title={snapshot.detail ? 'Its schema is not yours to see' : 'Not found'}
           description={
-            snapshot.detail
-              ? 'Every table of this materialization is in a dataset locked to you: its schemas need a role on the dataset.'
-              : 'This materialization is no longer present.'
+            snapshot.detail ? 'Its dataset is locked to you: its schema needs a role on the dataset.' : 'This table is no longer written.'
           }
         />
       </PageBody>
     );
   }
   // Keyed by the table, so versions, comparisons and filters chosen for one never apply to another.
-  return (
-    <TableSchema
-      key={table.name}
-      materializationId={materializationId}
-      snapshot={snapshot}
-      table={table}
-      tables={tables}
-      locked={(spec) => !readable(spec)}
-      onSelectTable={select}
-    />
-  );
+  return <TableSchema key={table.name} materializationId={materializationId} snapshot={snapshot} table={table} />;
 }
 
 function TableSchema({
   materializationId,
   snapshot,
   table,
-  tables,
-  locked,
-  onSelectTable,
 }: {
   materializationId: string;
   snapshot: DetailSnapshot;
   table: CpTableSpec;
-  tables: CpTableSpec[];
-  /** Whether a table's schema is closed to the person: its dataset is locked to them. */
-  locked: (table: CpTableSpec) => boolean;
-  onSelectTable: (name: string) => void;
 }): ReactNode {
   const api = useApi();
   const [mode, setMode] = useState<Mode>('fields');
@@ -179,26 +162,12 @@ function TableSchema({
 
   const supersededCount = (schema?.fields ?? []).filter((field) => field.state === 'superseded').length;
 
-  // Which table, for a materialization of several; nothing to choose otherwise.
-  const tableBar =
-    tables.length > 1 ? (
-      <div className="flex flex-wrap items-center gap-2 text-[12px] text-[var(--color-ink-muted)] lg:col-span-2">
-        <TablePicker tables={tables} value={table.name} onChange={onSelectTable} locked={locked} />
-        <span>
-          The schema of topic <code className="numeric text-[var(--color-ink)]">{table.source_topic}</code>, read in SQL as{' '}
-          <code className="numeric text-[var(--color-ink)]">
-            {table.dataset}.{table.name}
-          </code>
-        </span>
-      </div>
-    ) : null;
 
   if (currentVersion === null) {
     // A reported version with no readable schema is a fetch failure, not a pending discovery.
     if (schemaError || reportedVersion !== null) {
       return (
         <PageBody className="space-y-4">
-          {tableBar}
           <Panel>
             <EmptyState
               icon={<TriangleAlert className="size-6" />}
@@ -231,7 +200,6 @@ function TableSchema({
 
     return (
       <PageBody className="space-y-4">
-        {tableBar}
         <Panel>
           <EmptyState
             title="Schema not discovered yet"
@@ -244,7 +212,6 @@ function TableSchema({
 
   return (
     <PageBody className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
-      {tableBar}
       <Panel className="h-fit overflow-hidden">
         <PanelHeader
           title="Versions"

@@ -27,8 +27,7 @@ import {
 import { ALL_TIME, describeInstants, rangeLabel, resolveRange, sameRange, type TimeRangeSpec } from './timeRange';
 import { useRun, useRunPage } from './useRun';
 import { readViewState, writeViewState } from './viewState';
-import { resolveTable } from '../tables/selectedTable';
-import { TablePicker } from '../tables/TablePicker';
+import { namedTable } from '../tables/selectedTable';
 import { PageBody } from '@/components/AppShell';
 import { DataGrid } from '@/components/DataGrid';
 import { useToast } from '@/components/ui/Toast';
@@ -36,7 +35,7 @@ import { Button, EmptyState, Panel, Select, Skeleton } from '@/components/ui/pri
 import { ApiError, api as consoleApi } from '@/lib/api';
 import { useAuth, useConsoleAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
-import { formatTimestamp } from '@/lib/format';
+import { formatMoment, formatTimestamp } from '@/lib/format';
 import { useApi, useConsoleConfig, useDomain } from '@/lib/domains';
 import { rootQueryClient } from '@/lib/queryClient';
 import type {
@@ -99,10 +98,9 @@ function requestKey(request: RunRequest): string {
 }
 
 /**
- * Data exploration for one materialization.
+ * Data exploration for one table, on its page.
  *
- * One way to ask a question: choose a table, set a time range, add filters or write SQL, and press
- * Run. Opening the tab runs the table's preview — every row, newest first, with its exact count —
+ * One way to ask a question: set a time range, add filters or write SQL, and press Run. Opening the tab runs the table's preview — every row, newest first, with its exact count —
  * which the table's manifests answer without reading anything, so it is on screen at once at any
  * size. Paging reads one data file's rows directly and the next page is fetched ahead, so turning
  * pages does not wait on a query. Every run reports its progress while it works and its exact row
@@ -113,14 +111,18 @@ function requestKey(request: RunRequest): string {
  * With live tail on (every materialization has it), every run also holds the records past its
  * snapshot, from the live tail, and the browse view's Live mode — on unless turned off — appends what arrives
  * every few seconds while the tab is seen; a commit replaces the run with one pinned to the new
- * snapshot. A statement gets its tail once, when it runs, and Auto re-run runs it again.
+ * snapshot. A statement gets its tail once, when it runs, and Auto re-run runs it again. Browsing,
+ * the rows past the last commit are tinted, and the waterline sits where commits reach (§10.8).
  */
 export function DataTab({
   materializationId,
   snapshot,
+  table,
 }: {
   materializationId: string;
   snapshot: DetailSnapshot;
+  /** The table: its name in its materialization, which writes it. */
+  table: string;
 }): ReactNode {
   const api = useApi();
   const domain = useDomain();
@@ -156,10 +158,8 @@ export function DataTab({
       ),
     [fleetQuery.data, domain.id, materializationId],
   );
-  const [requestedTable, setRequestedTable] = useState<string | null>(initial.table);
-  // A table the address bar names that this materialization does not have, or that the person may
-  // not query, shows the first they may instead.
-  const tableName = resolveTable(tables, requestedTable, mayQuery)?.name ?? '';
+  // Empty for a table the person may not query: the page offers no Data tab for it then.
+  const tableName = namedTable(tables, table, mayQuery)?.name ?? '';
   const [range, setRange] = useState<TimeRangeSpec>(initial.range);
   const [filters, setFilters] = useState<BrowseFilter[]>(initial.filters);
   const [order, setOrder] = useState<RunOrder>(initial.order);
@@ -169,7 +169,8 @@ export function DataTab({
   const [pageSize, setPageSize] = useState(initial.pageSize);
   const [visibleOverride, setVisibleOverride] = useState<string[] | null>(initial.visibleColumns);
   const [pinnedColumn, setPinnedColumn] = useState<string | null>(initial.pinnedColumn);
-  const [railOpen, setRailOpen] = useState(true);
+  // On a phone the column list would leave the rows no room: it starts closed there.
+  const [railOpen, setRailOpen] = useState(() => typeof window === 'undefined' || window.matchMedia('(min-width: 768px)').matches);
   const [railWidth, setRailWidth] = useState(() => stored(RAIL_WIDTH_KEY, RAIL_MIN_WIDTH, RAIL_MAX_WIDTH, RAIL_MIN_WIDTH));
   const [sqlHeight, setSqlHeight] = useState(() => stored(SQL_HEIGHT_KEY, SQL_MIN_HEIGHT, SQL_MAX_HEIGHT, 220));
   const [detailIndex, setDetailIndex] = useState<number | null>(null);
@@ -249,20 +250,6 @@ export function DataTab({
     [sqlMode, range, sqlDraft, filters, order, tableName, start],
   );
 
-  // Another table: its own columns, so filters and column choices of this one do not carry over.
-  // Its preview runs at once.
-  const chooseTable = useCallback(
-    (name: string) => {
-      if (name === tableName) return;
-      setRequestedTable(name);
-      setFilters([]);
-      setVisibleOverride(null);
-      setPinnedColumn(null);
-      execute({ table: name, filters: [] });
-    },
-    [tableName, execute],
-  );
-
   // Opening the tab: pick the run in the address bar back up, or run the view it describes.
   const opened = useRef(false);
   useEffect(() => {
@@ -290,8 +277,9 @@ export function DataTab({
 
   // Mirror the view into the address bar. Replaced, not pushed: a page turn is not a navigation.
   useEffect(() => {
+    // The table is the page's own address, never the query's.
     const next = writeViewState({
-      table: tableName === tables[0]?.name ? null : tableName,
+      table: null,
       range,
       filters,
       order,
@@ -304,7 +292,7 @@ export function DataTab({
       live,
     });
     if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true });
-  }, [tableName, tables, range, filters, order, sqlMode, sqlDraft, page, pageSize, visibleOverride, pinnedColumn, run?.id, initial.runId, live, searchParams, setSearchParams]);
+  }, [range, filters, order, sqlMode, sqlDraft, page, pageSize, visibleOverride, pinnedColumn, run?.id, initial.runId, live, searchParams, setSearchParams]);
 
   // Check a statement as it is typed: bound against the view, never run.
   useEffect(() => {
@@ -384,6 +372,28 @@ export function DataTab({
   // numbering and are shown muted, so a row is never labelled with a position it does not hold.
   const shownOffset = pageQuery.data?.offset ?? page * pageSize;
   const stale = pageQuery.isPlaceholderData || shownOffset !== page * pageSize;
+  // Browsing: the rows past the last commit, and where commits reach (§10.8). A page being replaced
+  // shows neither: its rows may already have moved.
+  const liveRows = useMemo(() => {
+    const set = new Set<number>();
+    if (stale) return set;
+    for (const [from, to] of pageQuery.data?.live ?? []) for (let index = from; index < to; index += 1) set.add(index);
+    return set;
+  }, [pageQuery.data, stale]);
+  // Said by the commit itself, which every row below the line is in: during a backfill the table's
+  // "complete through" can trail its newest committed rows by months.
+  const committedAt = run?.tables.find((entry) => entry.name === run.table)?.snapshotAt ?? null;
+  const waterlineAt = stale ? null : (pageQuery.data?.waterline ?? null);
+  const waterline =
+    waterlineAt === null
+      ? null
+      : {
+          at: waterlineAt,
+          label: committedAt ? `Committed ${formatMoment(committedAt)}` : 'Nothing committed yet',
+          title: committedAt
+            ? `Rows past the line arrived after the last commit, at ${formatMoment(committedAt)}: they show here first. Every engine reads the rest.`
+            : 'Every row here arrived before the table’s first commit: they show here first.',
+        };
 
   const setVisible = useCallback(
     (next: (current: string[]) => string[]) => setVisibleOverride((current) => next(current ?? defaultVisibleColumns(columns))),
@@ -497,14 +507,9 @@ export function DataTab({
     return (
       <PageBody>
         <Panel>
-          {tables.length > 1 ? (
-            <div className="flex items-center border-b border-[var(--color-line)] px-3 py-2">
-              <TablePicker tables={tables} value={tableName} onChange={chooseTable} locked={(table) => !mayQuery(table)} />
-            </div>
-          ) : null}
           <EmptyState
             icon={<Table2 className="size-6" />}
-            title={failure ? `${tableName || 'The table'} is not readable` : tables.length > 1 ? `No data in ${tableName} yet` : 'No data to query yet'}
+            title={failure ? `${tableName || 'The table'} is not readable` : 'No data to query yet'}
             description={
               failure
                 ? failure instanceof ApiError
@@ -574,7 +579,6 @@ export function DataTab({
               {railOpen ? <PanelLeftClose className="size-4" /> : <PanelLeftOpen className="size-4" />}
             </Button>
 
-            {sqlMode ? null : <TablePicker tables={tables} value={tableName} onChange={chooseTable} locked={(table) => !mayQuery(table)} />}
             <TimeRangePicker materializationId={materializationId} table={tableName} value={range} onChange={setRange} summary={summary} />
 
             {sqlMode ? (
@@ -732,6 +736,8 @@ export function DataTab({
                   stale={stale}
                   labels={labels}
                   pinnedColumn={statementResult ? null : pinnedColumn}
+                  live={liveRows}
+                  waterline={waterline}
                   range={range}
                   hasFilters={!sqlMode && filters.length > 0}
                   summarySpan={
@@ -808,6 +814,8 @@ function GridArea({
   stale,
   labels,
   pinnedColumn,
+  live,
+  waterline,
   range,
   hasFilters,
   summarySpan,
@@ -825,6 +833,8 @@ function GridArea({
   stale: boolean;
   labels: ReturnType<typeof buildColumnLabels>;
   pinnedColumn: string | null;
+  live: ReadonlySet<number>;
+  waterline: { at: number; label: string; title: string } | null;
   range: TimeRangeSpec;
   hasFilters: boolean;
   summarySpan: string | null;
@@ -905,6 +915,8 @@ function GridArea({
       labels={labels}
       pinnedColumn={pinnedColumn}
       onCellClick={onCopy}
+      live={live}
+      waterline={waterline}
       emptyMessage="No rows on this page"
     />
   );

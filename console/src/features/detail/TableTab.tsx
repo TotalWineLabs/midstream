@@ -5,8 +5,6 @@ import { Link, useNavigate } from 'react-router-dom';
 
 import { reprotectCounts } from '../protection/protection';
 import { ENGINES, snippet, type Engine } from './connect';
-import { TABLE_PARAM, useSelectedTable } from '../tables/selectedTable';
-import { TablePicker } from '../tables/TablePicker';
 import { PageBody } from '@/components/AppShell';
 import { RelativeTime } from '@/components/Inline';
 import { StatCard } from '@/components/StatCard';
@@ -17,6 +15,7 @@ import { useAuth, useCan } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import { formatBytes, formatCount, formatDuration, formatExact, formatTimestamp, humanize, shortSnapshotId } from '@/lib/format';
 import { useApi, useDomainPath } from '@/lib/domains';
+import { tablePath } from '@/lib/paths';
 import type {
   CatalogConnection,
   CpMaintenanceRun,
@@ -30,87 +29,43 @@ import type {
   TableStorage,
 } from '@shared/types';
 
-/**
- * One of the materialization's Iceberg tables: its snapshots, its files by partition, the
- * maintenance that keeps it fast, its properties, and how to read it from another engine.
- *
- * Two sources, each enough on its own: the control plane's record, which the runtime's commit and
- * maintenance events keep, and the table itself, which the console reads directly.
- */
-export function TableTab({ snapshot }: { snapshot: DetailSnapshot }): ReactNode {
-  const { table, tables, select } = useSelectedTable(snapshot.detail);
-  if (!table) {
-    return (
-      <PageBody>
-        <EmptyState title="Not found" description="This materialization is no longer present." />
-      </PageBody>
-    );
-  }
-  return <TableDetail key={table.name} snapshot={snapshot} table={table} tables={tables} onSelectTable={select} />;
-}
-
-function TableDetail({
-  snapshot,
-  table,
-  tables,
-  onSelectTable,
-}: {
-  snapshot: DetailSnapshot;
-  table: CpTableSpec;
-  tables: CpTableSpec[];
-  onSelectTable: (name: string) => void;
-}): ReactNode {
-  const domainPath = useDomainPath();
+/** A table's record and its metadata, read from the control plane and from the table itself. */
+function useTableDetail(materializationId: string, table: string) {
   const api = useApi();
-  const materializationId = snapshot.materializationId;
-  const tableQuery = useQuery({
-    queryKey: ['table', materializationId, table.name],
-    queryFn: () => api.table(materializationId, table.name),
+  return useQuery({
+    queryKey: ['table', materializationId, table],
+    queryFn: () => api.table(materializationId, table),
     refetchInterval: 10_000,
   });
-  // Which table, for a materialization of several; nothing to choose otherwise.
-  const tableBar =
-    tables.length > 1 ? (
-      <div className="flex flex-wrap items-center gap-2 text-[12px] text-[var(--color-ink-muted)]">
-        <TablePicker tables={tables} value={table.name} onChange={onSelectTable} />
-        <span>
-          Topic <code className="numeric text-[var(--color-ink)]">{table.source_topic}</code>, in dataset{' '}
-          <Link to={domainPath(`/datasets/${encodeURIComponent(table.dataset)}`)} className="numeric text-[var(--color-ink)] hover:text-[var(--color-accent)] hover:underline">
-            {table.dataset}
-          </Link>
-        </span>
-      </div>
-    ) : null;
+}
 
-  if (tableQuery.isPending) {
+/** What a tab says while its table is read, when it cannot be, and before it exists; null once it can show it. */
+function readState(query: ReturnType<typeof useTableDetail>, table: CpTableSpec): ReactNode | null {
+  if (query.isPending) {
     return (
       <PageBody className="space-y-4">
-        {tableBar}
         <Skeleton className="h-24" />
         <Skeleton className="h-64" />
       </PageBody>
     );
   }
-  if (tableQuery.isError || !tableQuery.data) {
+  if (query.isError || !query.data) {
     return (
-      <PageBody className="space-y-4">
-        {tableBar}
+      <PageBody>
         <Panel>
           <EmptyState
             icon={<TriangleAlert className="size-6" />}
             title="The table could not be read"
-            description={tableQuery.error instanceof Error ? tableQuery.error.message : 'Try again in a moment.'}
+            description={query.error instanceof Error ? query.error.message : 'Try again in a moment.'}
           />
         </Panel>
       </PageBody>
     );
   }
-
-  const { record, metadata, metadataError, connection, storage } = tableQuery.data;
+  const { record, metadata, metadataError } = query.data;
   if (!record && !metadata) {
     return (
-      <PageBody className="space-y-4">
-        {tableBar}
+      <PageBody>
         <Panel>
           <EmptyState
             title="No table yet"
@@ -124,10 +79,24 @@ function TableDetail({
       </PageBody>
     );
   }
+  return null;
+}
 
+/**
+ * A table's history, on its page: what it holds now, the snapshots its commits and maintenance made,
+ * and the maintenance that keeps it fast. Two sources, each enough on its own: the control plane's
+ * record, which the runtime's commit and maintenance events keep, and the table itself, which the
+ * console reads directly.
+ */
+export function TableHistoryTab({ snapshot, table }: { snapshot: DetailSnapshot; table: CpTableSpec }): ReactNode {
+  const materializationId = snapshot.materializationId;
+  const query = useTableDetail(materializationId, table.name);
+  const state = readState(query, table);
+  if (state || !query.data) return state;
+  const { record, metadata, metadataError } = query.data;
+  const several = (snapshot.detail?.materialization.tables.length ?? 1) > 1;
   return (
     <PageBody className="space-y-6">
-      {tableBar}
       <TableFigures record={record} metadata={metadata} />
       {metadataError ? (
         <p className="rounded-lg border border-[var(--color-line)] px-4 py-3 text-[12px] text-[var(--color-ink-muted)]">
@@ -135,14 +104,26 @@ function TableDetail({
         </p>
       ) : null}
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        <SnapshotsPanel materializationId={materializationId} table={table} defaultTable={tables[0]?.name ?? null} metadata={metadata} />
-        <MaintenancePanel materializationId={materializationId} table={table.name} several={tables.length > 1} record={record} />
+        <SnapshotsPanel table={table} metadata={metadata} />
+        <MaintenancePanel materializationId={materializationId} table={table.name} several={several} record={record} />
       </div>
+    </PageBody>
+  );
+}
+
+/** How to read a table from another engine, and how it is laid out: its partitions and its properties. */
+export function TableConnectTab({ snapshot, table }: { snapshot: DetailSnapshot; table: CpTableSpec }): ReactNode {
+  const query = useTableDetail(snapshot.materializationId, table.name);
+  const state = readState(query, table);
+  if (state || !query.data) return state;
+  const { record, metadata, connection, storage } = query.data;
+  return (
+    <PageBody className="space-y-6">
+      <ConnectPanel connection={connection} record={record} metadata={metadata} table={table} storage={storage} />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <PartitionsPanel metadata={metadata} />
         <PropertiesPanel record={record} metadata={metadata} />
       </div>
-      <ConnectPanel connection={connection} record={record} metadata={metadata} table={table} storage={storage} />
     </PageBody>
   );
 }
@@ -209,21 +190,9 @@ function operationLabel(snapshot: TableSnapshotRow): ReactNode {
   return <Badge>{snapshot.operation}</Badge>;
 }
 
-function SnapshotsPanel({
-  materializationId,
-  table: spec,
-  defaultTable,
-  metadata,
-}: {
-  materializationId: string;
-  table: CpTableSpec;
-  /** The materialization's first table, which the Data tab shows without being told. */
-  defaultTable: string | null;
-  metadata: TableMetadataView | null;
-}): ReactNode {
+function SnapshotsPanel({ table: spec, metadata }: { table: CpTableSpec; metadata: TableMetadataView | null }): ReactNode {
   const domainPath = useDomainPath();
   const navigate = useNavigate();
-  const table = spec.name;
   // Reading the table as it was is a query, on its dataset.
   const canQuery = useCan('data.query', spec.dataset_id);
   const [showAll, setShowAll] = useState(false);
@@ -263,16 +232,7 @@ function SnapshotsPanel({
                     key={item.snapshotId}
                     className={cn(opens && 'cursor-pointer hover:bg-[var(--color-raised)]')}
                     title={`Snapshot ${item.snapshotId}${opens ? ' — open it in the Data tab' : ''}`}
-                    onClick={
-                      opens
-                        ? () => {
-                            const params = new URLSearchParams();
-                            if (table !== defaultTable) params.set(TABLE_PARAM, table);
-                            const query = params.toString();
-                            navigate(domainPath(`/materializations/${encodeURIComponent(materializationId)}/data${query ? `?${query}` : ''}`));
-                          }
-                        : undefined
-                    }
+                    onClick={opens ? () => navigate(domainPath(tablePath(spec.dataset, spec.name))) : undefined}
                   >
                     <td className="px-5 py-2 whitespace-nowrap">
                       <span className="numeric">{formatTimestamp(item.committedAt)}</span>

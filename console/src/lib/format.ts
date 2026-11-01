@@ -81,6 +81,20 @@ export function formatTimestamp(iso: string | null | undefined): string {
   });
 }
 
+/**
+ * A moment as people say it, to the second: the time alone today, its day too otherwise, and its
+ * year only when it is not this one. `2:41:04 PM`, `Oct 31, 2:41:04 PM`.
+ */
+export function formatMoment(iso: string | null | undefined, now = new Date()): string {
+  if (!iso) return '—';
+  const at = new Date(Date.parse(iso));
+  if (!Number.isFinite(at.getTime())) return iso;
+  const time = at.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+  if (at.toDateString() === now.toDateString()) return time;
+  const day = at.toLocaleDateString(undefined, at.getFullYear() === now.getFullYear() ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' });
+  return `${day}, ${time}`;
+}
+
 /** Turn `waiting_for_source_records` into `Waiting for source records`. */
 export function humanize(value: string | null | undefined): string {
   if (!value) return '—';

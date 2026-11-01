@@ -14,6 +14,10 @@ const ROW_OVERSCAN = 12;
 const COLUMN_OVERSCAN_PX = 480;
 /** Leading gutter holding the absolute row number and the expand affordance. */
 const GUTTER_WIDTH = 52;
+/** The waterline's own strip between rows (§10.8). */
+const WATERLINE_HEIGHT = 26;
+/** A live row's ground: Current, faintly, over the surface — opaque, so frozen cells still cover what scrolls under them. */
+const LIVE_GROUND = 'bg-[color-mix(in_srgb,var(--color-current)_7%,var(--color-surface))]';
 
 export interface DataGridProps {
   columns: QueryColumn[];
@@ -35,6 +39,10 @@ export interface DataGridProps {
   className?: string;
   /** Fixed viewport height. Omit to fill the parent, which must bound the grid's height. */
   height?: number;
+  /** Rows, by index, that are live: past the table's last commit, in the console only. */
+  live?: ReadonlySet<number>;
+  /** The waterline: drawn before row `at` (`rows.length` for after the last), saying where commits reach. */
+  waterline?: { at: number; label: ReactNode; title?: string } | null;
 }
 
 /**
@@ -63,6 +71,8 @@ export function DataGrid({
   emptyMessage = 'No rows',
   className,
   height,
+  live,
+  waterline,
 }: DataGridProps): ReactNode {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [scroll, setScroll] = useState({ top: 0, left: 0 });
@@ -167,6 +177,22 @@ export function DataGrid({
 
   const isPinned = (index: number): boolean => index === pinnedIndex;
   const spacer = (key: string): ReactNode => <div key={key} aria-hidden />;
+  // The waterline takes its own strip: every row past it sits that much lower.
+  const line = waterline && waterline.at >= 0 && waterline.at <= rows.length ? waterline.at : null;
+  const waterlineStrip =
+    line !== null && waterline ? (
+      <div
+        key="waterline"
+        role="separator"
+        title={waterline.title}
+        className="sticky left-0 flex items-center gap-2.5 px-3 text-[11.5px] font-semibold whitespace-nowrap text-[var(--color-current-ink)]"
+        style={{ height: WATERLINE_HEIGHT, width: measured.width || undefined }}
+      >
+        <span aria-hidden className="h-[1.5px] w-[18px] shrink-0 bg-[linear-gradient(90deg,transparent,var(--color-current))] opacity-80" />
+        <span className="numeric shrink-0">{waterline.label}</span>
+        <span aria-hidden className="h-[1.5px] min-w-0 flex-1 bg-[linear-gradient(90deg,var(--color-current)_70%,transparent)] opacity-80" />
+      </div>
+    ) : null;
 
   // `isolate` keeps the frozen header's and gutter's z-indexes inside the grid. Without it they
   // stacked over whatever was laid on top of the grid: the Data tab's head peek lost its title bar
@@ -249,7 +275,7 @@ export function DataGrid({
             </div>
           ) : (
             <div
-              style={{ height: rows.length * ROW_HEIGHT, position: 'relative' }}
+              style={{ height: rows.length * ROW_HEIGHT + (line !== null ? WATERLINE_HEIGHT : 0), position: 'relative' }}
               className={cn('transition-opacity duration-150', dimmed && 'opacity-45')}
               aria-busy={dimmed}
             >
@@ -257,22 +283,29 @@ export function DataGrid({
                 Offset with `top`, not `transform`: a transformed ancestor becomes the containing
                 block for its sticky descendants, which would break the frozen gutter again.
               */}
-              <div style={{ position: 'absolute', top: start * ROW_HEIGHT, left: 0 }}>
+              <div style={{ position: 'absolute', top: start * ROW_HEIGHT + (line !== null && line < start ? WATERLINE_HEIGHT : 0), left: 0 }}>
                 {rows.slice(start, end).map((row, offset) => {
                   const index = start + offset;
-                  return (
+                  const isLive = live?.has(index) ?? false;
+                  const shown = (
                     <div
                       key={index}
-                      className="group/row grid border-b border-[var(--color-line)] last:border-b-0 hover:bg-[var(--color-raised)]"
+                      className={cn(
+                        'group/row grid border-b border-[var(--color-line)] last:border-b-0 hover:bg-[var(--color-raised)]',
+                        isLive && LIVE_GROUND,
+                      )}
                       style={{ gridTemplateColumns: layout.template, height: ROW_HEIGHT }}
                     >
                       {onRowExpand ? (
                         <button
                           type="button"
                           onClick={() => onRowExpand(index)}
-                          title="Open row detail"
-                          aria-label={`Open row ${rowNumberOffset + index + 1}`}
-                          className="sticky left-0 z-10 flex items-center justify-end gap-1 border-r border-[var(--color-line)] bg-[var(--color-surface)] px-2 text-[var(--color-ink-muted)] transition-colors group-hover/row:bg-[var(--color-raised)] hover:text-[var(--color-ink)]"
+                          title={isLive ? 'Open row detail · live, not committed yet' : 'Open row detail'}
+                          aria-label={`Open row ${rowNumberOffset + index + 1}${isLive ? ', live' : ''}`}
+                          className={cn(
+                            'sticky left-0 z-10 flex items-center justify-end gap-1 border-r border-[var(--color-line)] px-2 transition-colors group-hover/row:bg-[var(--color-raised)] hover:text-[var(--color-ink)]',
+                            isLive ? `${LIVE_GROUND} text-[var(--color-current-ink)]` : 'bg-[var(--color-surface)] text-[var(--color-ink-muted)]',
+                          )}
                         >
                           <Maximize2 className="size-3 opacity-0 transition-opacity group-hover/row:opacity-100" />
                           <span className="numeric text-[11px]">{rowNumberOffset + index + 1}</span>
@@ -309,7 +342,7 @@ export function DataGrid({
                                 : 'numeric flex items-center overflow-hidden px-3 text-[12px] whitespace-nowrap text-[var(--color-ink)]') +
                               (onCellClick ? ' cursor-copy focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]' : '') +
                               (pinned
-                                ? ' sticky z-10 border-r border-[var(--color-line)] bg-[var(--color-surface)] group-hover/row:bg-[var(--color-raised)]'
+                                ? ` sticky z-10 border-r border-[var(--color-line)] ${isLive ? LIVE_GROUND : 'bg-[var(--color-surface)]'} group-hover/row:bg-[var(--color-raised)]`
                                 : '')
                             }
                           >
@@ -322,7 +355,9 @@ export function DataGrid({
                       {layout.rightSpacer > 0 ? spacer(`right-${index}`) : null}
                     </div>
                   );
+                  return index === line ? [waterlineStrip, shown] : shown;
                 })}
+                {line === rows.length && end === rows.length ? waterlineStrip : null}
               </div>
             </div>
           )}
