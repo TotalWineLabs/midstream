@@ -97,7 +97,7 @@ export function ResizeHandle({
       }}
       className={cn(
         'group relative flex shrink-0 items-center justify-center',
-        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]',
+        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-ink)]',
         vertical ? 'h-full w-3 cursor-col-resize' : 'h-3 w-full cursor-row-resize',
       )}
     >
@@ -111,8 +111,8 @@ export function ResizeHandle({
         className={cn(
           'rounded-full transition-all',
           'bg-[var(--color-line-strong)] opacity-60',
-          'group-hover:bg-[var(--color-accent)] group-hover:opacity-100',
-          'group-focus-visible:bg-[var(--color-accent)] group-focus-visible:opacity-100',
+          'group-hover:bg-[var(--color-ink-muted)] group-hover:opacity-100',
+          'group-focus-visible:bg-[var(--color-ink-muted)] group-focus-visible:opacity-100',
           vertical
             ? 'h-12 w-[3px] group-hover:h-16 group-focus-visible:h-16'
             : 'h-[3px] w-12 group-hover:w-16 group-focus-visible:w-16',

@@ -205,11 +205,11 @@ Each takes effect at its point of use: a default for the next create, the deleti
 deletes that have not reached that step, the discovery settings for the next discovery, the catalog
 settings for the next catalog request, the retention settings for the next hourly sweep.
 
-### Runtimes (`runtime`)
+### Runtimes (`runtime`), shown as Workers
 
 `…` is `RUNTIME_`. Every one is a `RuntimeAppConfig` field (03 §3.3.1).
 
-**Runtimes**
+**Workers** (the console's name for the runtimes' section)
 
 | Key | Env var | Default | Bounds | Label |
 |---|---|---|---|---|
@@ -260,7 +260,7 @@ settings for the next catalog request, the retention settings for the next hourl
 | `orphan_min_age_hours` | `…ORPHAN_MIN_AGE_HOURS` | 24 | 1–720 | Orphan minimum age (advanced) |
 | `orphan_cleanup_interval_hours` | `…ORPHAN_CLEANUP_INTERVAL_HOURS` | 24 | 1–168 | Orphan cleanup interval (advanced) |
 
-**Runtimes**
+**Workers** (the console's name for the runtimes' section)
 
 | Key | Env var | Default | Bounds | Label |
 |---|---|---|---|---|

@@ -106,11 +106,11 @@ export function FederatedTokens(): ReactNode {
                 <p className="flex flex-wrap items-center gap-2 text-[13px] font-medium">
                   {token.name}
                   {token.permissions.map((permission) => (
-                    <Badge key={permission} tone={permission === 'catalog.write' ? 'paused' : 'neutral'}>
+                    <Badge key={permission} tone={permission === 'catalog.write' ? 'accent' : 'neutral'}>
                       {PERMISSION_BADGES[permission] ?? permission}
                     </Badge>
                   ))}
-                  {!token.active ? <Badge tone="failed">{token.revoked_at ? 'revoked' : 'expired'}</Badge> : null}
+                  {!token.active ? <Badge>{token.revoked_at ? 'revoked' : 'expired'}</Badge> : null}
                 </p>
                 <p className="mt-0.5 text-[12px] text-[var(--color-ink-muted)]">
                   {token.datasets.length ? (
@@ -143,7 +143,7 @@ export function FederatedTokens(): ReactNode {
         </ul>
       )}
       {entries.filter((entry) => entry.error).map((entry) => (
-        <p key={entry.domain.id} className="border-t border-[var(--color-line)] px-5 py-2 text-[12px] text-[var(--color-phase-paused)]">
+        <p key={entry.domain.id} className="border-t border-[var(--color-line)] px-5 py-2 text-[12px] text-[var(--color-buoy-ink)]">
           {entry.domain.name}&rsquo;s tokens could not be read: {entry.error}
         </p>
       ))}
@@ -264,7 +264,7 @@ function NewTokenDialog({
             <label key={permission.key} className="flex items-start gap-2.5">
               <input
                 type="checkbox"
-                className="mt-[3px] size-3.5 shrink-0 accent-[var(--color-accent)]"
+                className="mt-[3px] size-3.5 shrink-0 accent-[var(--color-primary)]"
                 disabled={!permission.granted}
                 checked={permissions.includes(permission.key)}
                 onChange={(event) =>
@@ -284,7 +284,7 @@ function NewTokenDialog({
         <fieldset className="space-y-2">
           <legend className="mb-1 text-[12px] font-medium">Datasets</legend>
           <label className="flex items-start gap-2.5">
-            <input type="radio" name="federated-token-datasets" className="mt-[3px] size-3.5 accent-[var(--color-accent)]" checked={!limited} onChange={() => setLimited(false)} />
+            <input type="radio" name="federated-token-datasets" className="mt-[3px] size-3.5 accent-[var(--color-primary)]" checked={!limited} onChange={() => setLimited(false)} />
             <span className="text-[13px]">
               Every dataset you may read, in every domain
               <span className="block text-[12px] text-[var(--color-ink-muted)]">Including ones you are given access to later.</span>
@@ -294,7 +294,7 @@ function NewTokenDialog({
             <input
               type="radio"
               name="federated-token-datasets"
-              className="mt-[3px] size-3.5 accent-[var(--color-accent)]"
+              className="mt-[3px] size-3.5 accent-[var(--color-primary)]"
               checked={limited}
               disabled={available.length === 0}
               onChange={() => setLimited(true)}
@@ -314,13 +314,13 @@ function NewTokenDialog({
                   <label
                     key={dataset.name}
                     className={`flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-[12px] ${
-                      checked ? 'border-[var(--color-accent)] text-[var(--color-ink)]' : 'border-[var(--color-line)] text-[var(--color-ink-muted)]'
+                      checked ? 'border-[var(--color-ink-muted)] text-[var(--color-ink)]' : 'border-[var(--color-line)] text-[var(--color-ink-muted)]'
                     }`}
                     title={`${dataset.domainName}: ${dataset.permissions.includes('catalog.write') ? 'you may read and commit here' : 'you may read here'}`}
                   >
                     <input
                       type="checkbox"
-                      className="size-3 accent-[var(--color-accent)]"
+                      className="size-3 accent-[var(--color-primary)]"
                       checked={checked}
                       onChange={(event) => setDatasets((current) => (event.target.checked ? [...current, dataset.name] : current.filter((item) => item !== dataset.name)))}
                     />

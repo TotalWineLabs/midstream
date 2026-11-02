@@ -31,7 +31,7 @@ export function DatasetGrantsPanel({ grants, subject }: { grants: readonly CpHel
             <li key={`${grant.dataset_id}:${grant.principal_type}:${grant.principal_id}`} className="flex flex-wrap items-center justify-between gap-3 px-5 py-2.5 text-[13px]">
               <span className="min-w-0">
                 {canOpen ? (
-                  <Link to={domainPath(`/datasets/${encodeURIComponent(grant.dataset)}/access`)} className="numeric font-medium hover:text-[var(--color-accent)] hover:underline">
+                  <Link to={domainPath(`/datasets/${encodeURIComponent(grant.dataset)}/access`)} className="numeric font-medium hover:link">
                     {grant.dataset}
                   </Link>
                 ) : (

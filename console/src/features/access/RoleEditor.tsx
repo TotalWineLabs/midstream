@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, Copy, Lock, Search, Trash2 } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Copy, Lock, Search, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
@@ -201,7 +201,7 @@ function RoleForm({ creating, role, catalog }: { creating: boolean; role: CpRole
 
           <div className="space-y-3">
             <p className="text-[13px] font-semibold tracking-tight">Permissions</p>
-            {permissionError ? <p className="text-[12px] text-[var(--color-phase-failed)]">{permissionError}</p> : null}
+            {permissionError ? <p className="text-[12px] text-[var(--color-flare-ink)]">{permissionError}</p> : null}
             <div className="flex flex-wrap gap-2">
               <div className="relative min-w-[200px] flex-1">
                 <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[var(--color-ink-faint)]" />
@@ -241,11 +241,11 @@ function RoleForm({ creating, role, catalog }: { creating: boolean; role: CpRole
                     </button>
                     {!readOnly ? (
                       <span className="flex items-center gap-2 text-[12px]">
-                        <button type="button" className="text-[var(--color-accent)] hover:underline" onClick={() => setCategoryChosen(item.id, true)}>
+                        <button type="button" className="link" onClick={() => setCategoryChosen(item.id, true)}>
                           Select all
                         </button>
                         <span className="text-[var(--color-line-strong)]">|</span>
-                        <button type="button" className="text-[var(--color-accent)] hover:underline" onClick={() => setCategoryChosen(item.id, false)}>
+                        <button type="button" className="link" onClick={() => setCategoryChosen(item.id, false)}>
                           Deselect all
                         </button>
                       </span>
@@ -261,7 +261,7 @@ function RoleForm({ creating, role, catalog }: { creating: boolean; role: CpRole
                             <label className={cn('flex items-start gap-3 px-4 py-2.5 text-[13px]', readOnly ? 'cursor-default' : 'cursor-pointer hover:bg-[var(--color-raised)]')}>
                               <input
                                 type="checkbox"
-                                className="mt-0.5 size-4 accent-[var(--color-accent)]"
+                                className="mt-0.5 size-4 accent-[var(--color-primary)]"
                                 checked={checked || Boolean(implied)}
                                 disabled={readOnly || Boolean(implied && !checked)}
                                 onChange={() => toggle(definition.key)}
@@ -272,7 +272,12 @@ function RoleForm({ creating, role, catalog }: { creating: boolean; role: CpRole
                                   {definition.scope === 'dataset' ? (
                                     <Badge title="Held through a group, on every dataset; granted on a dataset, on that one only">Per dataset</Badge>
                                   ) : null}
-                                  {definition.danger ? <Badge tone="failed">Can remove data or access</Badge> : null}
+                                  {definition.danger ? (
+                                    <span className="inline-flex items-center gap-1 text-[12px] text-[var(--color-ink-muted)]">
+                                      <AlertTriangle className="size-3" aria-hidden />
+                                      Can remove data or access
+                                    </span>
+                                  ) : null}
                                   {implied && !checked ? <span className="text-[12px] text-[var(--color-ink-faint)]">included by {implied}</span> : null}
                                 </span>
                                 <span className="block text-[12px] text-[var(--color-ink-muted)]">{definition.description}</span>

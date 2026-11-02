@@ -14,7 +14,7 @@ import type {
 /** Who each scope's settings configure, as a heading reads. */
 export const SCOPE_LABELS = {
   'control-plane': 'Control plane',
-  runtime: 'Runtimes',
+  runtime: 'Workers',
   console: 'This console',
 } as const;
 

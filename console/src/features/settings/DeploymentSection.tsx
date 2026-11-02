@@ -14,8 +14,8 @@ const COMPONENTS: { id: DeploymentSettingView['component']; title: string; descr
   },
   {
     id: 'runtime',
-    title: 'Runtimes',
-    description: 'The runtime spec every runtime is rendered from, in the control plane’s environment.',
+    title: 'Workers',
+    description: 'The spec every materialization’s workers are rendered from, in the control plane’s environment.',
   },
   {
     id: 'console',

@@ -68,10 +68,11 @@ export function StatusGlyph({
       <svg {...box}>
         <defs>
           <linearGradient id={`${fade}-g`}>
-            <stop offset="0" stopColor="#fff" stopOpacity="0.15" />
-            <stop offset="0.25" stopColor="#fff" />
-            <stop offset="0.75" stopColor="#fff" />
-            <stop offset="1" stopColor="#fff" stopOpacity="0.15" />
+            {/* A mask: white is what shows, not a colour. */}
+            <stop offset="0" stopColor="white" stopOpacity="0.15" />
+            <stop offset="0.25" stopColor="white" />
+            <stop offset="0.75" stopColor="white" />
+            <stop offset="1" stopColor="white" stopOpacity="0.15" />
           </linearGradient>
           <mask id={`${fade}-m`}>
             <rect width="12" height="12" fill={`url(#${fade}-g)`} />
@@ -133,8 +134,8 @@ export function StatusGlyph({
     return (
       <svg {...box}>
         <rect x="2.4" y="2.4" width="7.2" height="7.2" rx="1.3" fill={color} transform="rotate(45 6 6)" />
-        <path d="M6 3.7v2.6" stroke="#1a1300" strokeWidth="1.4" strokeLinecap="round" />
-        <circle cx="6" cy="8.2" r="0.75" fill="#1a1300" />
+        <path d="M6 3.7v2.6" stroke="var(--color-on-buoy)" strokeWidth="1.4" strokeLinecap="round" />
+        <circle cx="6" cy="8.2" r="0.75" fill="var(--color-on-buoy)" />
       </svg>
     );
   }
@@ -143,7 +144,7 @@ export function StatusGlyph({
     return (
       <svg {...box}>
         <polygon points="3.9,0.9 8.1,0.9 11.1,3.9 11.1,8.1 8.1,11.1 3.9,11.1 0.9,8.1 0.9,3.9" fill={color} />
-        <rect x="3.3" y="5.25" width="5.4" height="1.5" rx="0.75" fill="#fff" />
+        <rect x="3.3" y="5.25" width="5.4" height="1.5" rx="0.75" fill="var(--color-on-flare)" />
       </svg>
     );
   }

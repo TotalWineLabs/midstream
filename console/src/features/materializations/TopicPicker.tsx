@@ -17,6 +17,7 @@ import { RelativeTime } from '@/components/Inline';
 import { Badge, FIELD_BASE, Skeleton } from '@/components/ui/primitives';
 import { ApiError } from '@/lib/api';
 import { useCan } from '@/lib/auth';
+import { Shimmer } from '@/components/motion/Shimmer';
 import { cn } from '@/lib/cn';
 import { displayName, formatExact } from '@/lib/format';
 import { useApi } from '@/lib/domains';
@@ -396,7 +397,7 @@ export function TopicPicker({
       className: cn(
         'absolute inset-x-0 flex items-center gap-2 rounded-md px-2.5 text-[13px]',
         blocked ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
-        isActive && 'bg-[var(--color-accent-soft)]',
+        isActive && 'bg-[var(--color-raised)]',
       ),
     };
 
@@ -438,7 +439,7 @@ export function TopicPicker({
         >
           {formatExact(topic.partitions)}
         </span>
-        <Check aria-hidden className={cn('size-3.5 shrink-0 text-[var(--color-accent)]', !isChosen && 'invisible')} />
+        <Check aria-hidden className={cn('size-3.5 shrink-0 text-[var(--color-ink)]', !isChosen && 'invisible')} />
       </div>
     );
   }
@@ -456,7 +457,7 @@ export function TopicPicker({
             type="button"
             onPointerDown={(event) => event.preventDefault()}
             onClick={() => setShowHidden(true)}
-            className="mt-1 block w-full text-[12px] text-[var(--color-accent)] hover:underline"
+            className="mt-1 block w-full text-[12px] link"
           >
             Show {formatExact(revealable)} internal {revealable === 1 ? 'topic' : 'topics'}
           </button>
@@ -503,10 +504,10 @@ export function TopicPicker({
 
   let hint: ReactNode;
   if (error) {
-    hint = <span className="block text-[12px] text-[var(--color-phase-failed)]">{error}</span>;
+    hint = <span className="block text-[12px] text-[var(--color-flare-ink)]">{error}</span>;
   } else if (unknown.length > 0) {
     hint = (
-      <span className="flex items-center gap-1.5 text-[12px] text-[var(--color-phase-paused)]">
+      <span className="flex items-center gap-1.5 text-[12px] text-[var(--color-buoy-ink)]">
         <TriangleAlert className="size-3.5 shrink-0" />
         {unknown.length === 1 ? `${unknown[0]} is` : `${unknown.join(', ')} are`} not in the cluster's topic list. Check
         the {unknown.length === 1 ? 'name' : 'names'} before {verb}.
@@ -563,8 +564,8 @@ export function TopicPicker({
           className={cn(
             FIELD_BASE,
             'flex h-9 cursor-pointer items-center gap-2 text-left',
-            error && 'border-[var(--color-phase-failed)]',
-            open && 'border-[var(--color-accent)]',
+            error && 'border-[var(--color-flare)]',
+            open && 'border-[var(--color-ink-muted)]',
           )}
         >
           {value.length === 0 ? (
@@ -585,7 +586,7 @@ export function TopicPicker({
             className={cn(
               'fade-in absolute inset-x-0 top-[calc(100%+6px)] z-40 overflow-hidden',
               'rounded-[var(--radius-panel)] border border-[var(--color-line-strong)]',
-              'bg-[var(--color-surface)] shadow-xl shadow-black/10 dark:shadow-black/50',
+              'bg-[var(--color-surface)] shadow-[var(--shadow-float)]',
             )}
           >
             <div className="flex items-center gap-2 border-b border-[var(--color-line)] pr-1.5 pl-3">
@@ -614,13 +615,14 @@ export function TopicPicker({
                 aria-label="Reload the topic list from Kafka"
                 className="grid size-7 shrink-0 place-items-center rounded-md text-[var(--color-ink-faint)] transition-colors hover:bg-[var(--color-raised)] hover:text-[var(--color-ink)] disabled:opacity-50"
               >
-                <RefreshCw className={cn('size-3.5', reload.isPending && 'animate-spin')} />
+                <RefreshCw className="size-3.5" />
               </button>
             </div>
 
             <div className="flex items-center justify-between gap-3 px-3 pt-2 pb-1.5 text-[11px] text-[var(--color-ink-faint)]">
               <span className="tabular-nums">
-                {summary}
+                {/* Reloading is work under way: the words say so, shimmering (§10.7). */}
+                {reload.isPending ? <Shimmer>Reloading the topic list from Kafka…</Shimmer> : summary}
                 {searching && hiddenMatches > 0 && !showHidden ? ` · ${formatExact(hiddenMatches)} internal hidden` : ''}
               </span>
               {/* Right edge lines up with the partitions column: list padding + check icon + gap. */}
@@ -628,7 +630,7 @@ export function TopicPicker({
             </div>
 
             {loadError ? (
-              <p className="px-3 pb-2 text-[12px] text-[var(--color-phase-failed)]">
+              <p className="px-3 pb-2 text-[12px] text-[var(--color-flare-ink)]">
                 Couldn't load topics: {loadError}. Type the exact topic name instead.
               </p>
             ) : null}
@@ -639,7 +641,7 @@ export function TopicPicker({
               <p
                 className={cn(
                   'border-t border-[var(--color-line)] px-3 py-1.5 text-[11px]',
-                  reload.isError ? 'text-[var(--color-phase-failed)]' : 'text-[var(--color-phase-paused)]',
+                  reload.isError ? 'text-[var(--color-flare-ink)]' : 'text-[var(--color-buoy-ink)]',
                 )}
                 title={catalog.data?.error ?? undefined}
               >
@@ -659,7 +661,7 @@ export function TopicPicker({
                       setShowHidden(event.target.checked);
                       searchRef.current?.focus();
                     }}
-                    className="size-3 cursor-pointer accent-[var(--color-accent)]"
+                    className="size-3 cursor-pointer accent-[var(--color-primary)]"
                   />
                   Show internal topics ({formatExact(index.hiddenTotal)})
                 </label>

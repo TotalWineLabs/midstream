@@ -76,7 +76,7 @@ function SessionRow({
         <span className="min-w-0">
           <span className="flex flex-wrap items-center gap-1.5 text-[13px] font-medium">
             {describeAgent(session.user_agent)}
-            {session.current ? <Badge tone="running">This browser</Badge> : null}
+            {session.current ? <Badge tone="accent">This browser</Badge> : null}
             {!session.active ? <Badge tone="neutral">{ENDED_REASONS[session.ended_reason ?? ''] ?? 'Expired'}</Badge> : null}
           </span>
           <span className="block text-[12px] text-[var(--color-ink-muted)]">

@@ -23,11 +23,12 @@ export function DomainDot({ domain, className }: { domain: Pick<ConsoleDomain, '
     <span
       className={cn(
         'size-1.5 shrink-0 rounded-full',
+        // Live is Current; reconnecting or unreachable needs attention; not usable has failed.
         domain.status === 'ok' && domain.connected
-          ? 'bg-[var(--color-phase-running)]'
+          ? 'bg-[var(--color-current)]'
           : usable
-            ? 'bg-[var(--color-phase-paused)]'
-            : 'bg-[var(--color-phase-failed)]',
+            ? 'bg-[var(--color-buoy)]'
+            : 'bg-[var(--color-flare)]',
         className,
       )}
       title={domainStatusText(domain)}

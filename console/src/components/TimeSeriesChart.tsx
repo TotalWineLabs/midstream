@@ -271,7 +271,7 @@ export function TimeSeriesChart({
       {active ? (
         <div
           role="status"
-          className="pointer-events-none absolute z-10 rounded-[var(--radius-control)] border border-[var(--color-line-strong)] bg-[var(--color-surface)] px-2.5 py-1.5 shadow-lg shadow-black/10"
+          className="pointer-events-none absolute z-10 rounded-[var(--radius-control)] border border-[var(--color-line-strong)] bg-[var(--color-surface)] px-2.5 py-1.5 shadow-[var(--shadow-float)]"
           style={{
             ...(flip ? { right: Math.max(4, width - tooltipLeft + 10) } : { left: tooltipLeft + 10 }),
             ...(tooltipBelow ? { bottom: MARGIN.bottom + 6 } : { top: 4 }),

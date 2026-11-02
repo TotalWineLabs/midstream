@@ -17,17 +17,17 @@ type Outstanding = Exclude<RuntimeRolloutState, 'current'>;
 const OUTSTANDING: Record<Outstanding, { status: Status | string; hint: string }> = {
   pending: {
     status: { kind: 'starting', label: 'Applying', reason: null, moving: true },
-    hint: 'A member still runs an older revision, or settings from before this installation; it picks these up within seconds.',
+    hint: 'A worker still runs an older revision, or settings from before this installation; it picks these up within seconds.',
   },
   stopped: {
     status: { kind: 'stopped', label: 'Stopped', reason: null, moving: false },
-    hint: 'No members are running; it takes the current settings when it resumes.',
+    hint: 'No workers are running; it takes the current settings when it resumes.',
   },
   not_reporting: {
     status: { kind: 'attention', label: 'Not reporting', reason: null, moving: false },
-    hint: 'No member has reported in the last two minutes.',
+    hint: 'No worker has reported in the last two minutes.',
   },
-  unsupported: { status: 'On its next deploy', hint: 'Its runtime predates live settings and takes them when it is next deployed.' },
+  unsupported: { status: 'On its next deploy', hint: 'Its workers predate live settings and take them when they are next deployed.' },
 };
 
 /**
@@ -48,7 +48,7 @@ export function RuntimeRolloutPanel({ rollout }: { rollout: RuntimeRollout | nul
   const label = `${rollout.current} of ${running} running current`;
   const progress =
     running === 0 ? (
-      <span className="text-[12px] text-[var(--color-ink-faint)]">No runtimes running</span>
+      <span className="text-[12px] text-[var(--color-ink-faint)]">No workers running</span>
     ) : rollout.current === running ? (
       <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--color-ink-muted)]">
         <CheckCircle2 className="size-3.5" aria-hidden />
@@ -64,13 +64,13 @@ export function RuntimeRolloutPanel({ rollout }: { rollout: RuntimeRollout | nul
   return (
     <Panel>
       <PanelHeader
-        title="Delivery to runtimes"
+        title="Delivery to workers"
         description={
           rollout.revision > 0
-            ? `Runtimes pick up revision ${rollout.revision} on their next record or heartbeat, without a restart.`
+            ? `Workers pick up revision ${rollout.revision} on their next record or heartbeat, without a restart.`
             : followed
-              ? 'No runtime setting has been changed here. A runtime still running settings from before this installation drops them on its next record or heartbeat.'
-              : 'No runtime setting has been changed here, so every runtime runs the values it was deployed with.'
+              ? 'No worker setting has been changed here. A worker still running settings from before this installation drops them on its next record or heartbeat.'
+              : 'No worker setting has been changed here, so every worker runs the values it was deployed with.'
         }
         actions={followed ? progress : null}
       />

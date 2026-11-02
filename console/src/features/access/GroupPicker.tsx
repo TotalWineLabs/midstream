@@ -26,7 +26,7 @@ export function GroupPicker({
 
   if (groups.isLoading) return <Skeleton className="h-24" />;
   if (groups.error) {
-    return <p className="text-[12px] text-[var(--color-phase-failed)]">Groups could not be loaded: {String((groups.error as Error).message)}</p>;
+    return <p className="text-[12px] text-[var(--color-flare-ink)]">Groups could not be loaded: {String((groups.error as Error).message)}</p>;
   }
 
   const toggle = (groupId: string): void => {
@@ -57,7 +57,7 @@ export function GroupPicker({
               >
                 <input
                   type="checkbox"
-                  className="mt-0.5 size-4 accent-[var(--color-accent)]"
+                  className="mt-0.5 size-4 accent-[var(--color-primary)]"
                   checked={checked}
                   disabled={locked}
                   onChange={() => toggle(group.group_id)}

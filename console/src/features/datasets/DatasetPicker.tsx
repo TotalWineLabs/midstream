@@ -104,8 +104,8 @@ export function DatasetPicker({
         className={cn(
           FIELD_BASE,
           'flex h-8 cursor-pointer items-center gap-2 text-left text-[13px]',
-          invalid && 'border-[var(--color-phase-failed)]',
-          open && 'border-[var(--color-accent)]',
+          invalid && 'border-[var(--color-flare)]',
+          open && 'border-[var(--color-ink-muted)]',
         )}
       >
         <span className={cn('numeric min-w-0 flex-1 truncate', !value && 'text-[var(--color-ink-faint)]')}>{value || 'Choose dataset'}</span>
@@ -117,7 +117,7 @@ export function DatasetPicker({
           className={cn(
             'fade-in absolute inset-x-0 top-[calc(100%+6px)] z-50 min-w-[260px] overflow-hidden',
             'rounded-[var(--radius-panel)] border border-[var(--color-line-strong)]',
-            'bg-[var(--color-surface)] shadow-xl shadow-black/10 dark:shadow-black/50',
+            'bg-[var(--color-surface)] shadow-[var(--shadow-float)]',
           )}
         >
           {creating ? (
@@ -154,7 +154,7 @@ export function DatasetPicker({
                 {datasets.isPending ? (
                   <p className="px-2 py-2 text-[12px] text-[var(--color-ink-muted)]">Loading datasets…</p>
                 ) : datasets.isError ? (
-                  <p className="px-2 py-2 text-[12px] text-[var(--color-phase-failed)]">
+                  <p className="px-2 py-2 text-[12px] text-[var(--color-flare-ink)]">
                     {datasets.error instanceof ApiError ? datasets.error.message : 'The datasets could not be loaded.'}
                   </p>
                 ) : items.length === 0 ? (
@@ -186,11 +186,11 @@ export function DatasetPicker({
                         className={cn(
                           'flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px]',
                           allowed ? 'cursor-pointer' : 'cursor-not-allowed opacity-60',
-                          position === active && 'bg-[var(--color-accent-soft)]',
+                          position === active && 'bg-[var(--color-raised)]',
                         )}
                       >
                         {allowed ? (
-                          <Check aria-hidden className={cn('size-3.5 shrink-0 text-[var(--color-accent)]', dataset.name !== value && 'invisible')} />
+                          <Check aria-hidden className={cn('size-3.5 shrink-0 text-[var(--color-ink)]', dataset.name !== value && 'invisible')} />
                         ) : (
                           <Lock aria-hidden className="size-3.5 shrink-0 text-[var(--color-ink-faint)]" />
                         )}
@@ -211,7 +211,7 @@ export function DatasetPicker({
                   type="button"
                   onPointerDown={(event) => event.preventDefault()}
                   onClick={() => setCreating(true)}
-                  className="flex w-full items-center gap-2 border-t border-[var(--color-line)] px-3 py-2 text-left text-[12px] font-medium text-[var(--color-accent)] hover:bg-[var(--color-raised)]"
+                  className="flex w-full items-center gap-2 border-t border-[var(--color-line)] px-3 py-2 text-left text-[12px] font-medium text-[var(--color-ink)] hover:bg-[var(--color-raised)]"
                 >
                   <Plus className="size-3.5" />
                   New dataset
@@ -289,7 +289,7 @@ function NewDatasetForm({
           className="numeric h-8 text-[13px]"
           aria-invalid={Boolean(name.trim() && problem)}
         />
-        {name.trim() && problem ? <span className="block text-[11px] text-[var(--color-phase-failed)]">{problem}</span> : null}
+        {name.trim() && problem ? <span className="block text-[11px] text-[var(--color-flare-ink)]">{problem}</span> : null}
       </label>
       <label className="block space-y-1">
         <span className="text-[11px] text-[var(--color-ink-muted)]">Description · optional</span>
@@ -310,7 +310,7 @@ function NewDatasetForm({
       <p className="text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
         You become its owner, and everyone signed in can read it; its owners can change that.
       </p>
-      {failure ? <p className="text-[11px] text-[var(--color-phase-failed)]">{failure}</p> : null}
+      {failure ? <p className="text-[11px] text-[var(--color-flare-ink)]">{failure}</p> : null}
       <div className="flex justify-end gap-2">
         <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
           Back

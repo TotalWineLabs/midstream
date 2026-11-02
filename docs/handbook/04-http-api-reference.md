@@ -1383,7 +1383,7 @@ value comes from, plus the deployment's read-only settings:
     {
       "key": "default_namespace",
       "component": "control-plane",
-      "label": "Runtime namespace",
+      "label": "Workers' namespace",
       "description": "Namespace new runtimes deploy into. …",
       "env_var": "CONTROL_PLANE_DEFAULT_NAMESPACE",
       "value": "midstream"

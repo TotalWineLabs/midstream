@@ -5,7 +5,8 @@ import { useDeferredValue, useEffect, useId, useMemo, useRef, useState, type Rea
 import { ColumnLabelText } from './ColumnLabelText';
 import { compactType, groupOf, isComparableType, type ColumnLabel } from './columns';
 import { searchFields } from './fieldSearch';
-import { Button, Input, Select, Spinner } from '@/components/ui/primitives';
+import { Shimmer } from '@/components/motion/Shimmer';
+import { Button, Input, Select } from '@/components/ui/primitives';
 import { Popover } from '@/components/ui/Popover';
 import { cn } from '@/lib/cn';
 import { formatCount } from '@/lib/format';
@@ -77,7 +78,7 @@ export function FilterChips({
             'numeric inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[var(--radius-control)] px-2 text-[11px]',
             superseded
               ? 'border border-dashed border-[var(--color-line-strong)] text-[var(--color-ink-faint)] opacity-60'
-              : 'border border-[var(--color-accent)] bg-[var(--color-accent-soft)]',
+              : 'border border-[var(--color-line-strong)] bg-[var(--color-raised)]',
           )}
         >
           <ColumnLabelText
@@ -447,12 +448,11 @@ function FilterValue({
           {runId === null ? (
             <p className="px-1 text-[11px] text-[var(--color-ink-faint)]">Type a value.</p>
           ) : suggestions.isLoading ? (
-            <p className="flex items-center gap-1.5 px-1 text-[11px] text-[var(--color-ink-muted)]">
-              <Spinner className="size-3" />
-              Reading values…
+            <p className="px-1 text-[11px] text-[var(--color-ink-muted)]">
+              <Shimmer>Reading values…</Shimmer>
             </p>
           ) : suggestions.isError ? (
-            <p className="px-1 text-[11px] text-[var(--color-phase-paused)]">Could not read values. Type one instead.</p>
+            <p className="px-1 text-[11px] text-[var(--color-buoy-ink)]">Could not read values. Type one instead.</p>
           ) : suggestions.data && suggestions.data.topValues.length > 0 ? (
             <>
               <p className="px-1 pb-1 text-[12px] font-medium text-[var(--color-ink-faint)]">

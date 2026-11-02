@@ -31,7 +31,7 @@ export function ChooseDomainDialog({
           <li key={domain.id}>
             <button
               type="button"
-              className="flex w-full items-center gap-3 rounded-[var(--radius-control)] border border-[var(--color-line)] px-4 py-3 text-left transition-colors hover:border-[var(--color-accent)] hover:bg-[var(--color-raised)]"
+              className="flex w-full items-center gap-3 rounded-[var(--radius-control)] border border-[var(--color-line)] px-4 py-3 text-left transition-colors hover:border-[var(--color-line-strong)] hover:bg-[var(--color-raised)]"
               onClick={() => {
                 onClose();
                 onChoose(domain);

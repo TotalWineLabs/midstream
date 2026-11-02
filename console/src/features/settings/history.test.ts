@@ -38,7 +38,7 @@ describe('mergeHistories', () => {
     ]);
     assert.deepEqual(
       merged.entries.map((row) => placeOf(row, true)),
-      ['Domain A · Runtimes', 'This console', 'Domain B · Control plane'],
+      ['Domain A · Workers', 'This console', 'Domain B · Control plane'],
     );
     assert.deepEqual(
       merged.entries.map((row) => whereFrom(row, true)),
@@ -66,12 +66,12 @@ describe('mergeHistories', () => {
       { domain: 'domain_a', domainName: 'Domain A', history: null, overview: null, error: 'connection refused' },
       { domain: 'domain_b', domainName: 'Domain B', history: history([], [{ scope: 'runtime', message: 'timed out' }]), overview: null, error: null },
     ]);
-    assert.deepEqual(merged.errors, ['Domain A (connection refused)', 'Domain B · Runtimes (timed out)']);
+    assert.deepEqual(merged.errors, ['Domain A (connection refused)', 'Domain B · Workers (timed out)']);
   });
 
   it('on a domain’s own page, places a change by its scope alone', () => {
     const merged = mergeHistories([{ domain: 'domain_a', domainName: 'Domain A', history: history([entry('runtime', 1, '2026-10-26T11:00:00Z')]), overview: null, error: null }]);
-    assert.equal(placeOf(merged.entries[0]!, false), 'Runtimes');
-    assert.equal(whereFrom(merged.entries[0]!, false), 'Runtimes');
+    assert.equal(placeOf(merged.entries[0]!, false), 'Workers');
+    assert.equal(whereFrom(merged.entries[0]!, false), 'Workers');
   });
 });

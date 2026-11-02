@@ -41,7 +41,7 @@ export function Dialog({
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-8">
       <div
-        className="fixed inset-0 bg-black/25 backdrop-blur-[2px] dark:bg-black/55"
+        className="fixed inset-0 bg-[var(--color-scrim)] backdrop-blur-[2px]"
         onClick={onClose}
         aria-hidden
       />
@@ -51,7 +51,7 @@ export function Dialog({
         aria-label={title}
         className={cn(
           'fade-in relative my-auto w-full rounded-[16px] border border-[var(--color-line-strong)]',
-          'bg-[var(--color-pop)] shadow-2xl shadow-black/10 dark:shadow-black/50',
+          'bg-[var(--color-pop)] shadow-[var(--shadow-float)]',
           size === 'lg' ? 'max-w-3xl' : 'max-w-lg',
         )}
       >

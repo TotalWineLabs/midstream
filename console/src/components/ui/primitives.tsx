@@ -8,6 +8,7 @@ import {
   type TextareaHTMLAttributes,
 } from 'react';
 
+import { Shimmer } from '@/components/motion/Shimmer';
 import { cn } from '@/lib/cn';
 
 /* ------------------------------------------------------------------ Button */
@@ -17,7 +18,7 @@ type ButtonSize = 'sm' | 'md';
 
 /**
  * The primary action is ink, never Current: aqua means flowing (docs/10-design-system.md §10.3).
- * Danger is Flare at a depth white or Abyss text reads on at 4.5:1 in each theme.
+ * Danger is Flare at a depth its text reads on at 4.5:1 in each theme (`--color-danger`).
  */
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary: 'bg-[var(--color-primary)] text-[var(--color-on-primary)] hover:opacity-90 disabled:opacity-40',
@@ -25,8 +26,7 @@ const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
     'bg-[var(--color-shelf)] text-[var(--color-ink)] border border-[var(--color-line-strong)] hover:bg-[var(--color-raised)] disabled:opacity-40',
   ghost:
     'text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] hover:bg-[var(--color-raised)] disabled:opacity-40',
-  danger:
-    'bg-[var(--color-flare-ink)] text-white dark:bg-[var(--color-flare)] dark:text-[var(--color-abyss)] hover:opacity-90 disabled:opacity-40',
+  danger: 'bg-[var(--color-danger)] text-[var(--color-on-danger)] hover:opacity-90 disabled:opacity-40',
 };
 
 const BUTTON_SIZES: Record<ButtonSize, string> = {
@@ -48,6 +48,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     <button
       ref={ref}
       disabled={disabled || loading}
+      aria-busy={loading || undefined}
       className={cn(
         'inline-flex items-center justify-center rounded-[var(--radius-control)] font-medium',
         'transition-[opacity,background-color,color] duration-150 select-none whitespace-nowrap',
@@ -58,22 +59,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       )}
       {...props}
     >
-      {loading ? <Spinner className="size-3.5" /> : null}
-      {children}
+      {/* Working: its words shimmer (§10.7), and it cannot be pressed again. */}
+      {loading ? <Shimmer className="inline-flex items-center gap-[inherit]">{children}</Shimmer> : children}
     </button>
   );
 });
-
-/* ------------------------------------------------------------------ Spinner */
-
-export function Spinner({ className }: { className?: string }): ReactNode {
-  return (
-    <svg className={cn('size-4 animate-spin', className)} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.2" strokeWidth="3" />
-      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 /* -------------------------------------------------------------------- Panel */
 
@@ -292,8 +282,9 @@ export function EmptyState({
 
 /* ----------------------------------------------------------------- Skeleton */
 
+/** Where content is loading: the shimmer's sweep across a block (§10.7), still under reduced motion. */
 export function Skeleton({ className }: { className?: string }): ReactNode {
-  return <div className={cn('animate-pulse rounded-md bg-[var(--color-raised)]', className)} />;
+  return <div className={cn('skeleton rounded-md', className)} />;
 }
 
 /* ---------------------------------------------------------------- Key/value */

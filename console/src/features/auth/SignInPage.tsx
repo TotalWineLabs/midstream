@@ -5,7 +5,7 @@ import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-route
 import { PasswordInput } from './PasswordInput';
 import { Mark } from '@/components/Logo';
 import { SsoOutcomePanel, useSsoOutcome } from './SsoOutcome';
-import { Button, Field, Input, Select, Spinner } from '@/components/ui/primitives';
+import { Button, Field, Input, Select } from '@/components/ui/primitives';
 import { ApiError } from '@/lib/api';
 import { useConsoleAuth } from '@/lib/auth';
 import { useConsoleConfig } from '@/lib/domains';
@@ -58,7 +58,8 @@ export function SignInPage(): ReactNode {
   if (config.isLoading || consoleAuth.loading) {
     return (
       <div className="flex min-h-full items-center justify-center">
-        <Spinner className="size-5 text-[var(--color-ink-faint)]" />
+        {/* The console itself is waiting: its mark flows (§10.7). */}
+        <Mark size={32} working label="Loading" className="text-[var(--color-ink-faint)]" />
       </div>
     );
   }
@@ -139,13 +140,9 @@ export function SignInPage(): ReactNode {
             {error ? (
               <div
                 role="alert"
-                className="flex items-start gap-2 rounded-[var(--radius-control)] border px-3 py-2.5 text-[13px]"
-                style={{
-                  borderColor: 'color-mix(in srgb, var(--color-phase-failed) 35%, transparent)',
-                  background: 'color-mix(in srgb, var(--color-phase-failed) 8%, transparent)',
-                }}
+                className="flex items-start gap-2 rounded-[var(--radius-control)] bg-[var(--color-flare-wash)] px-3 py-2.5 text-[13px]"
               >
-                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--color-phase-failed)]" />
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--color-flare-ink)]" />
                 <span>{error}</span>
               </div>
             ) : null}

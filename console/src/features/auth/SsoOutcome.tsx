@@ -58,15 +58,11 @@ export function SsoOutcomePanel({ outcome }: { outcome: SsoOutcome }): ReactNode
   return (
     <div
       role="alert"
-      className="space-y-2 rounded-[var(--radius-control)] border px-3 py-2.5 text-[13px]"
-      style={{
-        borderColor: 'color-mix(in srgb, var(--color-phase-failed) 35%, transparent)',
-        background: 'color-mix(in srgb, var(--color-phase-failed) 8%, transparent)',
-      }}
+      className="space-y-2 rounded-[var(--radius-control)] bg-[var(--color-flare-wash)] px-3 py-2.5 text-[13px]"
     >
       {outcome.error ? (
         <p className="flex items-start gap-2">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--color-phase-failed)]" />
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--color-flare-ink)]" />
           <span>{outcome.error}</span>
         </p>
       ) : (
@@ -86,9 +82,9 @@ export function SsoOutcomePanel({ outcome }: { outcome: SsoOutcome }): ReactNode
 function DomainLine({ entry }: { entry: SsoDomainOutcome }): ReactNode {
   const icon =
     entry.status === 'signed_in' ? (
-      <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-[var(--color-phase-running)]" />
+      <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-[var(--color-ink-muted)]" />
     ) : entry.status === 'unreachable' ? (
-      <CloudOff className="mt-0.5 size-3.5 shrink-0 text-[var(--color-phase-paused)]" />
+      <CloudOff className="mt-0.5 size-3.5 shrink-0 text-[var(--color-buoy-ink)]" />
     ) : (
       <Lock className="mt-0.5 size-3.5 shrink-0 text-[var(--color-ink-muted)]" />
     );

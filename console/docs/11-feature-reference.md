@@ -832,13 +832,13 @@ See [handbook 16 — Versioning](../../docs/handbook/16-versioning.md) for what 
 
 ## 11.8b Settings (`/settings/:section`, `/d/<domain>/settings/:section`)
 
-Where an administrator changes how the console, each domain's control plane and its runtimes behave,
+Where an administrator changes how the console, each domain's control plane and its workers behave,
 without a redeploy. `features/settings/`. Two pages share one layout (handbook 17 §17.8):
 
 - **The console's** (`/settings`, under **All domains**): the console's own settings, stored in the
   settings home, the **Domains** in its registry, **Your account** in each domain, and every domain's
   **Change history** merged.
-- **A domain's** (`/d/<domain>/settings`): its control plane's and runtimes' settings, its directory
+- **A domain's** (`/d/<domain>/settings`): its control plane's and workers' settings, its directory
   — users, groups, roles, the audit log — and **Sign-in**.
 
 ### Layout
@@ -856,7 +856,7 @@ home; on a domain's, in that domain:
 | Console | System | Deployment | `settings.view` in the settings home |
 | Console | System | Change history | `settings.view` in any domain |
 | Domain | Access | Users, Groups, Roles, Security, Sign-in, Audit log | `users.view`, `groups.view`, `roles.view`, `settings.view`, `settings.view`, `audit.view` |
-| Domain | Platform | Materializations, Data protection, Deletion & retention, Schema evolution, Runtimes, Commits, Live tail, Compaction & retention, Iceberg catalog, Background jobs | `settings.view` |
+| Domain | Platform | Materializations, Data protection, Deletion & retention, Schema evolution, Workers, Commits, Live tail, Compaction & retention, Iceberg catalog, Background jobs | `settings.view` |
 | Domain | System | Topics & Kafka, Diagnostics, Deployment, Change history | `settings.view` |
 
 Without `settings.manage` the settings sections are read-only: no save bar, no Reset. A domain's
@@ -881,7 +881,7 @@ above the rows says so: nothing can be hashed, so a create that keeps a default 
 refused until the key is added (control-plane handbook
 [22](../../docs/handbook/22-data-protection.md) §22.9). The
 domain's **Deployment** section shows the protection key's id, or *not configured: nothing can be
-hashed*, and the storage its apps and runtimes write with: the S3 endpoint, region and path-style
+hashed*, and the storage its apps and workers write with: the S3 endpoint, region and path-style
 addressing and the Azure Blob endpoint, never a credential. The console's own **Deployment** section
 names its storage profiles in **Object storage access** — each one's name, kind and mode, direct or
 cached — and gives each a row, **Storage profile <name>**: its scope, endpoint, region and path
@@ -927,7 +927,7 @@ abfss://container@account.dfs.core.windows.net/prefix`). One save covers every s
 
 | Outcome | What the page does |
 |---------|--------------------|
-| Applied | Toast **Settings saved**: *They apply from now on*, or *Running runtimes pick the change up within seconds* when a runtime setting changed |
+| Applied | Toast **Settings saved**: *They apply from now on*, or *Running workers pick the change up within seconds* when a worker setting changed |
 | Accepted, still applying (after 10 s) | Toast saying so; the page re-reads 3 s later |
 | A value refused | The message under that setting and in a toast; edits stay |
 | Someone changed the scope first | A banner: *These settings changed after this page loaded. Your edits are kept: reload to see the current values, then save again.* with **Reload settings** |
@@ -935,11 +935,11 @@ abfss://container@account.dfs.core.windows.net/prefix`). One save covers every s
 
 Leaving the page with unsaved edits asks first.
 
-### Runtimes: delivery to runtimes
+### Workers: delivery to workers
 
-Above the runtime settings — on Runtimes, Commits, Schema evolution and Compaction & retention,
-every section that holds some — **Delivery to runtimes** shows how far the current runtime-settings
-revision has reached. Beside its title, how many running materializations run it — *3 of 3 running
+Settings says workers where the system says runtimes (10 §10.9). Above the worker settings — on
+Workers, Commits, Schema evolution and Compaction & retention, every section that holds some —
+**Delivery to workers** shows how far the current revision of those settings has reached. Beside its title, how many running materializations run it — *3 of 3 running
 current*: quiet, with a check, when all do; with Starting's turning glyph while one is still applying;
 as needing attention when delivery has settled but some cannot take it yet (§10.6). Below, each
 materialization that is not current, with its state: **Applying** (with the revision it is on, or none
@@ -953,7 +953,7 @@ runs settings an earlier installation left on the delivery topic: it is then lis
 
 ### Deployment
 
-The settings only a deployment can change, per component (control plane, runtimes, this console),
+The settings only a deployment can change, per component (control plane, workers, this console),
 each with its value and environment variable, locked.
 
 ### Change history
