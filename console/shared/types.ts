@@ -1939,6 +1939,8 @@ export interface AuthProvider {
   id: string;
   type: string;
   label: string;
+  /** For `password`: true while password sign-in is off for everyone but administrators. */
+  administrators_only?: boolean;
 }
 
 /** What a new password must be, so a form can say so before it is sent. */
@@ -2038,8 +2040,9 @@ export interface CpMySessions {
   sessions: CpSessionRecord[];
 }
 
-export type UserStatus = 'active' | 'deactivated';
-export const USER_FILTERS = ['all', 'active', 'deactivated', 'locked', 'password_change'] as const;
+/** `invited`: an account made by email before its person signs in, accepted at their first sign-in. */
+export type UserStatus = 'active' | 'invited' | 'deactivated';
+export const USER_FILTERS = ['all', 'active', 'invited', 'deactivated', 'locked', 'password_change'] as const;
 export type UserFilter = (typeof USER_FILTERS)[number];
 export const USER_SORTS = ['name', 'last_active', 'created'] as const;
 export type UserSort = (typeof USER_SORTS)[number];
@@ -2077,11 +2080,66 @@ export interface CpUser {
   deactivated_at: string | null;
   deactivated_by: string | null;
   revision: number;
+  /** Set while the account is `invited`. Never the link itself: that is shown once, when made. */
+  invitation: CpInvitation | null;
   /** Holds every permission. */
   administrator: boolean;
   /** Whether the person asking may change this account: they hold everything it holds. */
   manageable: boolean;
   self: boolean;
+}
+
+/** How someone was invited, while nobody has accepted it (handbook 18 §18.18). */
+export interface CpInvitation {
+  invited_at: string;
+  /** Who invited them, as recorded: their email. */
+  invited_by: string;
+  /** When the link stops working; null when the invitation has no link (password sign-in off). */
+  link_expires_at: string | null;
+}
+
+/** One invitation made, with its link: the only time the link is shown. */
+export interface CpInvitationMade {
+  user_id: string;
+  email: string;
+  /** `inv_<user id>.<secret>`; null while password sign-in is off. */
+  link: string | null;
+  link_expires_at: string | null;
+}
+
+/** `POST …/users/invitations`, once applied (or still pending), with every invitation's link. */
+export interface InvitationsResult extends IdentityChangeResult {
+  invitations: CpInvitationMade[];
+}
+
+/** `POST …/users/:userId/invitation`: the new link, shown this once. */
+export interface InvitationLinkResult extends IdentityChangeResult {
+  link: string;
+  link_expires_at: string;
+}
+
+/** A refused email of an invitation, as the control plane lists each one. */
+export interface CpInvitationProblem {
+  index: number;
+  email: string | null;
+  reason: 'invalid' | 'duplicate' | 'already_exists';
+  message: string;
+}
+
+/** `POST /api/d/<domain>/auth/invitation`: what a link that works is for. */
+export interface CpInvitationDescription {
+  email: string;
+  first_name: string;
+  last_name: string;
+  /** The inviter's name, or their email when they no longer have an account. */
+  invited_by: string;
+  invited_at: string;
+  link_expires_at: string | null;
+  /** Whether a password may accept it: password sign-in is on, or the invitation is an administrator's. */
+  password_sign_in: boolean;
+  /** The providers this domain takes sign-ins from, which accept the invitation for its email. */
+  providers: AuthProvider[];
+  password_policy: PasswordPolicy;
 }
 
 export interface CpUserList {
@@ -2423,6 +2481,8 @@ export interface CpDatasetGrant {
   principal_id: string;
   name: string;
   email: string | null;
+  /** Shared with someone invited, before they joined; absent from control planes before invitations. */
+  invited?: boolean;
   role_ids: string[];
   roles: CpDatasetRole[];
   updated_at: string;
@@ -2436,9 +2496,9 @@ export interface CpDatasetGrantList {
   grants: CpDatasetGrant[];
   /** Every role that can be granted on a dataset; `grantable` when the person asking may grant it. */
   roles: Array<CpDatasetRole & { grantable: boolean }>;
-  /** Whom it can be shared with: the active people, and every group but Guest. */
+  /** Whom it can be shared with: the active people, those invited, and every group but Guest. */
   candidates: {
-    users: Array<{ user_id: string; name: string; email: string }>;
+    users: Array<{ user_id: string; name: string; email: string; invited?: boolean }>;
     groups: Array<{ group_id: string; name: string }>;
   };
 }

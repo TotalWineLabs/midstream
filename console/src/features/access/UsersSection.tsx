@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { Search, UserPlus, Users } from 'lucide-react';
+import { MailPlus, Search, UserPlus, Users } from 'lucide-react';
 import { useDeferredValue, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 import { AddUserDialog } from './AddUserDialog';
+import { InviteUsersDialog } from './InviteUsersDialog';
 import { Chips, UserStatusBadges, tableHeaderClass } from './shared';
 import { Avatar } from '@/components/Avatar';
 import { RelativeTime } from '@/components/Inline';
@@ -16,6 +17,7 @@ import type { CpUser, UserFilter, UserSort } from '@shared/types';
 const FILTER_LABELS: Record<UserFilter, string> = {
   all: 'All users',
   active: 'Active',
+  invited: 'Invited',
   deactivated: 'Deactivated',
   locked: 'Locked out',
   password_change: 'Password to change',
@@ -29,7 +31,10 @@ const SORT_LABELS: Record<UserSort, string> = {
 
 const GRID = 'grid grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_minmax(0,1fr)_120px] items-center gap-4';
 
-/** Everyone who can sign in, like a team directory: who they are, their groups, how active they are. */
+/**
+ * Everyone who can sign in, like a team directory - who they are, their groups, how active they are -
+ * and everyone invited who has not signed in yet.
+ */
 export function UsersSection(): ReactNode {
   const api = useApi();
   const auth = useAuth();
@@ -37,6 +42,7 @@ export function UsersSection(): ReactNode {
   const [sort, setSort] = useState<UserSort>('name');
   const [search, setSearch] = useState('');
   const [adding, setAdding] = useState(false);
+  const [inviting, setInviting] = useState(false);
   const query = useDeferredValue(search.trim());
 
   const users = useQuery({
@@ -46,6 +52,7 @@ export function UsersSection(): ReactNode {
   });
   const counts = users.data?.counts;
   const canManage = auth.can('users.manage');
+  const canInvite = auth.can('users.invite');
   const canOpen = auth.can('users.view_details');
 
   return (
@@ -83,9 +90,15 @@ export function UsersSection(): ReactNode {
           />
         </div>
         {canManage ? (
-          <Button variant="primary" onClick={() => setAdding(true)}>
+          <Button variant={canInvite ? 'secondary' : 'primary'} onClick={() => setAdding(true)}>
             <UserPlus className="size-4" />
             Add user
+          </Button>
+        ) : null}
+        {canInvite ? (
+          <Button variant="primary" onClick={() => setInviting(true)}>
+            <MailPlus className="size-4" />
+            Invite people
           </Button>
         ) : null}
       </div>
@@ -118,10 +131,29 @@ export function UsersSection(): ReactNode {
         ) : (users.data?.users.length ?? 0) === 0 ? (
           <EmptyState
             icon={<Users className="size-6" />}
-            title={search ? 'No one matches' : filter === 'active' ? 'No active users' : `No ${FILTER_LABELS[filter].toLowerCase()} users`}
-            description={search ? 'Try another name or email.' : 'People an administrator adds appear here.'}
+            title={
+              search
+                ? 'No one matches'
+                : filter === 'active'
+                  ? 'No active users'
+                  : filter === 'invited'
+                    ? 'No invitations waiting'
+                    : `No ${FILTER_LABELS[filter].toLowerCase()} users`
+            }
+            description={
+              search
+                ? 'Try another name or email.'
+                : filter === 'invited'
+                  ? 'People you invite appear here until they first sign in.'
+                  : 'People an administrator adds or invites appear here.'
+            }
             action={
-              canManage && !search ? (
+              !search && canInvite ? (
+                <Button variant="primary" onClick={() => setInviting(true)}>
+                  <MailPlus className="size-4" />
+                  Invite people
+                </Button>
+              ) : !search && canManage ? (
                 <Button variant="primary" onClick={() => setAdding(true)}>
                   <UserPlus className="size-4" />
                   Add user
@@ -139,21 +171,28 @@ export function UsersSection(): ReactNode {
       </Panel>
 
       {canManage ? <AddUserDialog open={adding} onClose={() => setAdding(false)} /> : null}
+      {canInvite ? (
+        // Once they are invited, the list shows the invitations, where the new ones wait.
+        <InviteUsersDialog open={inviting} onClose={() => setInviting(false)} onInvited={() => setFilter('invited')} />
+      ) : null}
     </div>
   );
 }
 
 function UserRow({ user, link }: { user: CpUser; link: boolean }): ReactNode {
   const domainPath = useDomainPath();
+  const invited = user.status === 'invited';
+  // An invitation nobody named is its email alone.
+  const named = user.display_name !== user.email;
   const content = (
     <div className={cn(GRID, 'px-5 py-3', link && 'transition-colors hover:bg-[var(--color-raised)]')}>
       <span className="flex min-w-0 items-center gap-3">
-        <Avatar name={user.display_name} email={user.email} muted={user.status === 'deactivated'} />
+        <Avatar name={named ? user.display_name : ''} email={user.email} muted={user.status !== 'active'} />
         <span className="min-w-0">
           <span className={cn('block truncate text-[13px] font-medium', user.status === 'deactivated' && 'text-[var(--color-ink-muted)]')}>
             {user.display_name}
           </span>
-          <span className="block truncate text-[12px] text-[var(--color-ink-muted)]">{user.email}</span>
+          {named ? <span className="block truncate text-[12px] text-[var(--color-ink-muted)]">{user.email}</span> : null}
         </span>
       </span>
       <Chips items={['All Users', ...user.groups.map((group) => group.name)]} />
@@ -163,7 +202,11 @@ function UserRow({ user, link }: { user: CpUser; link: boolean }): ReactNode {
         ) : null}
         <UserStatusBadges user={{ ...user, administrator: false, self: false }} />
       </span>
-      <RelativeTime value={user.last_active_at} className="text-right text-[12px] text-[var(--color-ink-muted)]" />
+      {invited ? (
+        <RelativeTime value={user.invitation?.invited_at ?? user.created_at} prefix="Invited" className="text-right text-[12px] text-[var(--color-ink-muted)]" />
+      ) : (
+        <RelativeTime value={user.last_active_at} className="text-right text-[12px] text-[var(--color-ink-muted)]" />
+      )}
     </div>
   );
   return <li>{link ? <Link to={domainPath(`/settings/users/${user.user_id}`)}>{content}</Link> : content}</li>;

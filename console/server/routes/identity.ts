@@ -23,6 +23,12 @@ const createUserSchema = z.strictObject({
   group_ids: ids.optional(),
 });
 
+/** People to invite: each an email, checked by the control plane, which says what is wrong with each. */
+const inviteUsersSchema = z.strictObject({
+  emails: z.array(z.string().trim().min(1).max(254)).min(1).max(100),
+  group_ids: ids.optional(),
+});
+
 const updateUserSchema = z.strictObject({
   first_name: name.optional(),
   last_name: name.optional(),
@@ -120,14 +126,44 @@ export async function registerIdentityRoutes(app: FastifyInstance): Promise<void
     return reply.code(result.status === 'applied' ? 201 : 202).send(result);
   });
 
-  app.patch('/users/:userId', { preHandler: permit('users.manage') }, async (request, reply) => {
+  /**
+   * Invite people by email (handbook 18 §18.18): an invited account each, holding the chosen groups,
+   * which its person has from their first sign-in. Answers once the invitations are made, with each
+   * one's link - shown this once: neither the console nor the control plane keeps it.
+   */
+  app.post('/users/invitations', { preHandler: permit('users.invite') }, async (request, reply) => {
+    const caller = callerOf(request);
+    const domain = domainOf(request);
+    const accepted = await domain.controlPlane.inviteUsers(caller, parseBody(inviteUsersSchema, request.body));
+    const result = await settle(domain, caller, accepted);
+    return reply
+      .code(result.status === 'applied' ? 201 : 202)
+      .header('cache-control', 'no-store')
+      .send({ ...result, invitations: accepted.invitations });
+  });
+
+  /** A new link for an invitation, shown this once; the one before it stops working. */
+  app.post('/users/:userId/invitation', { preHandler: permit('users.invite') }, async (request, reply) => {
+    const caller = callerOf(request);
+    const domain = domainOf(request);
+    const accepted = await domain.controlPlane.renewInvitation(caller, param(request, 'userId'));
+    const result = await settle(domain, caller, accepted);
+    return reply
+      .code(result.status === 'applied' ? 200 : 202)
+      .header('cache-control', 'no-store')
+      .send({ ...result, link: accepted.link, link_expires_at: accepted.link_expires_at });
+  });
+
+  // Changing or revoking an invitation needs only Invite users; the control plane asks Manage users
+  // of every other account.
+  app.patch('/users/:userId', { preHandler: permit('users.invite') }, async (request, reply) => {
     const caller = callerOf(request);
     const body = changes(updateUserSchema, request.body);
     const result = await settle(domainOf(request), caller, await domainOf(request).controlPlane.updateUser(caller, param(request, 'userId'), body));
     return reply.code(result.status === 'applied' ? 200 : 202).send(result);
   });
 
-  app.delete('/users/:userId', { preHandler: permit('users.manage') }, async (request, reply) => {
+  app.delete('/users/:userId', { preHandler: permit('users.invite') }, async (request, reply) => {
     const caller = callerOf(request);
     const result = await settle(domainOf(request), caller, await domainOf(request).controlPlane.deleteUser(caller, param(request, 'userId')));
     return reply.code(result.status === 'applied' ? 200 : 202).send(result);

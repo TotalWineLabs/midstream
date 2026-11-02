@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
 import { config } from '../config.ts';
@@ -13,7 +13,7 @@ import { AttemptLimiter } from '../auth/rateLimit.ts';
 import { handOn } from '../auth/revocations.ts';
 import { ssoProviders } from '../auth/sso.ts';
 import { parseBody } from './materializations.ts';
-import { TOKEN_PERMISSIONS, type AccessTokenRevoked, type AuthState, type ConsoleSession, type CpAccessTokenList, type CpAuthSession, type CpMySessions, type DomainAuth } from '../../shared/types.ts';
+import { TOKEN_PERMISSIONS, type AccessTokenRevoked, type AuthState, type ConsoleSession, type CpAccessTokenList, type CpAuthSession, type CpInvitationDescription, type CpMySessions, type DomainAuth } from '../../shared/types.ts';
 
 const signInSchema = z.object({
   email: z.string().trim().min(1).max(254),
@@ -30,6 +30,16 @@ const signOutSchema = z
 const passwordSchema = z.object({
   current_password: z.string().min(1).max(256),
   new_password: z.string().min(1).max(256),
+});
+
+/** An invitation link's token: the credential itself, so it travels in a body, never a URL. */
+const invitationToken = z.string().trim().min(1).max(512);
+const invitationSchema = z.strictObject({ token: invitationToken });
+const acceptInvitationSchema = z.strictObject({
+  token: invitationToken,
+  first_name: z.string().trim().min(1).max(100),
+  last_name: z.string().trim().min(1).max(100),
+  password: z.string().min(1).max(256),
 });
 
 const createTokenSchema = z.strictObject({
@@ -100,14 +110,41 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   app.post('/auth/login', async (request, reply): Promise<AuthState> => {
     const domain = domainOf(request);
     const body = parseBody(signInSchema, request.body);
-    if (!signIns.allow(request.ip, config.signInAttemptsPerMinute)) {
-      reply.header('retry-after', String(signIns.retryAfter(request.ip)));
-      throw new ConsoleError('too_many_attempts', 'Too many sign-in attempts. Wait a minute and try again.', 429, {
-        reason: 'rate_limited',
-      });
-    }
+    limitSignIns(request, reply);
     const previous = authOf(request).token;
     const answer = await domain.controlPlane.login({ ...callerOf(request), token: null }, body);
+    if (answer.status !== 200 || !answer.body?.token) throw signInError(answer.status, answer.body);
+    const state = rememberSession(domain, answer.body.token, answer.body);
+    setSessionCookie(request, reply, domain, answer.body.token, state);
+    if (previous) void endSession(domain, previous, request.ip);
+    return state;
+  });
+
+  /**
+   * What an invitation link is for (handbook 18 §18.18): the invited email, who invited them, how they
+   * may accept. The link is the credential, so this needs no session; it counts against the sign-in
+   * attempts of the address, and the control plane says nothing to a link that does not work.
+   */
+  app.post('/auth/invitation', async (request, reply): Promise<CpInvitationDescription> => {
+    const domain = domainOf(request);
+    const body = parseBody(invitationSchema, request.body);
+    limitSignIns(request, reply);
+    const answer = await domain.controlPlane.describeInvitation({ ...callerOf(request), token: null }, body.token);
+    if (answer.status !== 200 || !answer.body) throw signInError(answer.status, answer.body as never);
+    reply.header('cache-control', 'no-store');
+    return answer.body;
+  });
+
+  /**
+   * Accept an invitation with its link and a password of one's own: the domain makes the account
+   * theirs, and this browser is signed in to it, as by a password sign-in.
+   */
+  app.post('/auth/invitation/accept', async (request, reply): Promise<AuthState> => {
+    const domain = domainOf(request);
+    const body = parseBody(acceptInvitationSchema, request.body);
+    limitSignIns(request, reply);
+    const previous = authOf(request).token;
+    const answer = await domain.controlPlane.acceptInvitation({ ...callerOf(request), token: null }, body);
     if (answer.status !== 200 || !answer.body?.token) throw signInError(answer.status, answer.body);
     const state = rememberSession(domain, answer.body.token, answer.body);
     setSessionCookie(request, reply, domain, answer.body.token, state);
@@ -209,6 +246,15 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     }
     clearSessionCookie(request, reply, domain);
     return reply.code(200).send({ status: 'applied', session: (await guestAuth(domain)).state });
+  });
+}
+
+/** Refuse an address that tries to sign in - or to use invitation links - too often. */
+function limitSignIns(request: FastifyRequest, reply: FastifyReply): void {
+  if (signIns.allow(request.ip, config.signInAttemptsPerMinute)) return;
+  reply.header('retry-after', String(signIns.retryAfter(request.ip)));
+  throw new ConsoleError('too_many_attempts', 'Too many sign-in attempts. Wait a minute and try again.', 429, {
+    reason: 'rate_limited',
   });
 }
 

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { KeyRound, LogOut, Trash2, Unlock, UserCheck, UserX } from 'lucide-react';
+import { KeyRound, Link2, LogOut, MailX, Trash2, Unlock, UserCheck, UserX } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -9,16 +9,30 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { DatasetGrantsPanel } from './DatasetGrantsPanel';
 import { GroupPicker } from './GroupPicker';
 import { SessionList } from './SessionList';
-import { BackLink, UserStatusBadges, errorField, formatDate, generatePassword, permissionMap, useCatalog, useIdentityChange } from './shared';
+import {
+  BackLink,
+  UserStatusBadges,
+  errorField,
+  formatDate,
+  generatePassword,
+  invitationLink,
+  joinWays,
+  linkExpired,
+  orList,
+  permissionMap,
+  useCatalog,
+  useIdentityChange,
+} from './shared';
 import { Avatar } from '@/components/Avatar';
 import { CopyButton, RelativeTime } from '@/components/Inline';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button, EmptyState, Field, Input, Panel, PanelHeader, Skeleton } from '@/components/ui/primitives';
 import { useAuth } from '@/lib/auth';
-import { useApi, useDomainPath } from '@/lib/domains';
-import type { CpPermissionCatalog, CpUserDetail } from '@shared/types';
+import { cn } from '@/lib/cn';
+import { useApi, useDomain, useDomainPath } from '@/lib/domains';
+import type { CpPermissionCatalog, CpUserDetail, InvitationLinkResult } from '@shared/types';
 
-type Confirm = 'sign-out' | 'deactivate' | 'reactivate' | 'delete' | null;
+type Confirm = 'sign-out' | 'deactivate' | 'reactivate' | 'delete' | 'revoke' | null;
 
 /** One person's account: who they are, their groups, what they may do and why, and their sessions. */
 export function UserDetail({ userId }: { userId: string }): ReactNode {
@@ -30,10 +44,14 @@ export function UserDetail({ userId }: { userId: string }): ReactNode {
   const catalog = useCatalog();
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [resetting, setResetting] = useState(false);
+  const [linking, setLinking] = useState(false);
 
   const detail = user.data;
-  const canManage = auth.can('users.manage') && Boolean(detail?.manageable);
+  const invited = detail?.status === 'invited';
+  // An invitation is changed by whoever may invite; anyone else's account needs Manage users.
+  const canManage = auth.can(invited ? 'users.invite' : 'users.manage') && Boolean(detail?.manageable);
   const name = detail?.display_name ?? 'this user';
+  const links = joinWays(auth.state?.providers ?? []).links;
 
   const signOut = useIdentityChange((sessionId: string | undefined) => api.signOutUser(userId, sessionId), {
     success: (sessionId) => (sessionId ? 'Session signed out' : `${name} was signed out everywhere`),
@@ -53,8 +71,8 @@ export function UserDetail({ userId }: { userId: string }): ReactNode {
     },
   );
   const remove = useIdentityChange(() => api.deleteUser(userId), {
-    success: () => `${name} was deleted`,
-    failure: 'The account was not deleted',
+    success: () => (invited ? `The invitation for ${detail?.email ?? name} was revoked` : `${name} was deleted`),
+    failure: invited ? 'The invitation was not revoked' : 'The account was not deleted',
     onApplied: () => navigate(domainPath('/settings/users')),
   });
 
@@ -86,16 +104,29 @@ export function UserDetail({ userId }: { userId: string }): ReactNode {
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 items-center gap-4">
-          <Avatar name={detail.display_name} email={detail.email} size="lg" muted={detail.status === 'deactivated'} />
+          <Avatar name={detail.display_name !== detail.email ? detail.display_name : ''} email={detail.email} size="lg" muted={detail.status !== 'active'} />
           <div className="min-w-0">
             <h2 className="truncate text-[17px] font-semibold tracking-tight">{detail.display_name}</h2>
-            <p className="truncate text-[13px] text-[var(--color-ink-muted)]">{detail.email}</p>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {detail.display_name !== detail.email ? <p className="truncate text-[13px] text-[var(--color-ink-muted)]">{detail.email}</p> : null}
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <UserStatusBadges user={detail} />
             </div>
           </div>
         </div>
-        {canManage ? (
+        {canManage && invited ? (
+          <div className="flex flex-wrap gap-2">
+            {links ? (
+              <Button size="sm" onClick={() => setLinking(true)}>
+                <Link2 className="size-3.5" />
+                New link
+              </Button>
+            ) : null}
+            <Button size="sm" variant="ghost" onClick={() => setConfirm('revoke')}>
+              <MailX className="size-3.5" />
+              Revoke invitation
+            </Button>
+          </div>
+        ) : canManage ? (
           <div className="flex flex-wrap gap-2">
             {detail.locked_until ? (
               <Button size="sm" loading={unlock.isPending} onClick={() => unlock.mutate(undefined)}>
@@ -134,86 +165,108 @@ export function UserDetail({ userId }: { userId: string }): ReactNode {
               </>
             ) : null}
           </div>
-        ) : auth.can('users.manage') ? (
+        ) : auth.can(invited ? 'users.invite' : 'users.manage') ? (
           <p className="max-w-xs text-[12px] text-[var(--color-ink-muted)]">
-            {detail.display_name} has access you do not hold, so you cannot change their account.
+            {invited
+              ? `This invitation holds access you do not hold, so you cannot change it.`
+              : `${detail.display_name} has access you do not hold, so you cannot change their account.`}
           </p>
         ) : null}
       </div>
 
+      {invited ? <InvitationPanel user={detail} /> : null}
       <ProfilePanel user={detail} editable={canManage} />
       <GroupsPanel user={detail} editable={canManage} />
       <AccessPanel user={detail} catalog={catalog.data} />
       <DatasetGrantsPanel grants={detail.dataset_grants ?? []} subject="user" />
 
-      <Panel>
-        <PanelHeader
-          title="Sessions"
-          description="Browsers and scripts signed in as this person. Deactivating them or resetting their password ends every one."
-        />
-        <SessionList
-          sessions={detail.sessions}
-          onSignOut={canManage ? (sessionId) => signOut.mutate(sessionId) : undefined}
-          pending={signOut.isPending}
-        />
-      </Panel>
+      {invited ? (
+        <>
+          <NewLinkDialog open={linking} onClose={() => setLinking(false)} user={detail} />
+          <ConfirmDialog
+            open={confirm === 'revoke'}
+            title={`Revoke the invitation for ${detail.email}?`}
+            description="Its account is deleted with its groups and dataset roles, and its link stops working. You can invite them again."
+            confirmLabel="Revoke invitation"
+            danger
+            pending={remove.isPending}
+            onConfirm={() => remove.mutate(undefined)}
+            onClose={() => setConfirm(null)}
+          />
+        </>
+      ) : (
+        // What only someone who has signed in has: their sessions, their activity, and the dialogs about them.
+        <>
+          <Panel>
+            <PanelHeader
+              title="Sessions"
+              description="Browsers and scripts signed in as this person. Deactivating them or resetting their password ends every one."
+            />
+            <SessionList
+              sessions={detail.sessions}
+              onSignOut={canManage ? (sessionId) => signOut.mutate(sessionId) : undefined}
+              pending={signOut.isPending}
+            />
+          </Panel>
 
-      <Panel>
-        <PanelHeader title="Activity" />
-        <dl className="grid gap-4 px-5 py-4 text-[13px] sm:grid-cols-2 lg:grid-cols-4">
-          <Fact label="Last active">
-            <RelativeTime value={detail.last_active_at} />
-          </Fact>
-          <Fact label="Last signed in">
-            <RelativeTime value={detail.last_sign_in_at} />
-          </Fact>
-          <Fact label="Failed sign-ins">{detail.failed_sign_ins === 0 ? 'None' : detail.failed_sign_ins}</Fact>
-          <Fact label="Added">
-            {formatDate(detail.created_at)}
-            <span className="block text-[12px] text-[var(--color-ink-muted)]">by {detail.created_by}</span>
-          </Fact>
-        </dl>
-      </Panel>
+          <Panel>
+            <PanelHeader title="Activity" />
+            <dl className="grid gap-4 px-5 py-4 text-[13px] sm:grid-cols-2 lg:grid-cols-4">
+              <Fact label="Last active">
+                <RelativeTime value={detail.last_active_at} />
+              </Fact>
+              <Fact label="Last signed in">
+                <RelativeTime value={detail.last_sign_in_at} />
+              </Fact>
+              <Fact label="Failed sign-ins">{detail.failed_sign_ins === 0 ? 'None' : detail.failed_sign_ins}</Fact>
+              <Fact label="Added">
+                {formatDate(detail.created_at)}
+                <span className="block text-[12px] text-[var(--color-ink-muted)]">by {detail.created_by}</span>
+              </Fact>
+            </dl>
+          </Panel>
 
-      <ResetPasswordDialog open={resetting} onClose={() => setResetting(false)} user={detail} />
-      <ConfirmDialog
-        open={confirm === 'sign-out'}
-        title={`Sign ${detail.display_name} out everywhere?`}
-        description="Every browser and script signed in as them is signed out at its next request. They can sign in again at once."
-        confirmLabel="Sign out everywhere"
-        pending={signOut.isPending}
-        onConfirm={() => signOut.mutate(undefined)}
-        onClose={() => setConfirm(null)}
-      />
-      <ConfirmDialog
-        open={confirm === 'deactivate'}
-        title={`Deactivate ${detail.display_name}?`}
-        description="They are signed out everywhere and cannot sign in until they are reactivated. Their groups are kept."
-        confirmLabel="Deactivate"
-        danger
-        pending={setStatus.isPending}
-        onConfirm={() => setStatus.mutate('deactivated')}
-        onClose={() => setConfirm(null)}
-      />
-      <ConfirmDialog
-        open={confirm === 'reactivate'}
-        title={`Reactivate ${detail.display_name}?`}
-        description="They can sign in again with their password, and have the access their groups give."
-        confirmLabel="Reactivate"
-        pending={setStatus.isPending}
-        onConfirm={() => setStatus.mutate('active')}
-        onClose={() => setConfirm(null)}
-      />
-      <ConfirmDialog
-        open={confirm === 'delete'}
-        title={`Delete ${detail.display_name}?`}
-        description="Their account, sessions and activity are removed, and their email can be used for a new account. The audit log keeps what they did. This cannot be undone."
-        confirmLabel="Delete"
-        danger
-        pending={remove.isPending}
-        onConfirm={() => remove.mutate(undefined)}
-        onClose={() => setConfirm(null)}
-      />
+          <ResetPasswordDialog open={resetting} onClose={() => setResetting(false)} user={detail} />
+          <ConfirmDialog
+            open={confirm === 'sign-out'}
+            title={`Sign ${detail.display_name} out everywhere?`}
+            description="Every browser and script signed in as them is signed out at its next request. They can sign in again at once."
+            confirmLabel="Sign out everywhere"
+            pending={signOut.isPending}
+            onConfirm={() => signOut.mutate(undefined)}
+            onClose={() => setConfirm(null)}
+          />
+          <ConfirmDialog
+            open={confirm === 'deactivate'}
+            title={`Deactivate ${detail.display_name}?`}
+            description="They are signed out everywhere and cannot sign in until they are reactivated. Their groups are kept."
+            confirmLabel="Deactivate"
+            danger
+            pending={setStatus.isPending}
+            onConfirm={() => setStatus.mutate('deactivated')}
+            onClose={() => setConfirm(null)}
+          />
+          <ConfirmDialog
+            open={confirm === 'reactivate'}
+            title={`Reactivate ${detail.display_name}?`}
+            description="They can sign in again with their password, and have the access their groups give."
+            confirmLabel="Reactivate"
+            pending={setStatus.isPending}
+            onConfirm={() => setStatus.mutate('active')}
+            onClose={() => setConfirm(null)}
+          />
+          <ConfirmDialog
+            open={confirm === 'delete'}
+            title={`Delete ${detail.display_name}?`}
+            description="Their account, sessions and activity are removed, and their email can be used for a new account. The audit log keeps what they did. This cannot be undone."
+            confirmLabel="Delete"
+            danger
+            pending={remove.isPending}
+            onConfirm={() => remove.mutate(undefined)}
+            onClose={() => setConfirm(null)}
+          />
+        </>
+      )}
     </div>
   );
 }
@@ -229,19 +282,33 @@ function Fact({ label, children }: { label: string; children: ReactNode }): Reac
 
 function ProfilePanel({ user, editable }: { user: CpUserDetail; editable: boolean }): ReactNode {
   const api = useApi();
+  const invited = user.status === 'invited';
   const [draft, setDraft] = useState({ first_name: user.first_name, last_name: user.last_name, email: user.email });
   useEffect(() => setDraft({ first_name: user.first_name, last_name: user.last_name, email: user.email }), [user]);
-  const save = useIdentityChange(
-    () => api.updateUser(user.user_id, { ...draft, email: draft.email.trim(), base_revision: user.revision }),
-    { success: () => 'Profile saved', failure: 'The profile was not saved' },
+  // Only what changed: an invitation nobody named keeps its names empty until someone gives them.
+  const changes = Object.fromEntries(
+    (['first_name', 'last_name', 'email'] as const).filter((key) => draft[key].trim() !== user[key]).map((key) => [key, draft[key].trim()]),
   );
-  const changed = draft.first_name !== user.first_name || draft.last_name !== user.last_name || draft.email !== user.email;
+  const save = useIdentityChange(() => api.updateUser(user.user_id, { ...changes, base_revision: user.revision }), {
+    success: () => 'Profile saved',
+    failure: 'The profile was not saved',
+  });
+  const changed = Object.keys(changes).length > 0;
   const field = errorField(save.error);
   const error = (name: string): string | null => (field === name ? (save.error as Error).message : null);
 
   return (
     <Panel>
-      <PanelHeader title="Profile" description={user.self ? 'Your name and the email you sign in with.' : 'Their name and the email they sign in with.'} />
+      <PanelHeader
+        title="Profile"
+        description={
+          user.self
+            ? 'Your name and the email you sign in with.'
+            : invited
+              ? 'Their name, if you know it - otherwise they give it when they accept - and the email they are invited with.'
+              : 'Their name and the email they sign in with.'
+        }
+      />
       <div className="grid gap-4 px-5 py-4 sm:grid-cols-2">
         <Field label="First name" error={error('first_name')}>
           <Input value={draft.first_name} disabled={!editable} onChange={(event) => setDraft({ ...draft, first_name: event.target.value })} />
@@ -250,7 +317,11 @@ function ProfilePanel({ user, editable }: { user: CpUserDetail; editable: boolea
           <Input value={draft.last_name} disabled={!editable} onChange={(event) => setDraft({ ...draft, last_name: event.target.value })} />
         </Field>
         <div className="sm:col-span-2">
-          <Field label="Email" error={error('email')} hint="Changing it changes what they sign in with.">
+          <Field
+            label="Email"
+            error={error('email')}
+            hint={invited ? 'The invitation is accepted by signing in with this email.' : 'Changing it changes what they sign in with.'}
+          >
             <Input type="email" value={draft.email} disabled={!editable} onChange={(event) => setDraft({ ...draft, email: event.target.value })} />
           </Field>
         </div>
@@ -271,6 +342,97 @@ function ProfilePanel({ user, editable }: { user: CpUserDetail; editable: boolea
         </div>
       ) : null}
     </Panel>
+  );
+}
+
+/** How an invitation is accepted here, and its link: when it stops working, or that it has. */
+function InvitationPanel({ user }: { user: CpUserDetail }): ReactNode {
+  const auth = useAuth();
+  const ways = joinWays(auth.state?.providers ?? []);
+  const invitation = user.invitation;
+  const expires = invitation?.link_expires_at ?? null;
+  const day = (value: string): string => new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return (
+    <Panel>
+      <PanelHeader
+        title="Invitation"
+        description={invitation ? `Invited by ${invitation.invited_by} on ${day(invitation.invited_at)}. Their access is theirs from their first sign-in.` : undefined}
+      />
+      <ul className="space-y-1.5 px-5 py-4 text-[13px]">
+        {ways.providers.length > 0 ? (
+          <li>
+            They accept it by signing in through {orList(ways.providers)} with <span className="font-medium">{user.email}</span>.
+          </li>
+        ) : null}
+        <li className={cn(!expires && 'text-[var(--color-ink-muted)]')}>
+          {expires
+            ? linkExpired(invitation)
+              ? `Their link to choose a password expired on ${day(expires)}.${ways.links ? ' Make a new one to send them.' : ''}`
+              : `${ways.providers.length > 0 ? 'Or they open' : 'They open'} their link to choose a password. It works until ${day(expires)}.`
+            : ways.links
+              ? 'It has no link to choose a password: make one to send them.'
+              : 'It has no link: password sign-in is off here.'}
+        </li>
+      </ul>
+    </Panel>
+  );
+}
+
+/** Make an invitation a new link, saying first that the one before stops working; then show it, once. */
+function NewLinkDialog({ open, onClose, user }: { open: boolean; onClose: () => void; user: CpUserDetail }): ReactNode {
+  const api = useApi();
+  const domain = useDomain();
+  const [made, setMade] = useState<InvitationLinkResult | null>(null);
+  const renew = useIdentityChange(() => api.renewInvitation(user.user_id), {
+    success: () => `A new link for ${user.email}`,
+    failure: 'No new link was made',
+    quiet: true,
+    onApplied: (result) => setMade(result),
+  });
+  const { reset } = renew;
+  useEffect(() => {
+    if (!open) return;
+    setMade(null);
+    reset();
+  }, [open, reset]);
+  const url = made ? invitationLink(window.location.origin, domain.id, made.link) : null;
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title={made ? `A new link for ${user.email}` : `Make a new link for ${user.email}?`}
+      description={
+        made
+          ? `Send it to them privately: whoever has it can join as them until ${new Date(made.link_expires_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}. It is not shown again.`
+          : 'The link sent before stops working. The new one is shown once.'
+      }
+      footer={
+        made ? (
+          <Button variant="primary" onClick={onClose}>
+            Done
+          </Button>
+        ) : (
+          <>
+            <Button variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button variant="primary" loading={renew.isPending} onClick={() => renew.mutate(undefined)}>
+              Make a new link
+            </Button>
+          </>
+        )
+      }
+    >
+      {url ? (
+        <div className="flex items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-line-strong)] px-3 py-2">
+          <span className="ident min-w-0 flex-1 truncate text-[12px]" title={url}>
+            {url}
+          </span>
+          <CopyButton value={url} label={`Copy the link for ${user.email}`} className="h-8 px-2" />
+        </div>
+      ) : null}
+    </Dialog>
   );
 }
 

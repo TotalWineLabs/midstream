@@ -12,9 +12,9 @@ import { cn } from '@/lib/cn';
 import { plainStatus } from '@/lib/status';
 import { useApi } from '@/lib/domains';
 import { refusalDetails } from './logic';
-import type { CpUser, IdentityChangeResult } from '@shared/types';
+import type { CpInvitation, CpUser, IdentityChangeResult } from '@shared/types';
 
-export { AUDIT_ACTION_LABELS, auditActionLabel, describeAgent, expandPermissions, generatePassword, permissionMap } from './logic';
+export { AUDIT_ACTION_LABELS, auditActionLabel, describeAgent, expandPermissions, generatePassword, invitationLink, joinWays, orList, permissionMap } from './logic';
 
 /** Every identity query, so a change can refresh what it may have changed. */
 export const IDENTITY_QUERY_ROOTS = ['users', 'user', 'groups', 'group', 'roles', 'role', 'audit'] as const;
@@ -33,9 +33,15 @@ export function useCatalog() {
  * A change to users, groups or roles: send it, say how it went, and refresh whatever it touched —
  * including who you are, since a change to your own groups changes what you may do.
  */
-export function useIdentityChange<TInput>(
-  send: (input: TInput) => Promise<IdentityChangeResult>,
-  options: { success: (input: TInput, result: IdentityChangeResult) => string; failure: string; onApplied?: (result: IdentityChangeResult, input: TInput) => void },
+export function useIdentityChange<TInput, TResult extends IdentityChangeResult = IdentityChangeResult>(
+  send: (input: TInput) => Promise<TResult>,
+  options: {
+    success: (input: TInput, result: TResult) => string;
+    failure: string;
+    onApplied?: (result: TResult, input: TInput) => void;
+    /** The screen says it did it itself, as a dialog that shows what was made: no toast. */
+    quiet?: boolean;
+  },
 ) {
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -47,7 +53,7 @@ export function useIdentityChange<TInput>(
       await auth.reload();
       if (result.status === 'pending') {
         toast.success(options.success(input, result), 'The control plane accepted the change and is still applying it.');
-      } else {
+      } else if (!options.quiet) {
         toast.success(options.success(input, result));
       }
       options.onApplied?.(result, input);
@@ -69,9 +75,26 @@ export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function UserStatusBadges({ user }: { user: Pick<CpUser, 'status' | 'locked_until' | 'must_change_password' | 'self' | 'administrator'> }): ReactNode {
+/** Whether an invitation's link stopped working. */
+export function linkExpired(invitation: CpInvitation | null, now: number = Date.now()): boolean {
+  return Boolean(invitation?.link_expires_at && Date.parse(invitation.link_expires_at) <= now);
+}
+
+export function UserStatusBadges({
+  user,
+}: {
+  user: Pick<CpUser, 'status' | 'locked_until' | 'must_change_password' | 'self' | 'administrator'> & { invitation?: CpInvitation | null };
+}): ReactNode {
   return (
     <>
+      {user.status === 'invited' ? (
+        <Badge tone="neutral" title="Their account waits for them to accept the invitation at their first sign-in">
+          Invited
+        </Badge>
+      ) : null}
+      {user.status === 'invited' && linkExpired(user.invitation ?? null) ? (
+        <span className="text-[12px] text-[var(--color-ink-muted)]">Link expired</span>
+      ) : null}
       {user.status === 'deactivated' ? <Badge tone="neutral">Deactivated</Badge> : null}
       {user.locked_until ? (
         <span title={`Locked out until ${new Date(user.locked_until).toLocaleString()}`} className="inline-flex">

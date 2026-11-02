@@ -58,6 +58,21 @@ carries on. A session started through a provider is never held back by it.
 A session that ends elsewhere — signed out by an administrator, deactivated, expired — turns the
 page into that domain's guest's at the next request, and open streams close within 30 seconds.
 
+### Accepting an invitation (`/invitation/:domain#<link>`)
+
+The page an invitation's link opens (`features/auth/InvitationPage.tsx`; control-plane handbook 18
+§18.18), outside the shell like sign-in. It moves the link out of the address bar at once — into the
+tab's session storage, so a reload keeps it — and asks the domain what it is for: **Join <domain>**
+(*Join Midstream* with one domain), *Jane Doe invited you as ada@example.com.* Then the ways in that
+domain takes: **Continue with Google** (and each provider the console is registered with and the domain
+accepts), *Use your Google account for ada@example.com.*; and, while passwords are on there, **or choose
+a password** — first and last name, prefilled when the invitation was named, and a password with its
+minimum length — then **Join <domain>**, which signs the browser in there and opens the domain. Someone
+signed in there as someone else is told that accepting signs them in as the invited person instead. A
+link that does not work says so and nothing more — *This invitation link does not work* with the
+domain's message, *This invitation link has expired. Ask whoever invited you for a new one.*, or *This
+invitation link is incomplete* — with **Sign in** below.
+
 ### `LiveIndicator`
 
 Liveness is said by what moves — the river, numbers rolling, rows streaming in — so the shell shows
@@ -988,10 +1003,24 @@ domain the page is that domain's account, as before.
 
 ## 11.8d Users (`/settings/users[/:userId]`)
 
-The list (`users.view`): tabs **All users**, **Active**, **Deactivated**, **Locked out**,
+The list (`users.view`): tabs **All users**, **Active**, **Invited**, **Deactivated**, **Locked out**,
 **Password to change**, each with its count; search by name or email; sort by name, last active
-or date added. Each row shows name and email, groups, status badges (*Deactivated*, *Locked out*,
-*Password to change*, *Administrator*, *You*) and when they were last active.
+or date added. Each row shows name and email, groups, status badges (*Invited*, with *Link expired* once
+its link has, *Deactivated*, *Locked out*, *Password to change*, *Administrator*, *You*) and when they
+were last active — for an invitation, when it was made (*Invited 2 days ago*). An invitation nobody
+named shows its email alone.
+
+**Invite people** (`users.invite`, the header's primary action; control-plane handbook 18 §18.18):
+**Emails** — typed or pasted, separated by commas, spaces or new lines, a `Name <address>` read as its
+address — and **Groups**, only those whose access the person inviting holds. A line says how they will
+join: *They join by signing in through Google or GitHub with that email, or with the link each one gets
+here.* **Invite 3 people** makes an invited account for each, all or none: an email that is not one is
+named before anything is sent, and one the domain refuses — *viewer@example.com already has an account*,
+*ada@example.com is invited already* — is listed with **Remove them and invite the rest**. Once made, the
+dialog becomes *3 people are invited*: each email with its link and **Copy**, **Copy every email and
+link**, and what to do with them — *Send each person their link, privately: whoever has it can join as
+them until Nov 9. The links are not shown again.* While password sign-in is off there are no links: they
+join through a provider. The list then shows **Invited**.
 
 **Add user** (`users.manage`): first and last name, email, an **Initial password** — generated,
 20 characters from an alphabet without lookalikes, with **Copy password** and **Generate a new
@@ -1015,6 +1044,16 @@ locked out), **Reset password** (a generated one to pass on; ends their sessions
 it), **Sign out everywhere**, **Deactivate** / **Reactivate** (deactivating ends every session at
 once), and **Delete** (only once deactivated; frees the email). You cannot deactivate or delete
 yourself, and the last active administrator cannot be removed.
+
+**An invitation's page** has an **Invitation** panel first — *Invited by jane@example.com on Nov 2, 2026.
+Their access is theirs from their first sign-in.*, then how they accept it: through the domain's
+providers with the invited email, and their link, *It works until Nov 9, 2026* or *expired … Make a new
+one to send them* — then Profile (names optional: *Their name, if you know it - otherwise they give it
+when they accept*), Groups, Access and Dataset access, as for anyone; no Sessions or Activity. Its
+actions, with `users.invite` and holding everything it holds: **New link** — *The link sent before stops
+working. The new one is shown once.*, then the link with **Copy** — and **Revoke invitation**, which
+names what goes (*Its account is deleted with its groups and dataset roles, and its link stops
+working*). A group's **Add people** offers invitations too, marked *Invited*, and its members list them.
 
 ## 11.8e Groups (`/settings/groups[/:groupId]`)
 
@@ -1140,7 +1179,9 @@ tables to it and drops them; **Owner** also changes the dataset and who can use 
 only roles they hold on it themselves, and cannot take away a role they could not grant: such a grant
 shows its roles as words. A note says plainly what access does not do: *Midstream checks access, not
 the storage: anyone with a key that reads the bucket reads every table in it. Table names are not
-secret.* The toast says *Shared with Ana Ruiz* or *Ana Ruiz no longer has access*.
+secret.* The toast says *Shared with Ana Ruiz* or *Ana Ruiz no longer has access*. People invited but
+not yet joined can be chosen too, marked *(invited)*, and are listed *Invited · ada@example.com*: the
+role is theirs from their first sign-in.
 `/datasets/<name>/access`, the old Access tab's address, opens the page with Share open.
 
 **Delete dataset…** shows the plan of a delete (§10.10). While it holds tables it cannot be deleted:

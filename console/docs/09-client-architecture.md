@@ -12,6 +12,7 @@ main.tsx
               └── AuthProvider         Who is using the page, in every domain (lib/auth.tsx)
                   └── App              SessionGate + SsoOutcomeToast + route table
                       ├── SignInPage   /sign-in, /sign-in/:domain
+                      ├── InvitationPage   /invitation/:domain#<link>
                       └── AppShell     Sidebar with the domain switcher, account menu, ⌘K, theme
                           ├── <console page>      Overview | Materializations | Datasets | Search | Settings: every domain
                           └── DomainScope         /d/:domain/*: the domain, its API and a query cache of its own
@@ -47,6 +48,7 @@ under `/api/d/<domain>`) and its cache; `useDomain()`, `useDomainPath()` read th
 ```tsx
 <Route path="/sign-in"            element={<SignInPage />} />                     // the providers, or a password for a chosen domain
 <Route path="/sign-in/:domain"    element={<SignInPage />} />                     // a password for that domain
+<Route path="/invitation/:domain" element={<InvitationPage />} />                 // an invitation's link: accept it
 // Every domain:
 <Route path="/"                   element={<Overview />} />
 <Route path="/materializations"   element={<Materializations />} />
@@ -329,6 +331,7 @@ features/
     ProtectionTab.tsx                       The Detail tab: policy and rollout, what is about to change, per-table fields and history
   auth/
     SignInPage.tsx                          Email and password, the providers the control plane offers
+    InvitationPage.tsx                      What an invitation's link opens: who is invited, a provider or a password to accept it
     AccessGate.tsx                          SessionGate, RequirePermission, AccessDenied, SignInPrompt
     ChangePasswordForm.tsx                  Current and new password, with the control plane's minimum length
     PasswordInput.tsx                       Password field with show/hide
@@ -337,6 +340,7 @@ features/
     AccountSection.tsx                      Your profile, password and sessions
     UsersSection.tsx / UserDetail.tsx       Users list (filter, search, sort) and one person's account
     AddUserDialog.tsx / GroupPicker.tsx     Add a user with a generated password; groups you may grant
+    InviteUsersDialog.tsx                   Invite people by email with their groups, then each link, shown once
     GroupsSection.tsx / GroupDetail.tsx     Groups, members and roles
     RolesSection.tsx / RoleEditor.tsx       Roles and the permission editor, with implications
     AuditSection.tsx                        The audit log, a page at a time

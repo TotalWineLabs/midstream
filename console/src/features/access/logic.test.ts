@@ -3,7 +3,22 @@ import { describe, it } from 'node:test';
 
 import type { CpPermissionCatalog } from '@shared/types';
 
-import { AUDIT_ACTION_LABELS, PASSWORD_ALPHABET, auditActionLabel, describeAgent, describeDetail, describeMethod, expandPermissions, generatePassword, refusalDetails } from './logic.ts';
+import {
+  AUDIT_ACTION_LABELS,
+  PASSWORD_ALPHABET,
+  auditActionLabel,
+  describeAgent,
+  describeDetail,
+  describeMethod,
+  expandPermissions,
+  generatePassword,
+  invitationLink,
+  invitationToken,
+  joinWays,
+  orList,
+  parseEmails,
+  refusalDetails,
+} from './logic.ts';
 
 const catalog: CpPermissionCatalog = {
   categories: [{ id: 'data', label: 'Data' }],
@@ -103,6 +118,48 @@ describe('audit actions', () => {
 
   it('read an action this console does not know as words, never as its code', () => {
     assert.equal(auditActionLabel('pipeline.started_again'), 'Pipeline started again');
+  });
+});
+
+describe('invitations', () => {
+  it('read the addresses in whatever was pasted, each once', () => {
+    assert.deepEqual(
+      parseEmails('Ada@Example.com, grace@example.com;\nAda Lovelace <ada@example.com>  mailto:bob@example.org\n\n'),
+      { emails: ['ada@example.com', 'grace@example.com', 'bob@example.org'], invalid: [] },
+    );
+    assert.deepEqual(parseEmails('ada@example, @example.com, plain, ok@example.com'), {
+      emails: ['ok@example.com'],
+      invalid: ['ada@example', '@example.com', 'plain'],
+    });
+    assert.deepEqual(parseEmails('   '), { emails: [], invalid: [] });
+  });
+
+  it('put the token after # in the link, and read it back only when it is one', () => {
+    const token = `inv_usr-0123456789ab.${'A'.repeat(43)}`;
+    const link = invitationLink('https://midstream.example.com/', 'domain_a', token);
+    assert.equal(link, `https://midstream.example.com/invitation/domain_a#${token}`);
+    assert.equal(invitationToken(new URL(link).hash), token);
+    for (const hash of ['', '#', '#inv_usr-1.short', `#tok_${'A'.repeat(43)}`, '#inv_.x']) {
+      assert.equal(invitationToken(hash), null, hash);
+    }
+  });
+
+  it('say how invited people join, as a domain takes sign-ins', () => {
+    const password = { id: 'password', type: 'password', label: 'Email and password', administrators_only: false };
+    const google = { id: 'google', type: 'sso', label: 'Google' };
+    const github = { id: 'github', type: 'sso', label: 'GitHub' };
+    assert.deepEqual(joinWays([password, google, github]), { providers: ['Google', 'GitHub'], links: true });
+    assert.deepEqual(joinWays([{ ...password, administrators_only: true }, google]), { providers: ['Google'], links: false });
+    assert.deepEqual(joinWays([]), { providers: [], links: false });
+    assert.equal(orList(['Microsoft', 'Google', 'GitHub']), 'Microsoft, Google or GitHub');
+    assert.equal(orList(['Google']), 'Google');
+    assert.equal(orList([]), '');
+  });
+
+  it('name what each invitation step did in the audit log', () => {
+    for (const action of ['user.invited', 'user.invitation_renewed', 'user.invitation_revoked', 'user.invitation_accepted']) {
+      assert.ok(AUDIT_ACTION_LABELS[action], action);
+    }
   });
 });
 

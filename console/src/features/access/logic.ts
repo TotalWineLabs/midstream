@@ -1,9 +1,10 @@
 /**
- * The access pages' logic that needs no React: permission implications, generated passwords, and
- * telling sessions apart. Kept apart from the components so it can be tested directly.
+ * The access pages' logic that needs no React: permission implications, generated passwords, telling
+ * sessions apart, and the emails and links of invitations. Kept apart from the components so it can
+ * be tested directly.
  */
 
-import type { CpPermissionCatalog, CpPermissionDefinition } from '@shared/types';
+import type { AuthProvider, CpPermissionCatalog, CpPermissionDefinition } from '@shared/types';
 
 import { humanize } from '../../lib/format.ts';
 
@@ -100,6 +101,62 @@ export function refusalDetails(details: Record<string, unknown>): Record<string,
   return upstream && typeof upstream === 'object' ? { ...(upstream as Record<string, unknown>), ...details } : details;
 }
 
+/** As loose as the control plane's check: one @, something on each side, a dot in the domain. */
+const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+/**
+ * The addresses in what someone typed or pasted: separated by commas, semicolons, spaces or lines, a
+ * `Name <address>` taken as its address. Each once, in the order given, lower-cased as the control
+ * plane keeps them; `invalid` holds what is not an address, to say so before anything is sent.
+ */
+export function parseEmails(text: string): { emails: string[]; invalid: string[] } {
+  const emails: string[] = [];
+  const invalid: string[] = [];
+  const named = text.replace(/[^,;<>\n]*<([^<>\s]+)>/g, ' $1 ');
+  for (const token of named.split(/[\s,;]+/)) {
+    const value = token.trim().replace(/^mailto:/i, '').toLowerCase();
+    if (!value) continue;
+    if (!EMAIL.test(value)) {
+      if (!invalid.includes(value)) invalid.push(value);
+    } else if (!emails.includes(value)) {
+      emails.push(value);
+    }
+  }
+  return { emails, invalid };
+}
+
+/**
+ * An invitation's link: the console's page for it, the token after `#` so it never reaches a
+ * server's log or a referrer - the page hands it to the domain in a request body.
+ */
+export function invitationLink(origin: string, domain: string, token: string): string {
+  return `${origin.replace(/\/+$/, '')}/invitation/${encodeURIComponent(domain)}#${token}`;
+}
+
+/** The token in an invitation link's `#`, or null when there is none. */
+export function invitationToken(hash: string): string | null {
+  const token = decodeURIComponent(hash.replace(/^#/, '')).trim();
+  return /^inv_[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.[A-Za-z0-9_-]{43}$/.test(token) ? token : null;
+}
+
+/** Names joined as a sentence says them: "Google", "Google or GitHub", "Microsoft, Google or GitHub". */
+export function orList(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? '';
+  return `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`;
+}
+
+/**
+ * How an invited person accepts, in a domain that takes these sign-ins: through its providers with the
+ * invited email, and with a link of their own while passwords are on for everyone.
+ */
+export function joinWays(providers: AuthProvider[]): { providers: string[]; links: boolean } {
+  const password = providers.find((provider) => provider.type === 'password');
+  return {
+    providers: providers.filter((provider) => provider.type === 'sso').map((provider) => provider.label),
+    links: password !== undefined && !password.administrators_only,
+  };
+}
+
 /** What an audit entry's action reads as. */
 export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'session.signed_in': 'Signed in',
@@ -120,6 +177,10 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'user.bootstrap_restored': 'Restored the bootstrap administrator',
   'user.provisioned': 'Made an account at a first sign-in',
   'user.identity_linked': 'Linked a sign-in provider',
+  'user.invited': 'Invited a user',
+  'user.invitation_renewed': 'Made a new invitation link',
+  'user.invitation_revoked': 'Revoked an invitation',
+  'user.invitation_accepted': 'Accepted an invitation',
   'group.created': 'Created a group',
   'group.updated': 'Changed a group',
   'group.deleted': 'Deleted a group',

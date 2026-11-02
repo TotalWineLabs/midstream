@@ -82,11 +82,16 @@ Outside `/api`: the federated Iceberg REST catalog at `/catalog` and each domain
 | `POST` | `/api/auth/logout` | — | control plane | Clears the cookie (`scope: current`) |
 | `GET` | `/api/auth/sessions` | session | control plane | Your sessions |
 | `POST` | `/api/auth/password` | session | control plane | Change your password; signs you back in |
+| `POST` | `/api/auth/invitation` | — (an invitation link that works, in the body) | control plane | What it is for; counted against the address's sign-in attempts, `cache-control: no-store` |
+| `POST` | `/api/auth/invitation/accept` | — (an invitation link that works, in the body) | control plane | Accept it with a password of your own; sets the session cookie |
 | `GET` | `/api/auth/tokens` | session | control plane | Your access tokens |
 | `POST` | `/api/auth/tokens` | `catalog.read` on a dataset | control plane | Make one, optionally limited to datasets; `202`, the token shown once, `cache-control: no-store` |
 | `DELETE` | `/api/auth/tokens/:tokenId` | session | control plane | Revoke one of yours; `users.manage` revokes anyone's |
 | `GET` | `/api/users`, `/api/users/:userId` | `users.view`, `users.view_details` | control plane | |
-| `POST`, `PATCH`, `DELETE` | `/api/users`, `/api/users/:userId` | `users.manage` | control plane | Waits for the change to apply |
+| `POST` | `/api/users` | `users.manage` | control plane | Waits for the change to apply |
+| `POST` | `/api/users/invitations` | `users.invite` | control plane | Invite people by email; waits for it to apply; `201` with each link, shown once, `cache-control: no-store` |
+| `POST` | `/api/users/:userId/invitation` | `users.invite` | control plane | A new link for an invitation, shown once |
+| `PATCH`, `DELETE` | `/api/users/:userId` | `users.invite`; the control plane asks `users.manage` of every account but an invitation | control plane | Waits for the change to apply |
 | `POST` | `/api/users/:userId/password`, `/sign-out`, `/unlock` | `users.manage` | control plane | Waits for the change to apply |
 | `GET` | `/api/groups`, `/api/groups/:groupId` | `groups.view` | control plane | |
 | `POST`, `PATCH`, `DELETE` | `/api/groups`, `/api/groups/:groupId` | `groups.manage` | control plane | Waits for the change to apply |
@@ -1097,6 +1102,23 @@ Changes answer once the identity agent has applied them:
 ```json
 { "request_id": "idr-5b2d8e1f0a3c", "status": "applied", "entity_type": "user", "entity_id": "usr-9d0e1f2a3b4c" }
 ```
+
+**Invitations** (control-plane handbook 18 §18.18). `POST /api/users/invitations` with
+`{emails, group_ids}` answers the same, with `invitations`: each `{user_id, email, link,
+link_expires_at}`, the link — `inv_<user id>.<secret>`, `null` while password sign-in is off — shown
+this once; the page builds `<console>/invitation/<domain>#<link>` from it. A refusal of the emails
+lists each in `details.problems` (or `details.upstream_details.problems`, when the control plane refused
+the request itself): `{index, email, reason, message}`. `POST /api/users/:userId/invitation` answers
+`link` and `link_expires_at`. The page a link opens calls, with no session — the link is the
+credential, and travels in the body, never the URL:
+
+| Route | Body | Answer |
+|---|---|---|
+| `POST /api/d/<domain>/auth/invitation` | `{token}` | `{email, first_name, last_name, invited_by, invited_at, link_expires_at, password_sign_in, providers, password_policy}`; `404` (`invitation_invalid`) or `410` (`invitation_expired`) |
+| `POST /api/d/<domain>/auth/invitation/accept` | `{token, first_name, last_name, password}` | The new session, as a password sign-in answers, with its cookie set; the refusals of the control plane's `/auth/invitation/accept` passed through |
+
+Both count against the address's sign-in attempts (`CONSOLE_SIGN_IN_ATTEMPTS_PER_MINUTE`): `429
+too_many_attempts` (`rate_limited`).
 
 `200` when applied; `202` with `"status": "pending"` when not applied within 10 s; and when the
 agent refused it, the refusal as an error — `400 invalid_request`, `403 forbidden`,

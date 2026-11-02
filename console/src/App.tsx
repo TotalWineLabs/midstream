@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { AppShell } from './components/AppShell';
 import { RequirePermission, SessionGate } from './features/auth/AccessGate';
+import { InvitationPage } from './features/auth/InvitationPage';
 import { SignInPage } from './features/auth/SignInPage';
 import { SsoOutcomeToast } from './features/auth/SsoOutcome';
 import { DatasetPage } from './features/datasets/DatasetPage';
@@ -20,7 +21,7 @@ import { DomainScope, domainPath, useDomain } from './lib/domains';
 /**
  * The console's pages (handbook 20): every domain at `/`, `/materializations`, `/datasets` and
  * `/search`; the console's own settings at `/settings`; everything about one domain under
- * `/d/<domain>/`.
+ * `/d/<domain>/`; and, outside the shell, signing in and accepting an invitation.
  */
 export function App(): ReactNode {
   return (
@@ -29,6 +30,7 @@ export function App(): ReactNode {
       <Routes>
         <Route path="/sign-in" element={<SignInPage />} />
         <Route path="/sign-in/:domain" element={<SignInPage />} />
+        <Route path="/invitation/:domain" element={<InvitationPage />} />
         <Route path="*" element={<ShellRoutes />} />
       </Routes>
     </SessionGate>

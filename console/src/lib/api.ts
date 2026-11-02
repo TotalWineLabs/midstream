@@ -5,12 +5,15 @@ import type {
   CpAuditPage,
   CpGroupDetail,
   CpGroupList,
+  CpInvitationDescription,
   CpMySessions,
   CpPermissionCatalog,
   CpRole,
   CpRoleList,
   CpUserDetail,
   CpUserList,
+  InvitationLinkResult,
+  InvitationsResult,
   IdentityChangeResult,
   UserFilter,
   UserSort,
@@ -331,6 +334,12 @@ export function domainApi(domain: string) {
         body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
       }),
     mySessions: () => request<CpMySessions>(`${base}/auth/sessions`),
+    /** What an invitation link is for; the link is the credential, so no session is needed. */
+    describeInvitation: (token: string) =>
+      request<CpInvitationDescription>(`${base}/auth/invitation`, { method: 'POST', body: JSON.stringify({ token }) }),
+    /** Accept an invitation with a password of your own; answers with the session it starts. */
+    acceptInvitation: (input: { token: string; first_name: string; last_name: string; password: string }) =>
+      request<AuthState>(`${base}/auth/invitation/accept`, { method: 'POST', body: JSON.stringify(input) }),
     /** Your access tokens for external engines; never their secrets. */
     accessTokens: () => request<CpAccessTokenList>(`${base}/auth/tokens`),
     /** Make an access token, optionally limited to some datasets; the answer's `token` is its text, shown this once. */
@@ -345,6 +354,12 @@ export function domainApi(domain: string) {
     user: (id: string) => request<CpUserDetail>(`${base}/users/${encodeURIComponent(id)}`),
     createUser: (input: { first_name: string; last_name: string; email: string; password: string; group_ids: string[] }) =>
       request<IdentityChangeResult>(`${base}/users`, { method: 'POST', body: JSON.stringify(input) }),
+    /** Invite people by email; the answer carries each invitation's link, shown this once. */
+    inviteUsers: (input: { emails: string[]; group_ids: string[] }) =>
+      request<InvitationsResult>(`${base}/users/invitations`, { method: 'POST', body: JSON.stringify(input) }),
+    /** A new link for an invitation, shown this once; the one before it stops working. */
+    renewInvitation: (id: string) =>
+      request<InvitationLinkResult>(`${base}/users/${encodeURIComponent(id)}/invitation`, { method: 'POST' }),
     updateUser: (
       id: string,
       input: Partial<{ first_name: string; last_name: string; email: string; group_ids: string[]; status: UserStatus; base_revision: number }>,
