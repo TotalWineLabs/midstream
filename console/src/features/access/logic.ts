@@ -90,6 +90,16 @@ export function describeMethod(method: string): string {
   return `through ${names[provider] ?? provider}`;
 }
 
+/**
+ * What a refusal says about itself, wherever it was refused: the identity agent's refusal reaches the
+ * page with its details as they are, the control plane's own check of the request with them under
+ * `upstream_details`.
+ */
+export function refusalDetails(details: Record<string, unknown>): Record<string, unknown> {
+  const upstream = details.upstream_details;
+  return upstream && typeof upstream === 'object' ? { ...(upstream as Record<string, unknown>), ...details } : details;
+}
+
 /** What an audit entry's action reads as. */
 export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'session.signed_in': 'Signed in',

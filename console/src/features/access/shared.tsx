@@ -11,6 +11,7 @@ import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import { plainStatus } from '@/lib/status';
 import { useApi } from '@/lib/domains';
+import { refusalDetails } from './logic';
 import type { CpUser, IdentityChangeResult } from '@shared/types';
 
 export { AUDIT_ACTION_LABELS, auditActionLabel, describeAgent, expandPermissions, generatePassword, permissionMap } from './logic';
@@ -59,7 +60,9 @@ export function useIdentityChange<TInput>(
 
 /** The field a refused change points at, if it names one. */
 export function errorField(error: unknown): string | null {
-  return error instanceof ApiError && typeof error.details.field === 'string' ? error.details.field : null;
+  if (!(error instanceof ApiError)) return null;
+  const field = refusalDetails(error.details).field;
+  return typeof field === 'string' ? field : null;
 }
 
 export function errorMessage(error: unknown): string {

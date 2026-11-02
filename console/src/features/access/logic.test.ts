@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import type { CpPermissionCatalog } from '@shared/types';
 
-import { AUDIT_ACTION_LABELS, PASSWORD_ALPHABET, auditActionLabel, describeAgent, describeDetail, describeMethod, expandPermissions, generatePassword } from './logic.ts';
+import { AUDIT_ACTION_LABELS, PASSWORD_ALPHABET, auditActionLabel, describeAgent, describeDetail, describeMethod, expandPermissions, generatePassword, refusalDetails } from './logic.ts';
 
 const catalog: CpPermissionCatalog = {
   categories: [{ id: 'data', label: 'Data' }],
@@ -103,5 +103,15 @@ describe('audit actions', () => {
 
   it('read an action this console does not know as words, never as its code', () => {
     assert.equal(auditActionLabel('pipeline.started_again'), 'Pipeline started again');
+  });
+});
+
+describe('refusals', () => {
+  it('say which field they are about, refused by the identity agent or by the control plane itself', () => {
+    assert.equal(refusalDetails({ field: 'email', reason: 'already_exists' }).field, 'email');
+    const checked = refusalDetails({ upstream_code: 'already_exists', upstream_details: { field: 'email', problems: [{ index: 0 }] } });
+    assert.equal(checked.field, 'email');
+    assert.deepEqual(checked.problems, [{ index: 0 }]);
+    assert.deepEqual(refusalDetails({}), {});
   });
 });
