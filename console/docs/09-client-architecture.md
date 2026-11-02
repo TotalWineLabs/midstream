@@ -501,3 +501,9 @@ Every asynchronous surface has four states, and all four are implemented:
 The distinction between "empty" and "error" is enforced: `DataTab` checks `summaryQuery.error`
 before it says a table has no data yet, so *No data to query yet* and *<table> is not readable* are
 never confused. Getting this wrong was an actual bug caught during verification.
+
+So is the one between a page's answer and its next read. A page that reads what it is about on a
+timer keeps its last answer when one read fails (`lib/reads.ts::readFailed`), and shows the failure
+only with no answer to keep or when it is final (401, 403, 404): TanStack Query sets `isError` on a
+failed refresh while keeping `data`, and the dataset and table pages once read `isError` alone, so one
+failed 15 s read replaced the page — and every tab the table's page keeps — with an error.

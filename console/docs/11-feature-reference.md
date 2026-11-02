@@ -387,7 +387,9 @@ its rows and size from the control plane's record, and *from Orders*, a link to 
 A tab the person may not open is not shown; an address naming one opens the first they may. A
 dataset locked to them shows the name and a note, never its schema or data; so does a person who
 may not see materializations' details. A table the dataset does not hold (dropped, or never written
-there) says so, with a link to the dataset's tables.
+there) says so, with a link to the dataset's tables. The page reads its dataset every 15 s; a read
+that fails keeps the page as it was, and only a final answer — the dataset gone, or no longer the
+person's to read (404, 403, 401) — replaces it (`lib/reads.ts::readFailed`).
 
 **Tabs keep their place.** Each tab, once opened, stays as it was left until the page is left
 (`components/TabPanel.tsx`, 10 §10.10). Going back to **Data** finds its time range, filters, order,

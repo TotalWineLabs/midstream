@@ -22,6 +22,7 @@ import { displayName, formatBytes, formatCount, formatMoment } from '@/lib/forma
 import { useDetailStream } from '@/lib/live';
 import { TABLE_TABS, tablePath, type TableTab } from '@/lib/paths';
 import { isPinned, togglePin, usePins } from '@/lib/pins';
+import { readFailed } from '@/lib/reads';
 import { itemStatus, statusOf, type Status } from '@/lib/status';
 import { readableTables, type CpDatasetDetail, type CpDatasetTable, type CpDetail } from '@shared/types';
 
@@ -57,24 +58,19 @@ export function TablePage(): ReactNode {
     />
   );
 
-  if (dataset.isError || (dataset.data && !entry)) {
-    const missingDataset = dataset.error instanceof ApiError && dataset.error.status === 404;
+  // A refresh that fails keeps the page, and every tab it keeps, as it was; a final answer does not.
+  const failed = readFailed(dataset);
+  if (failed || (dataset.data && !entry)) {
+    const missingDataset = failed && dataset.error instanceof ApiError && dataset.error.status === 404;
+    const failure = failed && !missingDataset && dataset.error instanceof ApiError ? dataset.error.message : null;
     return (
       <>
         {header}
         <PageBody>
           <Panel>
             <EmptyState
-              title={
-                missingDataset ? `There is no dataset ${datasetName}` : dataset.isError ? 'The table could not be loaded' : `${datasetName} has no table ${tableName}`
-              }
-              description={
-                dataset.error instanceof ApiError && !missingDataset
-                  ? dataset.error.message
-                  : missingDataset
-                    ? 'It may have been deleted.'
-                    : 'It may have been dropped, or never written here.'
-              }
+              title={missingDataset ? `There is no dataset ${datasetName}` : failed ? 'The table could not be loaded' : `${datasetName} has no table ${tableName}`}
+              description={failure ?? (missingDataset ? 'It may have been deleted.' : 'It may have been dropped, or never written here.')}
               action={
                 <Link to={domainPath(missingDataset ? '/datasets' : `/datasets/${encodeURIComponent(datasetName)}`)} className="text-[13px] font-medium hover:underline">
                   {missingDataset ? 'All datasets' : `The tables in ${datasetName}`}
