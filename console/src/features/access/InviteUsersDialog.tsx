@@ -26,6 +26,7 @@ export function InviteUsersDialog({ open, onClose, onInvited }: { open: boolean;
   const parsed = useMemo(() => parseEmails(text), [text]);
   const ways = joinWays(auth.state?.providers ?? []);
 
+  // The dialog says how it went - the links, or what was refused - so no toast repeats it.
   const invite = useIdentityChange((input: { emails: string[]; group_ids: string[] }) => api.inviteUsers(input), {
     success: (input) => (input.emails.length === 1 ? `${input.emails[0]} invited` : `${input.emails.length} people invited`),
     failure: 'Nobody was invited',
@@ -47,6 +48,8 @@ export function InviteUsersDialog({ open, onClose, onInvited }: { open: boolean;
 
   const problems = problemsOf(invite.error);
   const refused = new Set(problems.flatMap((problem) => (problem.email ? [problem.email] : [])));
+  // A refusal about something else than the emails - the groups, the session - said as it came.
+  const refusal = invite.error && problems.length === 0 && errorField(invite.error) !== 'emails' ? (invite.error as Error).message : null;
   const count = parsed.emails.length;
   const ready = count > 0 && parsed.invalid.length === 0;
   const submit = (): void => {
@@ -122,12 +125,13 @@ export function InviteUsersDialog({ open, onClose, onInvited }: { open: boolean;
             className="font-sans text-sm"
           />
         </Field>
-        {problems.length > 0 ? (
+        {problems.length > 0 || refusal ? (
           <div role="alert" className="space-y-2 rounded-[var(--radius-control)] bg-[var(--color-flare-wash)] px-3 py-2.5 text-[13px]">
             <ul className="space-y-1">
               {problems.map((problem) => (
                 <li key={`${problem.index}-${problem.email}`}>{problem.message}</li>
               ))}
+              {refusal ? <li>{refusal}</li> : null}
             </ul>
             {refused.size > 0 ? (
               <Button

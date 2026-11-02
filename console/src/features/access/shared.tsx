@@ -39,7 +39,7 @@ export function useIdentityChange<TInput, TResult extends IdentityChangeResult =
     success: (input: TInput, result: TResult) => string;
     failure: string;
     onApplied?: (result: TResult, input: TInput) => void;
-    /** The screen says it did it itself, as a dialog that shows what was made: no toast. */
+    /** The screen says how it went itself - what was made, or what was refused - so no toast does. */
     quiet?: boolean;
   },
 ) {
@@ -59,7 +59,7 @@ export function useIdentityChange<TInput, TResult extends IdentityChangeResult =
       options.onApplied?.(result, input);
     },
     onError: (error) => {
-      toast.error(options.failure, error instanceof Error ? error.message : String(error));
+      if (!options.quiet) toast.error(options.failure, error instanceof Error ? error.message : String(error));
     },
   });
 }

@@ -103,7 +103,7 @@ export const CONSOLE_SECTIONS: SettingsSection[] = [
 
 /** A domain's Settings page, at `/d/<domain>/settings`. */
 export const DOMAIN_SECTIONS: SettingsSection[] = [
-  section('users', 'Users', 'Everyone who can sign in, their groups, and what they may do.', 'access', Users, 'users', 'users.view'),
+  section('users', 'Users', 'Everyone who can sign in or is invited, their groups, and what they may do.', 'access', Users, 'users', 'users.view'),
   section('groups', 'Groups', 'Bundle people into groups, and give groups roles.', 'access', UsersRound, 'groups', 'groups.view'),
   section('roles', 'Roles', 'Reusable sets of permissions, which groups hold.', 'access', ShieldCheck, 'roles', 'roles.view'),
   section('security', 'Security', 'Passwords, sessions, lockouts and how long the audit log is kept.', 'access', KeyRound),

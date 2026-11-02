@@ -431,6 +431,10 @@ function NewLinkDialog({ open, onClose, user }: { open: boolean; onClose: () => 
           </span>
           <CopyButton value={url} label={`Copy the link for ${user.email}`} className="h-8 px-2" />
         </div>
+      ) : renew.error ? (
+        <p role="alert" className="rounded-[var(--radius-control)] bg-[var(--color-flare-wash)] px-3 py-2.5 text-[13px]">
+          {(renew.error as Error).message}
+        </p>
       ) : null}
     </Dialog>
   );

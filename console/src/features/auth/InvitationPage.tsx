@@ -51,6 +51,11 @@ export function InvitationPage(): ReactNode {
     setLastName((current) => current || invitation.last_name);
   }, [invitation]);
 
+  useEffect(() => {
+    // A link that will never work again is not worth keeping for a reload.
+    if (described.error instanceof ApiError && (described.error.status === 404 || described.error.status === 410)) forgetToken();
+  }, [described.error]);
+
   const minimum = invitation?.password_policy.min_length ?? 12;
   const where = many && domain ? domain.name : 'Midstream';
   // The providers this console signs people in with that the domain takes.
@@ -195,6 +200,12 @@ function unusable(token: string | null, error: unknown): { title: string; messag
   if (!token) return { title: 'This invitation link is incomplete', message: 'Open it again from the message it came in, all of it.' };
   if (error instanceof ApiError && error.status === 410) {
     return { title: 'This invitation link has expired', message: 'Ask whoever invited you for a new one.' };
+  }
+  if (error instanceof ApiError && error.status === 404) {
+    return {
+      title: 'This invitation link does not work',
+      message: 'A newer link replaced it, or the invitation was revoked or accepted. Ask whoever invited you for a new link, or sign in.',
+    };
   }
   if (error instanceof ApiError && error.status < 500 && error.status !== 429) {
     return { title: 'This invitation link does not work', message: error.message };
