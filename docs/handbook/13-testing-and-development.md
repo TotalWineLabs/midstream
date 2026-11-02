@@ -893,6 +893,38 @@ Found and fixed, each with a regression test:
 
 Not run on the test cluster: a reprotect of a kept table, a key the maintenance app lacks, permission refusals (no test accounts were made), compaction of reprotected files, and `_unmapped` or collapsed JSON text. Unit tests cover each.
 
+## 13.8m Verified on a test cluster: invitations
+
+On 2026-11-02 two domains on a test cluster ran `feature/invitations` — at c300dbc, then at 4375ce1,
+aae82b5 and 60b26a3 with what the run found — with the shared console in the cluster and Playwright
+(Chromium) in light and dark, at desktop width and on a phone (390 px, with reduced motion too). Domain A
+took passwords and GitHub; Domain B passwords, Microsoft, GitHub and Google. An administrator of both
+acted, beside an Editor the run invited.
+
+| Step | Observed |
+|---|---|
+| 1. The permission | `GET /permissions` listed *Invite users* (`users.invite`), implied by *Manage users*; the Editor's `POST /users/invitations` answered `403` |
+| 2. Inviting | Two emails with Editor: `202`, applied by the agent, each answer carrying its link `inv_<user id>.…` once. The list showed both *Invited*, holding Editor, and carried no link or hash. A request naming an account and two strings that are not emails invited nobody (`400`), each email with its reason |
+| 3. The link | `POST /auth/invitation` said who was invited, by whom and that a password is taken; a made-up link `404 invitation_invalid`; a short password refused under its field. Accepting started a session — theirs, with Editor's permissions — and their password then signed them in with nothing to change; the link was spent (`404`) |
+| 4. New link, revoke | A new link replaced the old, which answered `404` from then on; an accepted invitation got none (`409`). Revoking needed no deactivation, after which the link opened nothing and the account was gone. The audit log recorded `user.invited`, `user.invitation_accepted`, `user.invitation_renewed` and `user.invitation_revoked` |
+| 5. The console, one domain | **Invite people** leading the Users page; an address that is not one named before sending; the links shown once, with **Copy every email and link**; the *Invited* filter; an email invited already given a new link with the groups it had, the rest invited beside it; an invitation's page saying how it is accepted, with **New link** and **Revoke invitation**; **Share** on a dataset offering the invitation. In a fresh browser the link opened *Join Midstream* naming the email, left the address bar, survived a reload, and a name and password signed the browser in to Domain A with Editor; a spent link read *This invitation link does not work*, one cut short *… is incomplete*, and the tab forgot a dead link. 22 of 22 on 4375ce1 in light and dark, at 1440 px and on a phone; 23 of 23 on 60b26a3; no page errors |
+| 6. Across domains | Signed in to both, the dialog offered **Domains**, both ticked, and **Groups in Domain A** and **Groups in Domain B**: Editor in A, Viewer in B. Someone invited in Domain B alone beforehand got a new link there with the groups they had. Each person got one link naming both domains; **New link** from Domain A's page renewed both, **Revoke invitation** from Domain B's withdrew both. The join page read *It gives you access to Domain A and Domain B.*, offered GitHub alone (the one provider both take), and one name and password joined both: Editor in A, Viewer's access in B. 20 of 20 on 60b26a3, in light at 1440 px and in dark on a phone |
+| 7. The setting | *Invitation links last* under Sign-in: 7 days, bounds 1–90 |
+
+Found and fixed:
+
+- The invite dialog listed a refused email and a toast repeated it, lingering onto the next page; a link
+  that no longer works repeated its title in its message and stayed in the tab, so a later visit without
+  a link read the dead one (4375ce1).
+- On a phone the Users list's four columns squeezed every name to a letter (aae82b5).
+- The join page offered every provider some domain of the invitation took: Microsoft, which only Domain B
+  takes, would have accepted B's part alone, and back from the provider nothing says what became of A's.
+  Only the providers every domain takes are offered now (60b26a3).
+
+Not run on the test cluster: acceptance through a real provider, a link expiring, password sign-in off
+(no links), and a domain taking no passwords in an invitation to several. Unit tests cover each
+(`test_sso.py`, `test_identity.py::InvitationTests`, `console/src/features/access/logic.test.ts`).
+
 ## 13.9 Pre-finish checklist
 
 Before considering any change complete:
