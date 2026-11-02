@@ -24,6 +24,7 @@ import type { DataSummary, RunSnapshot } from '@shared/types';
 export function StatusBar({
   run,
   starting,
+  idle = false,
   summary,
   dirty,
   waiting = null,
@@ -33,6 +34,8 @@ export function StatusBar({
 }: {
   run: RunSnapshot | null;
   starting: boolean;
+  /** Nothing asked yet: a question waiting for Run (Explore, reopened from History). */
+  idle?: boolean;
   summary: DataSummary | null;
   /** The controls describe a different query than the one on screen. */
   dirty: boolean;
@@ -50,7 +53,9 @@ export function StatusBar({
     <div className="relative border-b border-[var(--color-line)] bg-[var(--color-surface)]" data-role="status-line">
       <div className="flex min-h-[40px] flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5">
         <div className="flex min-w-0 flex-1 items-center gap-2" aria-live="polite" data-role="run-status">
-          {starting || !run ? (
+          {idle && !starting && !run ? (
+            <span className="text-[12px] text-[var(--color-ink-muted)]">Changes not run yet</span>
+          ) : starting || !run ? (
             <Shimmer className="text-[12px] text-[var(--color-ink-muted)]">Starting…</Shimmer>
           ) : (
             <RunSummary run={run} />
@@ -173,6 +178,8 @@ function readAcross(run: RunSnapshot): ReactNode {
 function runningText(run: RunSnapshot): string {
   const { progress } = run;
   if (run.phase === 'planning') return 'Preparing';
+  // Admitted one at a time: how many of one person's scan at once, and of everyone's (Settings › Data explorer).
+  if (run.phase === 'queued') return run.queued === 'own' ? 'Waiting for your other queries to finish' : 'Waiting for other queries to finish';
   if (run.phase === 'preparing') {
     return progress.objectsTotal > 0 ? `Preparing · ${Math.floor((progress.objectsDone / progress.objectsTotal) * 100)}%` : 'Preparing';
   }

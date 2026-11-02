@@ -268,6 +268,17 @@ async function inFleet(
 }
 
 /**
+ * Every table of the materialization writing `table`, `table` first: what a run about it may be
+ * about, and what a statement's error lists as the tables there are. First, because tables of one
+ * materialization in different datasets may share a name, and a run's table is picked by its name.
+ * The detail is the one `resolveTables` read moments ago, kept by the live store.
+ */
+async function siblingsOf(table: ResolvedTable): Promise<RunTableSource[]> {
+  const all = await tablesOf(domains().require(table.domain), table.materializationId);
+  return [table, ...all.filter((candidate) => !(candidate.dataset === table.dataset && candidate.name === table.name))];
+}
+
+/**
  * The tables a statement names, found in their domains (`resolveTables`). Refused before anything
  * is found: a table named without its domain, with the name to write instead in every domain that
  * holds it - `runDomain`'s first. The caller must be allowed to query each table, in its dataset, as
@@ -491,11 +502,11 @@ export async function registerRunRoutes(app: FastifyInstance): Promise<void> {
    */
   app.post('/api/runs', { preHandler: permitInSomeDomain('data.query') }, async (request, reply) => {
     const body = parseBody(consoleRunSchema, request.body);
-    const own = body.source ? await resolveTables(request, [body.source], 'source') : [];
-    const primary = own[0] ?? null;
+    const primary = body.source ? ((await resolveTables(request, [body.source], 'source'))[0] ?? null) : null;
+    const own = primary ? await siblingsOf(primary) : [];
     const named = body.kind === 'sql' ? await resolveStatement(request, body.sql, own, primary ? domains().require(primary.domain) : null) : null;
     // The table a run is about is one the person may query, whether or not a statement reads it.
-    requireOnTables(request, 'data.query', [...own, ...(named?.sources ?? [])]);
+    requireOnTables(request, 'data.query', [...(primary ? [primary] : []), ...(named?.sources ?? [])]);
     const lead = primary ?? named?.sources[0] ?? null;
     const domain = lead ? domains().require(lead.domain) : domains().home;
     const run = await startRun({
@@ -514,9 +525,10 @@ export async function registerRunRoutes(app: FastifyInstance): Promise<void> {
   /** Bind a statement without running it, so the editor can mark an error while it is typed, in Explore. */
   app.post('/api/data/validate', { preHandler: permitInSomeDomain('data.query') }, async (request) => {
     const body = parseBody(consoleValidateSchema, request.body);
-    const own = body.source ? await resolveTables(request, [body.source], 'source', { tails: false }) : [];
-    requireOnTables(request, 'data.query', own);
-    const { sources, tableNames } = await resolveStatement(request, body.sql, own, own[0] ? domains().require((own[0] as ResolvedTable).domain) : null);
+    const primary = body.source ? ((await resolveTables(request, [body.source], 'source', { tails: false }))[0] ?? null) : null;
+    requireOnTables(request, 'data.query', primary ? [primary] : []);
+    const own = primary ? await siblingsOf(primary) : [];
+    const { sources, tableNames } = await resolveStatement(request, body.sql, own, primary ? domains().require(primary.domain) : null);
     await validateStatement({ sources, sql: body.sql, tableNames });
     return { ok: true };
   });
@@ -550,11 +562,13 @@ export async function registerRunRoutes(app: FastifyInstance): Promise<void> {
     const body = parseBody(refreshSchema, request.body ?? {});
     const domain = domains().require(run.domain);
     // Its table where the run found it, unless it has moved since.
-    const own = run.request.source ? await resolveTables(request, [{ ...run.request.source, materializationId: run.materializationId }], 'source') : [];
-    const primary = own[0] ?? null;
+    const primary = run.request.source
+      ? ((await resolveTables(request, [{ ...run.request.source, materializationId: run.materializationId }], 'source'))[0] ?? null)
+      : null;
+    const own = primary ? await siblingsOf(primary) : [];
     // A run that replaces this one reads what it names now, in each domain as it is now.
     const named = run.request.kind === 'sql' ? await resolveStatement(request, run.request.sql ?? '', own, primary ? domain : null) : null;
-    requireOnTables(request, 'data.query', run.request.kind === 'sql' ? [...own, ...(named?.sources ?? [])] : own);
+    requireOnTables(request, 'data.query', [...(primary ? [primary] : []), ...(named?.sources ?? [])]);
     const outcome = await refreshRun({
       run,
       ownerId: ownerIn(request, domain),

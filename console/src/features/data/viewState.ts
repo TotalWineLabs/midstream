@@ -29,6 +29,9 @@ export interface ViewState {
   live: boolean;
 }
 
+/** The view a workbench keeps, wherever its host keeps it: the address bar's, less the table. */
+export type WorkbenchView = Omit<ViewState, 'table'>;
+
 export const PAGE_SIZES = [50, 100, 250, 500, 1000];
 export const DEFAULT_PAGE_SIZE = 100;
 

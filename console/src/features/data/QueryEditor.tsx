@@ -3,12 +3,18 @@ import { sql, PostgreSQL } from '@codemirror/lang-sql';
 import { lintGutter, setDiagnostics, type Diagnostic } from '@codemirror/lint';
 import type { EditorView } from '@codemirror/view';
 import CodeMirror from '@uiw/react-codemirror';
-import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useEffect, useImperativeHandle, useMemo, useRef, type ReactNode, type Ref } from 'react';
 
 import { isMetadataColumn } from '@shared/fieldPaths';
 import type { StatementPosition } from '@shared/types';
 
 const RUN_HINT = navigator.platform.toLowerCase().includes('mac') ? '⌘↵' : 'Ctrl+↵';
+
+/** What a page may do to the editor from outside it: Explore's tables put their names at the cursor. */
+export interface EditorHandle {
+  /** Put `text` where the cursor is, replacing what is selected, and focus the editor. */
+  insert: (text: string) => void;
+}
 
 /**
  * The editor's basic setup, made once. The CodeMirror wrapper reconfigures the editor whenever this
@@ -44,6 +50,7 @@ export function QueryEditor({
   onChange,
   onRun,
   error = null,
+  editorRef,
 }: {
   value: string;
   /** The table on screen; completion offers its columns without a table name. */
@@ -68,8 +75,22 @@ export function QueryEditor({
    * something visible instead of a claim about text the reader now has to go and count.
    */
   error?: { message: string; position?: StatementPosition | null } | null;
+  editorRef?: Ref<EditorHandle>;
 }): ReactNode {
   const viewRef = useRef<EditorView | null>(null);
+  useImperativeHandle(
+    editorRef,
+    () => ({
+      insert: (text: string) => {
+        const view = viewRef.current;
+        if (!view) return;
+        const { from, to } = view.state.selection.main;
+        view.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from + text.length }, scrollIntoView: true });
+        view.focus();
+      },
+    }),
+    [],
+  );
   // The names completion offers, as text: the page renders with every live frame, each with new
   // arrays of the same names, and only new names may rebuild the editor's extensions.
   const names = JSON.stringify([domain, tableName, tables, otherTables, tableColumns, columns]);
@@ -146,7 +167,11 @@ export function QueryEditor({
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-[var(--color-line)] bg-[var(--color-raised)] px-3 py-2">
         <p className="text-[11px] text-[var(--color-ink-muted)]">
           Read-only. Query{' '}
-          {tables.length > 1 ? (
+          {tables.length === 0 ? (
+            <>
+              any table you may read, in any domain, by its full name, <code className="numeric">domain.dataset.table</code>
+            </>
+          ) : tables.length > 1 ? (
             <>
               any of <code className="numeric">{tables.map((table) => `${domain}.${table.dataset}.${table.name}`).join(', ')}</code> and join them
             </>
@@ -155,7 +180,7 @@ export function QueryEditor({
               {domain}.{current?.dataset ?? 'dataset'}.{tableName}
             </code>
           )}
-          {otherTables.length > 0 ? ', or any table you may read in any domain, by its full name' : ''}; columns are named by their field paths, so quote
+          {otherTables.length > 0 && tables.length > 0 ? ', or any table you may read in any domain, by its full name' : ''}; columns are named by their field paths, so quote
           them: <code className="numeric">"{example}"</code>.
         </p>
         {/*
