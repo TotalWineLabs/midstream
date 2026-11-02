@@ -925,6 +925,34 @@ Not run on the test cluster: acceptance through a real provider, a link expiring
 (no links), and a domain taking no passwords in an invitation to several. Unit tests cover each
 (`test_sso.py`, `test_identity.py::InvitationTests`, `console/src/features/access/logic.test.ts`).
 
+## 13.8n Verified on a test cluster: a table's tabs keep their place
+
+On 2026-11-02 the console at `feature/table-tab-continuity` (beb62b0, 986d2b9) ran locally against
+Domain A of a test cluster — its control plane, tail app and S3-compatible store reached through
+port-forwards — with Playwright (Chromium), signed in as an administrator: light and dark, at 1440 px
+and on a phone (390 px), with reduced motion; tables of 24 thousand and 102.6 million rows. Console 11
+§11.4a says what a kept tab does, console 09 §9.6 how.
+
+| Step | Observed |
+|---|---|
+| 1. Data, then Schema, History, Connect and back | A view of 1,832 rows — a filter, oldest first, 50 rows a page, page 2, the column list open, row 53 open, the grid scrolled 160 px down and 240 px across — came back the same: the same run in the address bar, no run started, the summary read once on return and never while away. Away, the Data panel was hidden (`content-visibility: hidden`) and inert, Schema's address carried nothing of Data's, ⌘↵ ran nothing and `j` moved no row |
+| 2. The other tabs | Schema kept its field filter and the version chosen; History its scroll. History read nothing in 13 s while Data was shown, at once on return, then every 10 s |
+| 3. A statement | The text typed after it ran, its 1,000-row result and the editor's undo history were there after History; the address carried the statement |
+| 4. Streaming | 3 refreshes in 6 s while Data was shown, none in 8 s on Schema, 3 in 5 s after returning |
+| 5. A long count | Left at *0 of 102,582,940 rows*, back 8 s later at *10,669,756 of 102,582,940 rows · 10%*: the same run, followed out of sight |
+| 6. Reload and leaving | A reload on Data kept its view and its run; the dataset's page and back started afresh, with a new preview |
+| 7. A row open, then a phone | Row 3 open beside the grid, Schema shown, the window narrowed to 390 px: no row sheet over Schema; wide again, Data still had row 3 open |
+| 8. A failed refresh | The dataset's read answering 502 (injected): the page and its tabs stayed; answering 404: *There is no dataset midstream* |
+| 9. Themes, phone, keyboard | No sideways scroll in either theme at either width; Tab reached the Schema tab with its focus ring and Enter opened it; no page errors and no React warnings |
+
+Fixed alongside, found while building it: one failed 15 s read of the dataset replaced the table's
+page — and every tab it keeps — with *could not be loaded* (986d2b9; console 14 §14.5, defect 37).
+Step 8 is its check in a browser.
+
+Not run: a commit landing while a tab is away (streaming then takes in the new snapshot on return, as
+after any pause), and a browser without `content-visibility`, which hides a kept tab with
+`display: none` instead.
+
 ## 13.9 Pre-finish checklist
 
 Before considering any change complete:

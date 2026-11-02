@@ -209,6 +209,19 @@
     font-size: 11.5px;
     background-image: repeating-linear-gradient(135deg, transparent 0 5px, var(--color-veil) 5px 6px);
   }
+
+  /* A tab kept while another is shown (components/TabPanel.tsx): not drawn, nor found, focused or
+     read aloud, but laid out as it was left, so its scroll positions and an editor's measurements are
+     there when it is shown again. Where content-visibility is unknown, it is not displayed. */
+  .tab-kept {
+    content-visibility: hidden;
+  }
+
+  @supports not (content-visibility: hidden) {
+    .tab-kept {
+      display: none;
+    }
+  }
 }
 
 /* ---------------------------------------------------------------------------------------------

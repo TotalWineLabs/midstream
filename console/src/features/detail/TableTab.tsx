@@ -8,6 +8,7 @@ import { PageBody } from '@/components/AppShell';
 import { RelativeTime } from '@/components/Inline';
 import { StatusLabel } from '@/components/Status';
 import { StatCard } from '@/components/StatCard';
+import { useTabShown } from '@/components/TabPanel';
 import { useToast } from '@/components/ui/Toast';
 import { Badge, Button, EmptyState, Panel, PanelHeader, Skeleton } from '@/components/ui/primitives';
 import { ApiError } from '@/lib/api';
@@ -19,12 +20,17 @@ import { tablePath } from '@/lib/paths';
 import { plainStatus } from '@/lib/status';
 import type { CpMaintenanceRun, CpTable, CpTableSpec, DetailSnapshot, MaintenanceJob, TableMetadataView, TableSnapshotRow } from '@shared/types';
 
-/** A table's record and its metadata, read from the control plane and from the table itself. */
+/**
+ * A table's record and its metadata, read from the control plane and from the table itself: every
+ * 10 s while its tab is shown, and at once when the tab is shown again with what it read aged.
+ */
 export function useTableDetail(materializationId: string, table: string) {
   const api = useApi();
+  const shown = useTabShown();
   return useQuery({
     queryKey: ['table', materializationId, table],
     queryFn: () => api.table(materializationId, table),
+    enabled: shown,
     refetchInterval: 10_000,
   });
 }

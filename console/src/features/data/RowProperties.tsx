@@ -6,6 +6,7 @@ import { groupColumns } from './columns';
 import { readJsonShape } from './jsonShape';
 import { ProtectedMark } from '../protection/ProtectionSummary';
 import { fieldProtectionText } from '../protection/protection';
+import { useTabShown } from '@/components/TabPanel';
 import { Button } from '@/components/ui/primitives';
 import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/cn';
@@ -60,7 +61,10 @@ export function RowProperties({
     [columns],
   );
 
+  // The row stays open while another of the page's tabs is shown, and its keys are that tab's.
+  const shown = useTabShown();
   useEffect(() => {
+    if (!shown) return;
     const onKeyDown = (event: KeyboardEvent): void => {
       // Beside the grid the page stays in use: keys typed into a field are that field's.
       const target = event.target;
@@ -74,7 +78,7 @@ export function RowProperties({
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onClose, onStep]);
+  }, [onClose, onStep, shown]);
 
   const copy = (text: string, label: string): void => {
     void navigator.clipboard.writeText(text);

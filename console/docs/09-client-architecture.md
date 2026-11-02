@@ -82,7 +82,9 @@ shareable, and survives a reload. `DetailPage` reads `tab` from params, defaults
 and switches tabs with `navigate(..., { replace: true })` so tab changes do not fill the history
 stack. A table has a page of its own, `/d/domain_a/datasets/sales/tables/orders[/schema|history|connect]`
 (`features/tables/TablePage.tsx`, `lib/paths.ts::tablePath`), whose tabs show that table and no
-other (`selectedTable.ts::namedTable`). The materialization's old `data`, `schema` and `table` tabs
+other (`selectedTable.ts::namedTable`). Each of its tabs, once opened, stays mounted until the page is
+left, hidden while another is shown, so going back finds it as it was left (§9.6, *Kept tabs*); the
+route is the same for every tab, so moving between them keeps the page mounted. The materialization's old `data`, `schema` and `table` tabs
 redirect to it, `?table=` naming which (`resolveTable`: the first when absent or unknown).
 
 The server's SPA fallback (`main.ts`) is what makes deep links work on a cold load; the old
@@ -235,14 +237,15 @@ so the UI never renders `NaN` or `undefined`.
 | Detail snapshot | `useDetailStream` hook instance | None |
 | Schema versions / diff / dataset | TanStack Query cache | In-memory, keyed |
 | Schema timeline | TanStack Query `['schema-timeline', id, table, snapshot]` | In-memory; a new snapshot is a new key, so a commit re-reads it |
-| Time range, filters, order, statement, page, page size, visible and pinned columns, the run on screen | `DataTab` state, mirrored to the query string | Survives reload — a reload re-attaches to the same run — and is shareable as a link |
-| The run's snapshot | `useRun`, fed by the run's event stream (polling if it drops) | Lost on navigation; the run itself keeps going server-side until it finishes |
+| Which of a table page's tabs have been opened | `useOpenedTabs` in `TablePage` (`components/TabPanel.tsx`) | Until the page is left; each one opened stays mounted, hidden while another is shown |
+| Time range, filters, order, statement, page, page size, visible and pinned columns, the run on screen | `DataTab` state, mirrored to the query string while the tab is shown | Kept across the page's tabs, and written back to the query string when the tab is shown again; survives reload — a reload re-attaches to the same run — and is shareable as a link |
+| The run's snapshot | `useRun`, fed by the run's event stream (polling if it drops) | Kept across the page's tabs, followed while out of sight; lost on leaving the page, though the run itself keeps going server-side until it finishes |
 | Pages of a run | TanStack Query, keyed by run, offset and readiness | Complete pages never change, so they are cached for good and the next one is prefetched |
 | SQL editor height, column rail width, column rail open | `localStorage` (`console.data.sqlHeight`, `console.data.railWidth`, `console.data.columnsOpen`) | Survives reload; guarded for private browsing |
 | JSON layout for exports and the row properties' copy | `localStorage` (`console.data.jsonShape`: `nested` or `flat`) | Survives reload; nested when unset |
 | Consumer-lag window, throughput metric | `StateReadout` and `DiagnosticsPanels` local state | Lost on navigation |
 | Search text, recently deleted | `MaterializationsPage` local state | Lost on navigation |
-| Selected schema version, compare version, field filter | `SchemaTab` local state | Lost on navigation |
+| Selected schema version, compare version, field filter | `SchemaTab` local state | Kept across the table page's tabs; lost on leaving the page |
 | Who is signed in | TanStack Query `['session']`, from the HttpOnly session cookie | The cookie persists until sign-out or the session's maximum length |
 | Users, groups, roles, the permission catalog, the audit log | TanStack Query (`['users']`, `['user', id]`, `['groups']`, `['group', id]`, `['roles']`, `['role', id]`, `['permissions']`, `['audit', …]`) | In-memory; every directory change invalidates all of them and reloads the session |
 | Appearance | `localStorage['console.theme']` (`light`, `dark`, absent for the system's; `lib/appearance.ts`) + `documentElement.classList`, applied before first paint by `index.html` | Persistent |
@@ -260,8 +263,23 @@ on what someone is typing — both are working preferences of one person at one 
 of the view a **Share** link should reproduce. Each read is wrapped in `try`/`catch`, so a browser
 blocking storage still gets working panes, just not remembered ones.
 
-> Known consequence: navigating away from the Data tab discards your filters and SQL. See
-> [16 — Known gaps](./16-known-gaps-and-roadmap.md).
+### Kept tabs (`components/TabPanel.tsx`)
+
+A table's page keeps each tab it has opened (`useOpenedTabs`) and renders every one in a
+`TabPanel`, only the active one shown, so nothing a tab holds needs saving anywhere: its React state,
+its queries, the run it follows, an editor's undo history and the DOM's scroll positions all stay
+where they are. Leaving the page unmounts them all.
+
+| Concern | How a hidden tab handles it |
+|---|---|
+| Drawing | `.tab-kept` (`styles.css`): `content-visibility: hidden` skips painting it but keeps its layout, so showing it again measures nothing anew — the grid keeps its scroll and column widths, the editor its lines. `inert` keeps it out of focus and interaction. Where `content-visibility` is unknown, `display: none` |
+| The page's updates | `TabPanel` is `memo`'d to skip a render that keeps it hidden: a new detail frame every 1.5 s reaches it when it is shown. Its own state still renders it — a run it follows reports, a read lands |
+| What it does on its own | `useTabShown()` says whether the tab is on screen (true outside a tab panel). Hidden, the Data tab writes nothing to the address bar, takes no ⌘↵ and lets a row take no keys, streams nothing (`liveHold` sees it as unseen, as for a hidden browser tab), auto re-runs nothing and keeps its row sheet off the page. Polls are `enabled` only while shown — the Data tab's summary, the Schema tab's versions, `useTableDetail` — so a hidden tab reads nothing on a timer, and TanStack Query reads one at once when its tab is shown with its data aged |
+| The page's scroll | Each panel remembers where `main` was scrolled while it was shown and scrolls it back when it is shown again; a tab shown for the first time leaves it where it is |
+| The address bar | The tab on screen's. The Data tab mirrors its view only while shown, and writes it back, replacing the entry, when shown again |
+
+`keptTabs.test.ts` checks the one rule a script can: a key listener on the document or window, in
+what the table's tabs render, asks `useTabShown()` first.
 
 ## 9.7 Feature modules
 
@@ -269,7 +287,7 @@ blocking storage still gets working panes, just not remembered ones.
 features/
   overview/OverviewPage.tsx                 Is everything flowing? The readout, the river, what needs you, the rows
   overview/River.tsx                        The fleet as strands from Kafka through Midstream to the lake
-  tables/TablePage.tsx                      A table: its Data, Schema, History and Connect tabs, under its dataset
+  tables/TablePage.tsx                      A table: its Data, Schema, History and Connect tabs, under its dataset, each kept once opened
   tables/TableConnect.tsx                   A table's Connect tab: the connection, its partitions, its properties
   tables/PartitionsPanel.tsx                Its partitions as columns on a time axis (partitions.ts bins them)
   overview/riverEngine.ts                   The river's particles, how they move, and its bed (2D canvas)
@@ -483,3 +501,9 @@ Every asynchronous surface has four states, and all four are implemented:
 The distinction between "empty" and "error" is enforced: `DataTab` checks `summaryQuery.error`
 before it says a table has no data yet, so *No data to query yet* and *<table> is not readable* are
 never confused. Getting this wrong was an actual bug caught during verification.
+
+So is the one between a page's answer and its next read. A page that reads what it is about on a
+timer keeps its last answer when one read fails (`lib/reads.ts::readFailed`), and shows the failure
+only with no answer to keep or when it is final (401, 403, 404): TanStack Query sets `isError` on a
+failed refresh while keeping `data`, and the dataset and table pages once read `isError` alone, so one
+failed 15 s read replaced the page — and every tab the table's page keeps — with an error.

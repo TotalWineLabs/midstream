@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Lock, Pin } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 
 import { namedTable } from './selectedTable';
@@ -11,6 +11,7 @@ import { TableHistoryTab } from '../detail/TableTab';
 import { SchemaTab } from '../schema/SchemaTab';
 import { PageBody, PageHeader } from '@/components/AppShell';
 import { StatusLabel } from '@/components/Status';
+import { TabPanel, useOpenedTabs } from '@/components/TabPanel';
 import { Button, EmptyState, Panel, Skeleton } from '@/components/ui/primitives';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -21,6 +22,7 @@ import { displayName, formatBytes, formatCount, formatMoment } from '@/lib/forma
 import { useDetailStream } from '@/lib/live';
 import { TABLE_TABS, tablePath, type TableTab } from '@/lib/paths';
 import { isPinned, togglePin, usePins } from '@/lib/pins';
+import { readFailed } from '@/lib/reads';
 import { itemStatus, statusOf, type Status } from '@/lib/status';
 import { readableTables, type CpDatasetDetail, type CpDatasetTable, type CpDetail } from '@shared/types';
 
@@ -56,24 +58,19 @@ export function TablePage(): ReactNode {
     />
   );
 
-  if (dataset.isError || (dataset.data && !entry)) {
-    const missingDataset = dataset.error instanceof ApiError && dataset.error.status === 404;
+  // A refresh that fails keeps the page, and every tab it keeps, as it was; a final answer does not.
+  const failed = readFailed(dataset);
+  if (failed || (dataset.data && !entry)) {
+    const missingDataset = failed && dataset.error instanceof ApiError && dataset.error.status === 404;
+    const failure = failed && !missingDataset && dataset.error instanceof ApiError ? dataset.error.message : null;
     return (
       <>
         {header}
         <PageBody>
           <Panel>
             <EmptyState
-              title={
-                missingDataset ? `There is no dataset ${datasetName}` : dataset.isError ? 'The table could not be loaded' : `${datasetName} has no table ${tableName}`
-              }
-              description={
-                dataset.error instanceof ApiError && !missingDataset
-                  ? dataset.error.message
-                  : missingDataset
-                    ? 'It may have been deleted.'
-                    : 'It may have been dropped, or never written here.'
-              }
+              title={missingDataset ? `There is no dataset ${datasetName}` : failed ? 'The table could not be loaded' : `${datasetName} has no table ${tableName}`}
+              description={failure ?? (missingDataset ? 'It may have been deleted.' : 'It may have been dropped, or never written here.')}
               action={
                 <Link to={domainPath(missingDataset ? '/datasets' : `/datasets/${encodeURIComponent(datasetName)}`)} className="text-[13px] font-medium hover:underline">
                   {missingDataset ? 'All datasets' : `The tables in ${datasetName}`}
@@ -135,6 +132,12 @@ function TableView({ dataset, entry, tab }: { dataset: CpDatasetDetail; entry: C
   const tabs = TABS.filter((item) => item.permission === null || can(item.permission, dataset.dataset_id));
   // A tab that is not one, or one the person may not open — from a shared link, say — is the first they may.
   const active = tabs.find((item) => item.key === (tab ?? 'data'))?.key ?? tabs[0]?.key ?? 'history';
+  // Every tab opened stays as it was left until the page is: going back to Data finds its rows,
+  // range, filters and statement, and the run on screen, which it kept following (§11.4a).
+  const opened = useOpenedTabs(active);
+  const ids = useId();
+  const tabId = (key: TableTab): string => `${ids}tab-${key}`;
+  const panelId = (key: TableTab): string => `${ids}panel-${key}`;
   const materializationName = detail ? displayName(detail.materialization) : (entry.materialization_name ?? entry.materialization_id);
 
   return (
@@ -176,8 +179,10 @@ function TableView({ dataset, entry, tab }: { dataset: CpDatasetDetail; entry: C
               return (
                 <button
                   key={item.key}
+                  id={tabId(item.key)}
                   role="tab"
                   aria-selected={selected}
+                  aria-controls={opened.has(item.key) ? panelId(item.key) : undefined}
                   type="button"
                   onClick={() => navigate(domainPath(tablePath(dataset.name, entry.name, item.key)), { replace: true })}
                   className={cn(
@@ -209,14 +214,22 @@ function TableView({ dataset, entry, tab }: { dataset: CpDatasetDetail; entry: C
             />
           </Panel>
         </PageBody>
-      ) : active === 'data' ? (
-        <DataTab materializationId={entry.materialization_id} snapshot={snapshot} table={entry.name} />
-      ) : active === 'schema' ? (
-        <SchemaTab materializationId={entry.materialization_id} snapshot={snapshot} table={entry.name} />
-      ) : active === 'connect' ? (
-        <TableConnect snapshot={snapshot} table={spec} />
       ) : (
-        <TableHistoryTab snapshot={snapshot} table={spec} />
+        tabs
+          .filter((item) => opened.has(item.key))
+          .map((item) => (
+            <TabPanel key={item.key} id={panelId(item.key)} labelledBy={tabId(item.key)} shown={item.key === active}>
+              {item.key === 'data' ? (
+                <DataTab materializationId={entry.materialization_id} snapshot={snapshot} table={entry.name} />
+              ) : item.key === 'schema' ? (
+                <SchemaTab materializationId={entry.materialization_id} snapshot={snapshot} table={entry.name} />
+              ) : item.key === 'connect' ? (
+                <TableConnect snapshot={snapshot} table={spec} />
+              ) : (
+                <TableHistoryTab snapshot={snapshot} table={spec} />
+              )}
+            </TabPanel>
+          ))
       )}
     </>
   );

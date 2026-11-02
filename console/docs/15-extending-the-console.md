@@ -74,7 +74,12 @@ Rules that keep derived metrics honest:
    recovery action, content.
 5. Something about one table belongs on the table's page (`features/tables/TablePage.tsx`), as a tab
    of its own: it takes the table from the page, by name (`selectedTable.ts::namedTable`), and its
-   address is `tablePath(dataset, table, tab)` (`lib/paths.ts`).
+   address is `tablePath(dataset, table, tab)` (`lib/paths.ts`). Add its key to `TABLE_TABS` and its
+   branch inside the page's `TabPanel`. Once opened it stays mounted, hidden while another tab is
+   shown (09 §9.6, *Kept tabs*), so its state needs no saving, but whatever it does on its own asks
+   `useTabShown()` first: a key listener on the document (`keptTabs.test.ts` checks), a poll
+   (`enabled: shown`, which also reads at once on return), anything that streams. Anything it puts in
+   the address bar it writes only while shown, and again when shown.
 
 ## 15.4 Gating something on a permission, or adding a permission
 

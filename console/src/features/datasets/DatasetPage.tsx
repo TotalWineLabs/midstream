@@ -18,6 +18,7 @@ import { useApi, useDomain, useDomainPath } from '@/lib/domains';
 import { useFleet } from '@/lib/fleet';
 import { formatCount } from '@/lib/format';
 import { tablePath } from '@/lib/paths';
+import { readFailed } from '@/lib/reads';
 import { itemStatus } from '@/lib/status';
 import type { CpDatasetDetail, CpDatasetTable } from '@shared/types';
 
@@ -53,7 +54,8 @@ export function DatasetPage(): ReactNode {
     </Link>
   );
 
-  if (dataset.isError) {
+  // A refresh that fails keeps the page as it was; a final answer does not.
+  if (readFailed(dataset)) {
     const missing = dataset.error instanceof ApiError && dataset.error.status === 404;
     return (
       <>
