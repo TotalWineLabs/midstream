@@ -60,6 +60,8 @@ is no session.
 | `GET` | `/auth/session` | `auth-session` | any | 200 | no | no |
 | `GET` | `/auth/sessions` | `auth-sessions` | session | 200 | no | no |
 | `POST` | `/auth/password` | `auth-password` | session | **202** | **no** | `<release>-identity-requests` |
+| `POST` | `/auth/invitation` | `auth-invitation` | — (an invitation link that works, in the body) | 200 | no | no |
+| `POST` | `/auth/invitation/accept` | `auth-invitation-accept` | — (an invitation link that works, in the body) | 200 | no | `<release>-identity-requests` |
 | `GET` | `/auth/tokens` | `auth-tokens-list` | session | 200 | no | no |
 | `POST` | `/auth/tokens` | `auth-tokens-create` | `catalog.read` on a dataset | **202** | **no** | `<release>-identity-requests` |
 | `DELETE` | `/auth/tokens/{token_id}` | `auth-tokens-revoke` | session: their own token, or anyone's with `users.manage` | **202** | **no** | `<release>-identity-requests` |
@@ -68,8 +70,10 @@ is no session.
 | `GET` | `/users` | `users-list` | `users.view` | 200 | no | no |
 | `GET` | `/users/{user_id}` | `users-detail` | `users.view_details` | 200 | no | no |
 | `POST` | `/users` | `users-create` | `users.manage` | **202** | **no** | `<release>-identity-requests` |
-| `PATCH` | `/users/{user_id}` | `users-update` | `users.manage` | **202** | **no** | `<release>-identity-requests` |
-| `DELETE` | `/users/{user_id}` | `users-delete` | `users.manage` | **202** | **no** | `<release>-identity-requests` |
+| `POST` | `/users/invitations` | `users-invite` | `users.invite` | **202** | **no** | `<release>-identity-requests` |
+| `POST` | `/users/{user_id}/invitation` | `users-invitation` | `users.invite` | **202** | **no** | `<release>-identity-requests` |
+| `PATCH` | `/users/{user_id}` | `users-update` | `users.manage`; an invitation `users.invite` | **202** | **no** | `<release>-identity-requests` |
+| `DELETE` | `/users/{user_id}` | `users-delete` | `users.manage`; an invitation `users.invite` | **202** | **no** | `<release>-identity-requests` |
 | `POST` | `/users/{user_id}/password` | `users-password` | `users.manage` | **202** | **no** | `<release>-identity-requests` |
 | `POST` | `/users/{user_id}/sign-out` | `users-sign-out` | `users.manage` | **202** | **no** | `<release>-identity-requests` |
 | `POST` | `/users/{user_id}/unlock` | `users-unlock` | `users.manage` | **202** | **no** | `<release>-identity-requests` |
@@ -1687,8 +1691,36 @@ Emits `sign_in_succeeded` or `sign_in_failed` (§4.13.5).
 seen answers once their account exists. Refused with `400 invalid_request` (an unknown provider),
 `401 invalid_credential`, `403 provider_disabled`, `email_not_allowed`, `email_unverified`,
 `no_account`, `account_deactivated`, `409` (the account could not be made), `503
-provider_unreachable` or `provisioning`. Emits `sign_in_succeeded`, `link_identity` or
-`provision_user`, or `sign_in_failed` with `method: sso:<provider>`.
+provider_unreachable` or `provisioning`. Emits `sign_in_succeeded`, `link_identity`,
+`accept_invitation` (an invitation for the email, 18 §18.18) or `provision_user`, or `sign_in_failed`
+with `method: sso:<provider>`; an invitation accepted is answered, like a first sign-in, once the
+account is active.
+
+**Accepting an invitation with its link** (18 §18.18), neither asking for a session — the link is the
+credential:
+
+```bash
+curl -s -X POST localhost:6065/auth/invitation -H 'content-type: application/json' -d '{"token":"inv_usr-9d0e1f2a3b4c.…"}'
+```
+
+```json
+{
+  "email": "ada@example.com", "first_name": "", "last_name": "",
+  "invited_by": "Jane Doe", "invited_at": "2026-11-02T12:00:00Z", "link_expires_at": "2026-11-09T12:00:00Z",
+  "password_sign_in": true,
+  "providers": [{ "id": "google", "type": "sso", "label": "Google" }],
+  "password_policy": { "min_length": 12, "max_length": 256 }
+}
+```
+
+`POST /auth/invitation/accept` with `{token, first_name, last_name, password}` answers `200` with the
+session payload and its token, as `POST /auth/login` does, once the identity agent has made the account
+active. Refusals, of either: `404 not_found` (`invitation_invalid`: not a link, replaced by a newer one,
+revoked or accepted — the same answer whatever is wrong), `410 gone` (`invitation_expired`); and of the
+acceptance: `400 invalid_request` (`field: first_name | last_name | password`), `403 forbidden`
+(`password_sign_in_disabled`), `409 conflict` (the agent refused it meanwhile), `429 too_many_attempts`
+(`busy`), `503 unavailable` (`sign_in_unavailable`, `starting`, `provisioning`). Emits
+`accept_invitation`.
 
 ### 4.13.2 Sessions: `GET /auth/session`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/sessions`
 
@@ -1733,9 +1765,9 @@ A person whose password someone else chose may call only these five endpoints, p
 
 ### 4.13.3 Users, groups, roles
 
-`GET /users?status=&sort=&q=`: `status` is `all` (default), `active`, `deactivated`, `locked` or
-`password_change`; `sort` is `name` (default), `last_active` or `created`; `q` searches names and
-emails.
+`GET /users?status=&sort=&q=`: `status` is `all` (default), `active`, `invited`, `deactivated`,
+`locked` or `password_change`; `sort` is `name` (default), `last_active` or `created`; `q` searches
+names and emails.
 
 ```json
 {
@@ -1750,18 +1782,20 @@ emails.
       "created_at": "2026-10-01T12:00:00Z", "created_by": "admin@example.com",
       "updated_at": "2026-10-01T12:00:00Z", "updated_by": "admin@example.com",
       "deactivated_at": null, "deactivated_by": null,
-      "revision": 1, "administrator": false, "manageable": true, "self": false
+      "revision": 1, "invitation": null, "administrator": false, "manageable": true, "self": false
     }
   ],
-  "counts": { "all": 12, "active": 11, "deactivated": 1, "locked": 0, "password_change": 2 },
+  "counts": { "all": 14, "active": 11, "invited": 2, "deactivated": 1, "locked": 0, "password_change": 2 },
   "returned": 1,
   "can_manage": true
 }
 ```
 
 `groups` lists the groups the person was added to; Guest and All Users are implied. `manageable`
-says whether the caller may change this account: they hold `users.manage` and every permission
-the person holds.
+says whether the caller may change this account: they hold `users.manage` (`users.invite` for an
+invitation) and every permission the person holds. An invitation (`status: invited`) has empty names
+until someone gives them — its `display_name` is its email — and `invitation`:
+`{invited_at, invited_by, link_expires_at}`, never the link.
 
 `GET /users/{user_id}` adds `memberships` (every group including the automatic ones, with their
 roles), `permissions` (`[{key, via: [{group_id, group, role_id, role}]}]`, so a page can say where
@@ -1771,8 +1805,10 @@ each permission comes from), `all_permissions`, `failed_sign_ins`, `sessions` an
 | Request | Body | Notes |
 |---|---|---|
 | `POST /users` | `{first_name, last_name, email, password, group_ids}` | The password must be changed at first sign-in |
-| `PATCH /users/{id}` | any of `{first_name, last_name, email, group_ids, status, base_revision}` | `group_ids` is the full list; `status` is `active` or `deactivated` |
-| `DELETE /users/{id}` | — | Only a deactivated account |
+| `POST /users/invitations` | `{emails, group_ids}` | 1-100 emails, all or none; answers `invitations`, each `{user_id, email, link, link_expires_at}` - the link shown this once, `null` while password sign-in is off. A refusal lists every email's problem in `details.problems` |
+| `POST /users/{id}/invitation` | — | A new `link` (and `link_expires_at`) for an invitation; the old one stops working |
+| `PATCH /users/{id}` | any of `{first_name, last_name, email, group_ids, status, base_revision}` | `group_ids` is the full list; `status` is `active` or `deactivated`, never an invitation's |
+| `DELETE /users/{id}` | — | Only a deactivated account, or an invitation (revoking it) |
 | `POST /users/{id}/password` | `{password}` | Ends their sessions; they must change it at next sign-in |
 | `POST /users/{id}/sign-out` | `{session_id}` or nothing | One session, or every one |
 | `POST /users/{id}/unlock` | — | Clears failed sign-ins for their email |

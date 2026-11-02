@@ -5,7 +5,7 @@ accounts, groups, roles, datasets, their grants and sessions are stored, and how
 the control plane and the console is authorized.
 
 Source: `identity/` (`permissions.py`, `principals.py`, `authorization.py`, `tokens.py`,
-`passwords.py`, `secrets.py`, `directory.py`, `validation.py`), `models/identity.py`,
+`passwords.py`, `secrets.py`, `directory.py`, `validation.py`, `invitations.py`), `models/identity.py`,
 `storage/identity.py`, `services/identity.py`, `handlers/identity.py`, `web/auth.py`,
 `web/identity.py`, `web/datasets.py`, `web/tokens.py`, `services/table_claims.py`; chart templates
 `tables/{directory,identity-audit}.yaml`, `agents/identity-intake.yaml`, `tasks/identity-*.yaml`,
@@ -21,8 +21,10 @@ read-only service credential, or an access token. A person belongs to **groups**
 someone do. A permission holds across the deployment, or — for what concerns a dataset's tables —
 on one **dataset** at a time: a **dataset grant** gives a person or a group roles on one dataset.
 What a person may do is the union of everything their groups grant, and on a dataset that plus
-every grant on it to them or their groups. People, custom groups and roles, datasets, their grants
-and the claims of table names live in the control plane's `directory` KasprTable; the API validates
+every grant on it to them or their groups. Someone can be **invited** by email before they have
+signed in: the invitation is an account of its own, holding the groups and dataset roles chosen for
+them, which become theirs at their first sign-in (§18.18). People, custom groups and roles, datasets,
+their grants and the claims of table names live in the control plane's `directory` KasprTable; the API validates
 a change and publishes it, and the `identity-intake` agent, the table's only writer, applies changes
 one at a time in order. Every WebView authorizes its caller against that table before it does
 anything, so a change to anyone's access applies to their next request.
@@ -65,7 +67,8 @@ permission's `scope`, for the console's role editor.
 |---|---|---|---|---|
 | `users.view` | deployment | View users page with emails | — | |
 | `users.view_details` | deployment | View account details | `users.view` | |
-| `users.manage` | deployment | Manage users | `users.view_details`, `groups.view` | yes |
+| `users.invite` | deployment | Invite users: invite people by email with the groups they will join, and change, renew or revoke invitations nobody has accepted (§18.18) | `users.view_details`, `groups.view` | |
+| `users.manage` | deployment | Manage users | `users.view_details`, `users.invite`, `groups.view` | yes |
 | `groups.view` | deployment | View groups | — | |
 | `groups.manage` | deployment | Manage groups | `groups.view`, `roles.view`, `users.view` | |
 | `roles.view` | deployment | View roles | — | |
@@ -181,9 +184,10 @@ Checked by the agent as it applies each change, against the directory as it then
 | One account per email, without regard to case | `already_exists` |
 | **Nobody grants access they do not hold.** Adding someone to a group, removing someone from one, giving a group a role, putting a permission in a role, deleting a group or role: the actor must hold every permission involved — across the deployment, and on each dataset where the group holds grants. Granting or taking away a role on a dataset needs every permission of that role on that dataset. Administrators hold everything | `forbidden` |
 | **Nobody manages an account with more access than their own.** Editing, resetting, signing out or deleting a person requires holding everything that person holds | `forbidden` |
-| **There is always an active administrator.** A change that would leave none is refused | `last_administrator` |
+| **There is always an active administrator.** A change that would leave none is refused. An invitation nobody has accepted is not an administrator, whatever its groups | `last_administrator` |
+| An invitation's status changes only when its person accepts it (§18.18): it cannot be made active or deactivated, and no account becomes an invitation. An invitation is changed or revoked with `users.invite`; every other account needs `users.manage`. Its password is chosen by its person, never set by an administrator | `invalid`, `forbidden` |
 | You cannot deactivate or delete yourself, or reset your own password as an administrator | `self_action` |
-| An account must be deactivated before it is deleted | `invalid` |
+| An account must be deactivated before it is deleted; an invitation is revoked - deleted - at once | `invalid` |
 | Built-in groups keep their name and description; built-in roles cannot change | `built_in` |
 | The Admin group keeps the Administrator role | `locked_role` |
 | A change made from a stale page (`base_revision` differs) | `changed` |
@@ -208,7 +212,7 @@ record lives in one changelog partition; reads still keep the newest copy of a k
 
 | Key | Entity type | Model | Holds |
 |---|---|---|---|
-| `user:<user_id>` | `user` | `User` | Name, email, status, `group_ids`, password hash, `external_identities`, `session_epoch`, `revision` |
+| `user:<user_id>` | `user` | `User` | Name, email, status (`active`, `invited`, `deactivated`), `group_ids`, password hash, `external_identities`, `session_epoch`, `revision`, and while it is invited, `invitation`: who invited them and when, and the SHA-256 of its link's secret with when the link expires |
 | `user-email:<email>` | `user-email` | — | `{email, user_id}`: the unique email index, lower-cased |
 | `group:<group_id>` | `group` | `Group` | Name, description, `role_ids`, `membership`, `external_groups`, `revision`. Built-in groups read their code defaults until first stored |
 | `role:<role_id>` | `role` | `Role` | Custom roles only; built-in roles always come from code |
@@ -279,12 +283,15 @@ may read its outcome.
 | Action | Payload | Permission | Notes |
 |---|---|---|---|
 | `create_user` | `user_id`, `email`, `first_name`, `last_name`, `group_ids`, `password_hash` | `users.manage` | Password must be changed at first sign-in |
-| `update_user` | any of `first_name`, `last_name`, `email`, `group_ids`, `status` | `users.manage` | Deactivating ends every session |
+| `invite_users` | `invitations` (each `user_id`, `email`, `link_hash`, `link_expires_at`), `group_ids` | `users.invite` | An invited account per email, all or none (§18.18) |
+| `renew_invitation` | `user_id`, `link_hash`, `link_expires_at` | `users.invite` | The old link stops working; refused while password sign-in is off |
+| `accept_invitation` | `user_id`, `method`; with a password `link_hash`, `password_hash`, names; through a provider `provider`, `subject`, names; the session | — | Sent by the sign-in views (§18.18); records the sign-in |
+| `update_user` | any of `first_name`, `last_name`, `email`, `group_ids`, `status` | `users.manage`; an invitation's names, email or groups `users.invite` | Deactivating ends every session |
 | `set_user_password` | `user_id`, `password_hash` | `users.manage` | Must be changed at next sign-in; ends every session; lifts a lockout |
 | `change_password` | `user_id`, `password_hash` | (own account) | Ends every session, this one included |
 | `sign_out_user` | `user_id`, optional `session_id` | `users.manage`, or own account | One session, or all |
 | `unlock_user` | `user_id` | `users.manage` | Clears the email's failed-attempt count |
-| `delete_user` | `user_id` | `users.manage` | Deactivated accounts only; frees the email |
+| `delete_user` | `user_id` | `users.manage`; an invitation `users.invite` | Deactivated accounts and invitations only; frees the email |
 | `create_group` / `update_group` / `delete_group` | `name`, `description`, `role_ids`, `member_ids` / `add_member_ids`, `remove_member_ids` | `groups.manage` | Membership is stored on each user |
 | `create_role` / `update_role` / `delete_role` | `name`, `description`, `permissions` | `roles.manage` | Deleting a role removes it from every group and every dataset grant |
 | `create_dataset` | `dataset_id`, `name`, `description` | `datasets.create` | Grants its creator Dataset Owner and All Users Dataset Reader (§18.16) |
@@ -308,7 +315,8 @@ may read its outcome.
 3. Look up the account by email and verify the password in a worker thread. An unknown email is
    verified against a dummy hash, so it takes as long as a wrong password. Wrong email or wrong
    password → `401 unauthenticated` "Email or password is incorrect." (`invalid_credentials`),
-   and a `sign_in_failed` event that counts towards a lockout.
+   and a `sign_in_failed` event that counts towards a lockout. An invitation has no password, so it
+   reads the same: its person accepts it with its link instead (§18.18).
 4. A deactivated account with the right password → `403 forbidden` (`account_deactivated`).
 5. Password sign-in turned off here (`password_sign_in_enabled`, §18.17) and the account does not
    hold the Administrator role → `403 forbidden` (`password_sign_in_disabled`). Checked after the
@@ -513,11 +521,15 @@ See the console handbook, [11 — Feature reference](../../console/docs/11-featu
 | `GET` | `/auth/session` | — | `{authenticated, principal, session, providers, password_policy, session_error?}`; the principal carries `dataset_permissions` (by dataset id) and `dataset_limit` |
 | `GET` | `/auth/sessions` | a session | Your sessions, newest first, `current` marked |
 | `POST` | `/auth/password` | a session | `202`; body `{current_password, new_password}` |
+| `POST` | `/auth/invitation` | an invitation link that works | What it is for: `{email, first_name, last_name, invited_by, invited_at, link_expires_at, password_sign_in, providers, password_policy}`; `404` for a link that does not work, `410` for one that expired; body `{token}` |
+| `POST` | `/auth/invitation/accept` | an invitation link that works | `200` session with `token`, once the account is theirs; body `{token, first_name, last_name, password}` (§18.18) |
 | `GET` | `/users` | `users.view` | `?status=all\|active\|deactivated\|locked\|password_change&sort=name\|last_active\|created&q=`; `{users, counts, returned, can_manage}` |
 | `GET` | `/users/{id}` | `users.view_details` | The user with `memberships`, `permissions` (each with the groups and roles it comes from), `dataset_grants` (theirs and their groups'), `sessions`, `failed_sign_ins` |
 | `POST` | `/users` | `users.manage` | `202`; body `{first_name, last_name, email, password, group_ids}` |
-| `PATCH` | `/users/{id}` | `users.manage` | `202`; body any of `{first_name, last_name, email, group_ids, status, base_revision}` |
-| `DELETE` | `/users/{id}` | `users.manage` | `202` |
+| `POST` | `/users/invitations` | `users.invite` | `202` with `invitations` - each `{user_id, email, link, link_expires_at}`, the link shown this once; body `{emails, group_ids}` (§18.18) |
+| `POST` | `/users/{id}/invitation` | `users.invite` | `202` with a new `link` and `link_expires_at`; the old link stops working |
+| `PATCH` | `/users/{id}` | `users.manage`; an invitation `users.invite` | `202`; body any of `{first_name, last_name, email, group_ids, status, base_revision}` |
+| `DELETE` | `/users/{id}` | `users.manage`; an invitation `users.invite` | `202` |
 | `POST` | `/users/{id}/password` | `users.manage` | `202`; body `{password}` |
 | `POST` | `/users/{id}/sign-out` | `users.manage` | `202`; body `{session_id}` for one session, empty for all |
 | `POST` | `/users/{id}/unlock` | `users.manage` | `202` |
@@ -572,6 +584,7 @@ The **Sign-in** section (`control-plane` scope) holds single sign-on and passwor
 | `sso_first_sign_in` | `SSO_FIRST_SIGN_IN` | `open` (`open` or `invited`) | new sign-ins |
 | `sso_allowed_email_domains` | `SSO_ALLOWED_EMAIL_DOMAINS` | empty: any (a `domain_list`, comma-separated) | new sign-ins |
 | `password_sign_in_enabled` | `PASSWORD_SIGN_IN_ENABLED` | true; off, administrators only | new sign-ins |
+| `invitation_link_lifetime_days` | `INVITATION_LINK_LIFETIME_DAYS` | 7 (1-90): how long an invitation's link works (§18.18) | new invitation links |
 
 Never overridable, from the **`<release>-auth`** Secret (`midstream-auth` in dev),
 every key optional. The Settings page's Deployment section says only whether each is configured.
@@ -848,13 +861,14 @@ is off).
 | The provider configured here and turned on | `403 provider_disabled` |
 | The credential checked: an ID token's signature against the provider's keys (read again for an unknown key, at most once a minute), `iss`, `aud`, `exp`, `iat` within 5 minutes, the nonce matched and used once; Entra's `tid`, Google's `email_verified` and `hd`; the issuer's `email_verified` unless `trustEmails`. GitHub: the token issued to this App (`POST /applications/<id>/token` with the secret), the account and its primary, verified email | `401 invalid_credential`, `403 email_unverified`, `503 provider_unreachable` |
 | The email's domain among `sso_allowed_email_domains`, when any are set | `403 email_not_allowed` |
-| The person found: by the linked provider account (`external-identity:<provider>:<subject>`); else by the email, and linked (`link_identity`, audit `user.identity_linked`); else, under `open`, a new account in All Users (`provision_user`, audit `user.provisioned`) | `403 no_account` under `invited`; `403 account_deactivated` |
+| The person found: by the linked provider account (`external-identity:<provider>:<subject>`); else by the email, and linked (`link_identity`, audit `user.identity_linked`) - an invitation for the email is accepted, under either policy (`accept_invitation`, audit `user.invitation_accepted`, §18.18); else, under `open`, a new account in All Users (`provision_user`, audit `user.provisioned`) | `403 no_account` under `invited`; `403 account_deactivated` |
 
 A session's method is `sso:<provider>`. A new account has no password until an administrator sets
 one, and its id is derived from the provider account (`usr-<sha256(provider:subject)[:16]>`), so two
 first sign-ins at once make one account. The login view publishes `provision_user`, and its next step
 (`await-account`) holds the answer until the identity agent has made the account — at most 10 s, then
-`503 provisioning`, or `409` when the agent refused it. A known refusal is audited as
+`503 provisioning`, or `409` when the agent refused it. Accepting an invitation waits the same way, until
+the account is active. A known refusal is audited as
 `session.sign_in_failed` with `method: sso:<provider>`; nothing a provider sign-in does counts
 towards a lockout. A session started through a provider is never held back by a password change
 someone else's password requires (§18.6).
@@ -865,3 +879,88 @@ Group claims from a provider do not drive Midstream's groups: groups are assigne
 
 Tests: `python/tests/test_sso.py`; console `server/routes/sso.test.ts`.
 
+
+## 18.18 Invitations
+
+Someone can be given access before they have ever signed in: anyone with `users.invite` — the
+Administrator role holds it, and so does `users.manage` — **invites** them by email, choosing the groups
+they will join, and dataset owners share datasets with them as with anyone. The invitation is an
+account of its own in the `invited` status, so it holds groups, dataset grants and its email exactly as
+an account does; its person **accepts** it at their first sign-in, which makes it `active`, with all of
+that already theirs. The users list shows invitations under **Invited**, a dataset's Share popover
+offers them, and a group's members list them (console 11 §11.8d).
+
+**Inviting.** `POST /users/invitations` with `{emails, group_ids}`: 1 to 100 addresses
+(`identity/invitations.py::MAX_INVITATIONS`), all invited or none. Every email is checked before any is
+invited, and a refusal lists each problem in `details.problems` (`index`, `email`, `reason` —
+`invalid`, `duplicate`, `already_exists` for an account, or `invited` for an invitation, with its
+`user_id` — and `message`): `400`, or `409` when every problem is an email that has an account or an
+invitation already. The groups follow the rule every grant does: only
+groups whose access the inviter holds (§18.3). The agent makes one `User` per email — `status:
+invited`, no password, and no names until someone gives them — with an `invitation`: who invited
+them, when, and the link's hash and expiry. Audit: `user.invited`.
+
+**Accepting.** Either way records the sign-in, as any first sign-in does, and audits
+`user.invitation_accepted` with the method:
+
+| Way | How | What it takes |
+|---|---|---|
+| Through a provider | The person signs in through Entra ID, GitHub, Google or OpenID Connect with the invited email (§18.17): the provider vouches for the email, and the account it finds by it is the invitation | The provider account is linked and the account becomes active, its names the provider's when nobody named the invitation. Accepted under either first-sign-in policy: `invited` admits exactly the people an administrator added or invited. Allowed email domains still apply |
+| With its link | The person opens the invitation's link, gives their name and chooses a password (`POST /auth/invitation/accept`) | Only while password sign-in is on, or for an invitation holding the Administrator role, as at sign-in (§18.6). The password follows the usual rules and is theirs from the start: nothing asks them to change it |
+
+The sign-in view publishes `accept_invitation` and holds its answer until the account is active, as for
+a first provider sign-in (`await-account`): `409` when the agent refused it — the invitation was revoked,
+or its link replaced, meanwhile — and `503` when that took longer than 10 s.
+
+**The link.** `inv_<user id>.<secret>`, with 32 random bytes of secret. The answer to the invitation —
+or to `POST /users/{id}/invitation`, which makes a new link and stops the old one — carries it **once**:
+the directory keeps only the secret's SHA-256, so neither the identity topic nor the directory's
+changelog holds anything a link could be made from. A link works for `invitation_link_lifetime_days`
+(7); once it expires the invitation stays, and its person can still accept it through a provider or be
+given a new link. While password sign-in is off, invitations get no link. The console shows a person
+one link for every domain that invited them, `<console>/invitation#<domain>:<token>,<domain>:<token>`
+(below): after `#`, no token reaches a server's log or a referrer, and the page moves them out of the
+address bar and hands each to its domain's control plane in request bodies (`POST /auth/invitation`,
+`…/accept`). Neither view asks for a session — the link is the
+credential — and neither says anything to a link that does not work: `404 invitation_invalid` whatever
+is wrong with it, `410 invitation_expired` for one that worked until it expired. The agent checks the
+link again as it applies the acceptance, since a new one may have replaced it in between. The console
+counts both views against the address's sign-in attempts (§18.6).
+
+**Across domains: one invitation.** An invitation is an account in one domain, as every account is
+(chapter 20), but to the person it is one invitation. The console's **Invite people** invites in every
+domain where the person inviting holds `users.invite` — all of them unless they choose fewer — with each
+domain's own groups, sending each domain its own `POST /users/invitations`. Where an email has an
+account already, that domain invites the rest and leaves it out; where it is invited already
+(`reason: invited`, with the invitation's `user_id`), the console gives that invitation a new link,
+its groups unchanged. Each person then gets **one link** carrying every domain's token. Their join page
+reads *Join Midstream*: one provider sign-in accepts every domain's invitation at once (each domain
+checks the provider's credential itself, §18.17), so the page offers the providers every domain of the
+invitation takes; and one name and password accepts it in each domain that takes passwords and signs
+the browser in to each. A domain taking no passwords makes no link, so the link does not reach it; the
+dialog says so, and how that domain is joined. **New link** and **Revoke** on an invitation's
+page act on the person's invitation in every domain that holds one where the person asking may invite.
+Each domain still decides alone: a refusal in one leaves the others as they are, and is named with its
+domain.
+
+**Until it is accepted** an invitation is nobody. No password signs in to it, and a password sign-in
+with its email reads as any wrong password. A session naming it is refused (`invalid_session`), and an
+access token another domain made for its email is not honoured here (`token_unknown_owner`). It is
+never an administrator, so it neither satisfies the last-administrator rule nor holds back the
+bootstrap administrator; an invitation for the bootstrap email becomes the bootstrap administrator's
+account (§18.8).
+
+**Changing and revoking.** With `users.invite` — and holding everything the invitation holds, as for
+any account — someone may change an invitation's names, email and groups (`PATCH /users/{id}`), give it
+a new link, or revoke it (`DELETE /users/{id}`): revoking deletes it at once, with its groups and dataset
+grants, no deactivation first, and frees the email (audit `user.invitation_revoked`). Its status changes
+only when it is accepted, and nobody sets its password but its person. Every other account still needs
+`users.manage`, which implies `users.invite`: whoever can add a user with a password can invite one.
+
+**Not built yet.** Nothing is sent to the person: whoever invites passes each link on, as they would an
+initial password. Delivering invitations by email or another channel is the next step (14 §14.21); the
+link is what such a message would carry.
+
+Tests: `python/tests/test_identity.py::InvitationTests`, `test_sso.py` (a provider sign-in accepting an
+invitation), `test_datasets.py` (sharing a dataset with an invitation); console
+`server/routes/identity.test.ts`, `server/auth/auth.test.ts`, `src/features/access/logic.test.ts`.

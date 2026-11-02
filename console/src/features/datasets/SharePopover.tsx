@@ -162,7 +162,9 @@ function GrantRow({ grant, roles, onChange }: { grant: CpDatasetGrant; roles: Gr
       )}
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[13px] font-medium">{grant.name}</span>
-        <span className="block truncate text-[12px] text-[var(--color-ink-faint)]">{grant.principal_type === 'group' ? 'Group' : grant.email}</span>
+        <span className="block truncate text-[12px] text-[var(--color-ink-faint)]">
+          {grant.principal_type === 'group' ? 'Group' : grant.invited ? `Invited · ${grant.email}` : grant.email}
+        </span>
       </span>
       {changeable ? (
         <Select
@@ -227,7 +229,9 @@ function AddPerson({
           <optgroup label="People">
             {users.map((user) => (
               <option key={user.user_id} value={`user:${user.user_id}`}>
-                {user.name} · {user.email}
+                {/* An invitation nobody named is its email alone; it is shared before they join. */}
+                {user.name === user.email ? user.email : `${user.name} · ${user.email}`}
+                {user.invited ? ' (invited)' : ''}
               </option>
             ))}
           </optgroup>

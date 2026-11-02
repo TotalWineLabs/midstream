@@ -1,9 +1,28 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { CpPermissionCatalog } from '@shared/types';
+import type { AuthProvider, CpPermissionCatalog } from '@shared/types';
 
-import { AUDIT_ACTION_LABELS, PASSWORD_ALPHABET, auditActionLabel, describeAgent, describeDetail, describeMethod, expandPermissions, generatePassword } from './logic.ts';
+import {
+  AUDIT_ACTION_LABELS,
+  PASSWORD_ALPHABET,
+  auditActionLabel,
+  describeAgent,
+  describeDetail,
+  describeMethod,
+  expandPermissions,
+  generatePassword,
+  andList,
+  invitationEntries,
+  invitationLink,
+  joinWays,
+  joinSentence,
+  joinWaysAcross,
+  orList,
+  parseEmails,
+  refusalDetails,
+  takenByAll,
+} from './logic.ts';
 
 const catalog: CpPermissionCatalog = {
   categories: [{ id: 'data', label: 'Data' }],
@@ -103,5 +122,98 @@ describe('audit actions', () => {
 
   it('read an action this console does not know as words, never as its code', () => {
     assert.equal(auditActionLabel('pipeline.started_again'), 'Pipeline started again');
+  });
+});
+
+describe('invitations', () => {
+  it('read the addresses in whatever was pasted, each once', () => {
+    assert.deepEqual(
+      parseEmails('Ada@Example.com, grace@example.com;\nAda Lovelace <ada@example.com>  mailto:bob@example.org\n\n'),
+      { emails: ['ada@example.com', 'grace@example.com', 'bob@example.org'], invalid: [] },
+    );
+    assert.deepEqual(parseEmails('ada@example, @example.com, plain, ok@example.com'), {
+      emails: ['ok@example.com'],
+      invalid: ['ada@example', '@example.com', 'plain'],
+    });
+    assert.deepEqual(parseEmails('   '), { emails: [], invalid: [] });
+  });
+
+  it('carry every domain’s invitation after # in one link, and read back only what could be one', () => {
+    const a = { domain: 'domain_a', token: `inv_usr-0123456789ab.${'A'.repeat(43)}` };
+    const b = { domain: 'domain_b', token: `inv_usr-ba9876543210.${'B'.repeat(43)}` };
+    const link = invitationLink('https://midstream.example.com/', [a, b]);
+    assert.equal(link, `https://midstream.example.com/invitation#domain_a:${a.token},domain_b:${b.token}`);
+    assert.deepEqual(invitationEntries(new URL(link).hash), [a, b]);
+    // One per domain; anything that is not a domain's invitation is left out.
+    assert.deepEqual(invitationEntries(`#domain_a:${a.token},domain_a:${b.token},Domain_C:${a.token},domain_d:inv_usr-1.short`), [a]);
+    for (const hash of ['', '#', `#${a.token}`, `#tok_${'A'.repeat(43)}`, `#domain_a:${a.token}:x`, '#%E0%A4%A']) {
+      assert.deepEqual(invitationEntries(hash), [], hash);
+    }
+  });
+
+  it('say how invited people join, as a domain takes sign-ins', () => {
+    const password = { id: 'password', type: 'password', label: 'Email and password', administrators_only: false };
+    const google = { id: 'google', type: 'sso', label: 'Google' };
+    const github = { id: 'github', type: 'sso', label: 'GitHub' };
+    assert.deepEqual(joinWays([password, google, github]), { providers: ['Google', 'GitHub'], links: true });
+    assert.deepEqual(joinWays([{ ...password, administrators_only: true }, google]), { providers: ['Google'], links: false });
+    assert.deepEqual(joinWays([]), { providers: [], links: false });
+    assert.equal(orList(['Microsoft', 'Google', 'GitHub']), 'Microsoft, Google or GitHub');
+    assert.equal(orList(['Google']), 'Google');
+    assert.equal(orList([]), '');
+    assert.equal(andList(['Domain A', 'Domain B']), 'Domain A and Domain B');
+    assert.equal(andList(['A', 'B', 'C']), 'A, B and C');
+  });
+
+  it('say how people invited to several domains join, one invitation to them', () => {
+    const password = { id: 'password', type: 'password', label: 'Email and password', administrators_only: false };
+    const google = { id: 'google', type: 'sso', label: 'Google' };
+    const github = { id: 'github', type: 'sso', label: 'GitHub' };
+    const entra = { id: 'entra', type: 'sso', label: 'Microsoft' };
+    const domainA = (...providers: AuthProvider[]) => ({ name: 'Domain A', providers });
+    const domainB = (...providers: AuthProvider[]) => ({ name: 'Domain B', providers });
+
+    // Only a provider every domain takes joins them all; the link joins each taking passwords.
+    const both = joinWaysAcross([domainA(password, github), domainB(password, entra, github, google)]);
+    assert.deepEqual(both, { providers: ['GitHub'], links: true, elsewhere: [] });
+    assert.equal(joinSentence(both, 2), 'They join by signing in through GitHub with that email, or with the one link each gets here, for every domain.');
+    assert.equal(
+      joinSentence(joinWaysAcross([domainA(password, github), domainB(password, google)]), 2),
+      'They join with the one link each gets here, for every domain, choosing their own password.',
+    );
+    // A domain taking no passwords gets no link: said, with how it is joined.
+    const mixed = joinWaysAcross([domainA(password, github), domainB({ ...password, administrators_only: true }, entra)]);
+    assert.deepEqual(mixed, { providers: [], links: true, elsewhere: [{ name: 'Domain B', providers: ['Microsoft'] }] });
+    assert.equal(
+      joinSentence(mixed, 2),
+      'They join with the one link each gets here, choosing their own password. Domain B takes no passwords: there they sign in through Microsoft.',
+    );
+    // No link anywhere: a shared provider is enough; with none, each domain's own.
+    assert.equal(joinSentence(joinWaysAcross([domainA(github, google), domainB(google)]), 2), 'They join by signing in through Google with that email.');
+    assert.equal(
+      joinSentence(joinWaysAcross([domainA(github), domainB()]), 2),
+      'Domain A takes no passwords: there they sign in through GitHub. Nobody can join Domain B yet: it takes no sign-in provider, and only administrators may use a password.',
+    );
+    // One domain reads as before.
+    assert.equal(joinSentence(joinWaysAcross([domainA(password, google)]), 1), 'They join by signing in through Google with that email, or with the link each one gets here.');
+    assert.equal(joinSentence(joinWaysAcross([domainA()]), 1), 'Nobody can join yet: no sign-in provider is on, and only administrators may use a password.');
+    assert.deepEqual(takenByAll([[github, google], [google, github], [entra, google]]), [google]);
+    assert.deepEqual(takenByAll([]), []);
+  });
+
+  it('name what each invitation step did in the audit log', () => {
+    for (const action of ['user.invited', 'user.invitation_renewed', 'user.invitation_revoked', 'user.invitation_accepted']) {
+      assert.ok(AUDIT_ACTION_LABELS[action], action);
+    }
+  });
+});
+
+describe('refusals', () => {
+  it('say which field they are about, refused by the identity agent or by the control plane itself', () => {
+    assert.equal(refusalDetails({ field: 'email', reason: 'already_exists' }).field, 'email');
+    const checked = refusalDetails({ upstream_code: 'already_exists', upstream_details: { field: 'email', problems: [{ index: 0 }] } });
+    assert.equal(checked.field, 'email');
+    assert.deepEqual(checked.problems, [{ index: 0 }]);
+    assert.deepEqual(refusalDetails({}), {});
   });
 });

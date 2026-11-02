@@ -95,6 +95,7 @@ revision. With no settings table it returns `get_config()` unchanged.
 | `sign_in_max_failed_attempts` | `CONTROL_PLANE_SIGN_IN_MAX_FAILED_ATTEMPTS` | `10` | integer, `>= 1`; wrong passwords in a row before an email is locked out |
 | `sign_in_lockout_minutes` | `CONTROL_PLANE_SIGN_IN_LOCKOUT_MINUTES` | `15` | integer, `>= 1` |
 | `audit_log_retention_days` | `CONTROL_PLANE_AUDIT_LOG_RETENTION_DAYS` | `90` | integer, `>= 1` |
+| `invitation_link_lifetime_days` | `CONTROL_PLANE_INVITATION_LINK_LIFETIME_DAYS` | `7` | integer, `>= 1`; how long an invitation's link works (18 §18.18) |
 | `live_tail_enabled` | `CONTROL_PLANE_LIVE_TAIL_ENABLED` | `True` | boolean parse; on, every materialization's tables are tailed; off, none (19) |
 | `live_tail_max_rows_per_table` | `CONTROL_PLANE_LIVE_TAIL_MAX_ROWS_PER_TABLE` | `250000` | integer, `>= 1000`; one table's uncommitted records the tail holds, and the backlog bound |
 | `live_tail_max_bytes_per_table` | `CONTROL_PLANE_LIVE_TAIL_MAX_BYTES_PER_TABLE` | `268435456` | integer, `>= 8 MiB`; one table's tail memory |
@@ -214,7 +215,7 @@ and so on).
 | Topics | `topic_catalog_ttl_seconds`, `topic_catalog_min_refresh_seconds`, `topic_analysis_max_topics` |
 | Diagnostics | `protocol_logging_enabled` |
 | Security | `session_idle_timeout_minutes`, `session_max_lifetime_hours`, `session_refresh_minutes`, `password_min_length`, `sign_in_max_failed_attempts`, `sign_in_lockout_minutes`, `audit_log_retention_days` |
-| Sign-in | `sso_entra_enabled`, `sso_github_enabled`, `sso_google_enabled`, `sso_oidc_enabled`, `sso_first_sign_in`, `sso_allowed_email_domains`, `password_sign_in_enabled` |
+| Sign-in | `sso_entra_enabled`, `sso_github_enabled`, `sso_google_enabled`, `sso_oidc_enabled`, `sso_first_sign_in`, `sso_allowed_email_domains`, `password_sign_in_enabled`, `invitation_link_lifetime_days` |
 | Live tail | `live_tail_enabled`, `live_tail_max_rows_per_table`, `live_tail_max_bytes_per_table`, `live_tail_retention_seconds`, `live_tail_fetch_wait_ms`, `live_tail_max_records_per_second_per_table`, `live_tail_peek_max_rows`, `live_tail_idle_seconds` |
 
 The rest stay with the deployment — topic and table names, the namespace and runtime naming, the

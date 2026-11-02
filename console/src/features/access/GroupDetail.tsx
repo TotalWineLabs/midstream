@@ -181,12 +181,15 @@ function MembersPanel({ group, editable }: { group: CpGroupDetail; editable: boo
           {members.map((member) => (
             <li key={member.user_id} className="flex items-center justify-between gap-3 px-5 py-2.5">
               <Link to={domainPath(`/settings/users/${member.user_id}`)} className="flex min-w-0 items-center gap-3">
-                <Avatar name={member.display_name} email={member.email} muted={member.status === 'deactivated'} />
+                <Avatar name={member.display_name !== member.email ? member.display_name : ''} email={member.email} muted={member.status !== 'active'} />
                 <span className="min-w-0">
                   <span className="block truncate text-[13px] font-medium">{member.display_name}</span>
-                  <span className="block truncate text-[12px] text-[var(--color-ink-muted)]">{member.email}</span>
+                  {member.display_name !== member.email ? (
+                    <span className="block truncate text-[12px] text-[var(--color-ink-muted)]">{member.email}</span>
+                  ) : null}
                 </span>
                 {member.status === 'deactivated' ? <Badge tone="neutral">Deactivated</Badge> : null}
+                {member.status === 'invited' ? <Badge tone="neutral">Invited</Badge> : null}
               </Link>
               <span className="flex items-center gap-3">
                 <span className="hidden text-[12px] text-[var(--color-ink-muted)] sm:inline">
@@ -209,7 +212,8 @@ function MembersPanel({ group, editable }: { group: CpGroupDetail; editable: boo
 
 function AddMembersDialog({ open, onClose, group }: { open: boolean; onClose: () => void; group: CpGroupDetail }): ReactNode {
   const api = useApi();
-  const users = useQuery({ queryKey: ['users', 'active', 'name', ''], queryFn: () => api.users({ status: 'active' }), enabled: open });
+  // Everyone who signs in, and everyone invited: a group given before they join is theirs from their first sign-in.
+  const users = useQuery({ queryKey: ['users', 'all', 'name', ''], queryFn: () => api.users({ status: 'all' }), enabled: open });
   const [search, setSearch] = useState('');
   const [chosen, setChosen] = useState<string[]>([]);
   useEffect(() => {
@@ -220,6 +224,7 @@ function AddMembersDialog({ open, onClose, group }: { open: boolean; onClose: ()
   const memberIds = useMemo(() => new Set((group.members ?? []).map((member) => member.user_id)), [group.members]);
   const candidates = (users.data?.users ?? []).filter(
     (user) =>
+      user.status !== 'deactivated' &&
       !memberIds.has(user.user_id) &&
       (!search || `${user.display_name} ${user.email}`.toLowerCase().includes(search.trim().toLowerCase())),
   );
@@ -267,11 +272,14 @@ function AddMembersDialog({ open, onClose, group }: { open: boolean; onClose: ()
                     checked={checked}
                     onChange={() => setChosen(checked ? chosen.filter((id) => id !== user.user_id) : [...chosen, user.user_id])}
                   />
-                  <Avatar name={user.display_name} email={user.email} size="sm" />
-                  <span className="min-w-0">
+                  <Avatar name={user.display_name !== user.email ? user.display_name : ''} email={user.email} size="sm" />
+                  <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] font-medium">{user.display_name}</span>
-                    <span className="block truncate text-[12px] text-[var(--color-ink-muted)]">{user.email}</span>
+                    {user.display_name !== user.email ? (
+                      <span className="block truncate text-[12px] text-[var(--color-ink-muted)]">{user.email}</span>
+                    ) : null}
                   </span>
+                  {user.status === 'invited' ? <Badge tone="neutral">Invited</Badge> : null}
                 </label>
               </li>
             );

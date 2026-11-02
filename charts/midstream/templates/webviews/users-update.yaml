@@ -8,7 +8,7 @@ metadata:
     kaspr.io/app: {{ include "midstream.controlPlane" . }}
 spec:
   name: users-update
-  description: "Change a person's name, email, groups or status, and emit the request the identity agent applies."
+  description: "Change a person's name, email, groups or status - or an invitation's - and emit the request the identity agent applies."
   request:
     method: PATCH
     path: /users/{user_id}
@@ -30,7 +30,8 @@ spec:
             from midstream.web.identity import update_user_request
 
             async def prepare_request(request, user_id, directory_table):
-                principal = authorize(request, directory_table, "users.manage")
+                # An invitation needs Invite users; any other account, Manage users (checked after).
+                principal = authorize(request, directory_table, "users.invite")
                 body = await json_body(request)
                 return update_user_request(directory_table, principal, user_id, body, request=request).to_value()
       - name: send-identity-request

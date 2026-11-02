@@ -50,6 +50,7 @@ from midstream.models.identity import (
     Group,
     IdentityRequest,
     IdentityRequestOutcome,
+    Invitation,
     PasswordCredential,
     RequestContext,
     Role,
@@ -148,6 +149,23 @@ def store_user(table: FakeTable, user: User) -> User:
     save_user(table, user)
     save_user_email(table, user.email, user.user_id, updated_at=NOW)
     return user
+
+
+def make_invited(user_id: str, email: str, *, groups: list[str] | None = None, link_hash: str | None = None, link_expires_at: str | None = None) -> User:
+    """An invitation nobody named, as `invite_users` makes one."""
+    return User(
+        user_id=user_id,
+        email=email,
+        first_name="",
+        last_name="",
+        status="invited",
+        group_ids=groups or [],
+        invitation=Invitation(invited_at=NOW, invited_by="admin@example.com", link_hash=link_hash, link_expires_at=link_expires_at),
+        created_at=NOW,
+        created_by="admin@example.com",
+        updated_at=NOW,
+        updated_by="admin@example.com",
+    )
 
 
 def request(action: str, actor: str, payload: dict[str, Any] | None = None, *, request_id: str | None = None, base_revision: int | None = None) -> IdentityRequest:
@@ -1517,3 +1535,289 @@ class AccessTokenTests(unittest.TestCase):
         save_user(self.table, replace(self.viewer, status="deactivated"))
         apply(self.table, self.audit, "delete_user", "admin", {"user_id": "viewer"})
         self.assertIsNone(get_access_token(self.table, kept["token_id"]))
+
+
+class InvitationTests(unittest.TestCase):
+    """Invitations (handbook 18 §18.18): an account made by email before its person signs in, holding
+    the access chosen for them, accepted at their first sign-in."""
+
+    LATER = datetime(2026, 10, 13, 12, tzinfo=UTC)
+
+    def setUp(self) -> None:
+        clear_grants_cache()
+        self.table, self.audit = directory()
+        # Someone who may invite and nothing more about users: a custom role, through a group.
+        from midstream.storage.identity import save_group, save_role
+
+        save_role(self.table, Role(role_id="rol-inviter", name="Inviter", permissions=["users.invite"], created_at=NOW, created_by="system", updated_at=NOW, updated_by="system"))
+        save_group(self.table, Group(group_id="grp-inviters", name="Inviters", role_ids=["rol-inviter"], created_at=NOW, created_by="system", updated_at=NOW, updated_by="system"))
+        store_user(self.table, make_user("inviter", "inviter@example.com", groups=["grp-inviters"]))
+        # A group whose access everyone signed in holds already, which anyone who may invite may give.
+        save_group(self.table, Group(group_id="grp-lookers", name="Lookers", role_ids=["viewer"], created_at=NOW, created_by="system", updated_at=NOW, updated_by="system"))
+
+    def principal(self, user_id: str):
+        clear_grants_cache()
+        return authorize(http_request(session_token(get_user(self.table, user_id))), self.table, None, secrets=SECRETS, now=NOW_EPOCH)
+
+    def invite(self, actor: str, emails: list[str], groups: list[str] | None = None, *, config: ControlPlaneConfig = CONFIG) -> dict[str, Any]:
+        acceptance = views.invite_users_request(
+            self.table, self.principal(actor), {"emails": emails, "group_ids": groups or []}, request=http_request(), config=config, now=self.LATER
+        )
+        outcome = apply_identity_request(self.table, self.audit, acceptance.request_event, config=config, secrets=SECRETS, applied_at=NOW)
+        self.assertEqual("applied", outcome.status, outcome.to_dict())
+        return acceptance.response
+
+    def accept(self, token: str, **fields: Any) -> auth.AuthResult:
+        body = {"token": token, "first_name": "Ada", "last_name": "Lovelace", "password": "analytical engines", **fields}
+        return run(auth.accept_invitation(self.table, body, request=http_request(), config=fields.pop("config", CONFIG) if "config" in fields else CONFIG, secrets=SECRETS, now=NOW_EPOCH))
+
+    def audited(self) -> list[str]:
+        return [AuditEntry.from_dict(value["payload"]).action for _, value in self.audit.prefix_scan("audit:")]
+
+    def test_each_email_becomes_an_invited_account_holding_the_groups(self) -> None:
+        response = self.invite("admin", ["ada@example.com", " Bob@Example.com "], ["editor"])
+
+        self.assertEqual(["ada@example.com", "bob@example.com"], [item["email"] for item in response["invitations"]])
+        for item in response["invitations"]:
+            user = get_user(self.table, item["user_id"])
+            self.assertEqual(("invited", ["editor"], "", None), (user.status, user.group_ids, user.first_name, user.password))
+            self.assertEqual(user.email, user.display_name)
+            self.assertEqual("admin@example.com", user.invitation.invited_by)
+            self.assertEqual("2026-10-20T12:00:00Z", user.invitation.link_expires_at)
+            self.assertTrue(item["link"].startswith(f"inv_{item['user_id']}."))
+            # The directory holds the link's hash, never the link.
+            self.assertNotIn(item["link"].rsplit(".", 1)[1], json.dumps(self.table.data))
+            self.assertEqual(item["user_id"], find_user_by_email(self.table, item["email"]).user_id)
+        self.assertEqual(2, self.audited().count("user.invited"))
+        # An invited account holds what its groups give, and is no administrator.
+        invited = get_user(self.table, response["invitations"][0]["user_id"])
+        self.assertIn("materializations.create", DirectoryView.load(self.table).grants_for_user(invited).permissions)
+        listing = views.list_users_view(self.table, self.principal("admin"), {"status": "invited"})
+        self.assertEqual((2, 2, 4), (listing["returned"], listing["counts"]["invited"], listing["counts"]["active"]))
+        row = listing["users"][0]
+        self.assertEqual(("invited", "2026-10-20T12:00:00Z"), (row["status"], row["invitation"]["link_expires_at"]))
+        self.assertNotIn("link_hash", json.dumps(views.get_user_view(self.table, self.principal("admin"), row["user_id"])))
+
+    def test_every_email_is_checked_before_any_is_invited(self) -> None:
+        self.invite("admin", ["ada@example.com"])
+        with self.assertRaises(WebError) as caught:
+            views.invite_users_request(
+                self.table,
+                self.principal("admin"),
+                {"emails": ["viewer@example.com", "not-an-email", "new@example.com", "NEW@example.com", "ada@example.com"]},
+                request=http_request(),
+                config=CONFIG,
+            )
+        self.assertEqual(400, caught.exception.status_code)
+        problems = {problem["index"]: (problem["reason"], problem["message"]) for problem in caught.exception.details["problems"]}
+        self.assertEqual(
+            {
+                0: ("already_exists", "viewer@example.com already has an account."),
+                1: ("invalid", "Enter a valid email address, such as jane@example.com"),
+                3: ("duplicate", "new@example.com is named twice."),
+                4: ("invited", "ada@example.com is invited already."),
+            },
+            problems,
+        )
+        # An invitation says which, so a client can give it a new link rather than invite again.
+        invited = next(problem for problem in caught.exception.details["problems"] if problem["reason"] == "invited")
+        self.assertEqual(find_user_by_email(self.table, "ada@example.com").user_id, invited["user_id"])
+        self.assertNotIn("user_id", caught.exception.details["problems"][0])
+        with self.assertRaises(WebError) as caught:
+            views.invite_users_request(self.table, self.principal("admin"), {"emails": ["viewer@example.com"]}, request=http_request(), config=CONFIG)
+        self.assertEqual((409, "emails"), (caught.exception.status_code, caught.exception.details["field"]))
+        for body in ({"emails": []}, {"emails": "ada@example.com"}, {"emails": [f"p{index}@example.com" for index in range(101)]}, {"emails": ["x@example.com"], "password": "x"}):
+            with self.subTest(body=str(body)[:40]), self.assertRaises(WebError) as caught:
+                views.invite_users_request(self.table, self.principal("admin"), body, request=http_request(), config=CONFIG)
+            self.assertEqual(400, caught.exception.status_code)
+
+    def test_nobody_invites_into_access_they_do_not_hold(self) -> None:
+        # Inviting is its own permission; Manage users includes it.
+        self.assertIn("users.invite", expand_permissions(["users.manage"]))
+        self.assertTrue({"users.view_details", "users.view", "groups.view"} <= expand_permissions(["users.invite"]))
+        with self.assertRaises(WebError) as caught:
+            views.invite_users_request(self.table, self.principal("viewer"), {"emails": ["ada@example.com"]}, request=http_request(), config=CONFIG)
+        self.assertEqual(403, caught.exception.status_code)
+        with self.assertRaises(IdentityRejection) as refused:
+            views.preview_identity_request(self.table, views.directory_request(self.principal("inviter"), "invite_users", {"invitations": [{"user_id": "usr-x", "email": "x@example.com"}], "group_ids": ["admin"]}, request=http_request()), config=CONFIG, secrets=SECRETS)
+        self.assertEqual("forbidden", refused.exception.reason)
+        with self.assertRaises(WebError) as caught:
+            views.invite_users_request(self.table, self.principal("inviter"), {"emails": ["ada@example.com"], "group_ids": ["editor"]}, request=http_request(), config=CONFIG)
+        self.assertEqual(403, caught.exception.status_code)
+        # Groups whose access everyone signed in holds are theirs to give; so the User Manager's.
+        self.assertEqual(1, len(self.invite("inviter", ["ada@example.com"], ["grp-lookers"])["invitations"]))
+        self.assertEqual(1, len(self.invite("manager", ["bob@example.com"], ["editor"])["invitations"]))
+        refused = apply(self.table, self.audit, "invite_users", "viewer", {"invitations": [{"user_id": "usr-y", "email": "y@example.com"}]})
+        self.assertEqual("forbidden", refused.reason)
+
+    def test_an_invitation_is_changed_and_revoked_by_whoever_may_invite(self) -> None:
+        invited = self.invite("inviter", ["ada@example.com"], ["grp-lookers"])["invitations"][0]["user_id"]
+
+        changed = views.update_user_request(self.table, self.principal("inviter"), invited, {"group_ids": [], "first_name": "Ada"}, request=http_request(), config=CONFIG)
+        self.assertEqual("applied", apply_identity_request(self.table, self.audit, changed.request_event, config=CONFIG, secrets=SECRETS).status)
+        self.assertEqual(([], "Ada", "invited"), (get_user(self.table, invited).group_ids, get_user(self.table, invited).first_name, get_user(self.table, invited).status))
+        # Anyone else's account still needs Manage users.
+        with self.assertRaises(WebError) as caught:
+            views.update_user_request(self.table, self.principal("inviter"), "viewer", {"first_name": "Vera"}, request=http_request(), config=CONFIG)
+        self.assertEqual(403, caught.exception.status_code)
+        self.assertEqual("forbidden", apply(self.table, self.audit, "update_user", "inviter", {"user_id": "viewer", "first_name": "Vera"}).reason)
+        # An invitation becomes active only when it is accepted, and nothing becomes an invitation.
+        for user_id, status in ((invited, "active"), (invited, "deactivated"), ("viewer", "invited")):
+            with self.subTest(user=user_id, status=status):
+                self.assertEqual("invalid", apply(self.table, self.audit, "update_user", "admin", {"user_id": user_id, "status": status}).reason)
+        self.assertEqual("invalid", apply(self.table, self.audit, "set_user_password", "admin", {"user_id": invited, "password_hash": HASH}).reason)
+
+        with self.assertRaises(WebError) as caught:
+            views.delete_user_request(self.table, self.principal("inviter"), "viewer", request=http_request(), config=CONFIG)
+        self.assertEqual(403, caught.exception.status_code)
+        # Shared a dataset the inviter cannot read, it holds access they lack: theirs no longer.
+        store_dataset(self.table, "ds-000000000002", name="finance", grants={invited: ("user", "dataset-reader")})
+        with self.assertRaises(WebError) as caught:
+            views.delete_user_request(self.table, self.principal("inviter"), invited, request=http_request(), config=CONFIG)
+        self.assertEqual(403, caught.exception.status_code)
+        # Revoking needs no deactivating first: nobody ever used it.
+        revoked = views.delete_user_request(self.table, self.principal("admin"), invited, request=http_request(), config=CONFIG)
+        self.assertEqual("applied", apply_identity_request(self.table, self.audit, revoked.request_event, config=CONFIG, secrets=SECRETS).status)
+        self.assertIsNone(get_user(self.table, invited))
+        self.assertIsNone(find_user_by_email(self.table, "ada@example.com"))
+        self.assertFalse(any(grant.principal_id == invited for grant in DirectoryView.load(self.table).dataset_grants.values()))
+        self.assertIn("user.invitation_revoked", self.audited())
+
+    def test_an_invitation_holding_more_than_the_inviter_is_theirs_to_leave_alone(self) -> None:
+        invited = self.invite("admin", ["root@example.com"], [ADMIN_GROUP_ID])["invitations"][0]["user_id"]
+        for action, payload in (("update_user", {"user_id": invited, "group_ids": []}), ("delete_user", {"user_id": invited}), ("renew_invitation", {"user_id": invited})):
+            with self.subTest(action=action):
+                self.assertEqual("forbidden", apply(self.table, self.audit, action, "inviter", payload).reason)
+
+    def test_an_invitation_is_no_administrator_until_it_is_accepted(self) -> None:
+        self.invite("admin", ["second@example.com"], [ADMIN_GROUP_ID])
+        self.assertEqual({"admin"}, DirectoryView.load(self.table).administrators())
+        refused = apply(self.table, self.audit, "update_user", "admin", {"user_id": "admin", "group_ids": []})
+        self.assertEqual("last_administrator", refused.reason)
+
+    def test_accepting_with_the_link_makes_the_account_theirs_and_signs_them_in(self) -> None:
+        item = self.invite("admin", ["ada@example.com"], ["editor"])["invitations"][0]
+        described = auth.describe_invitation(self.table, {"token": item["link"]}, config=CONFIG, now=NOW_EPOCH)
+        self.assertEqual(
+            ("ada@example.com", "Admin Person", "2026-10-20T12:00:00Z", True),
+            (described["email"], described["invited_by"], described["link_expires_at"], described["password_sign_in"]),
+        )
+
+        result = self.accept(item["link"])
+        self.assertEqual(200, result.status, result.body)
+        self.assertEqual("accept_invitation", result.request_event.action)
+        self.assertEqual({"user_id": item["user_id"], "request_id": result.request_event.request_id}, result.provisioning)
+        self.assertNotIn("analytical engines", json.dumps(result.request_event.to_dict()))
+        # Its session is not theirs until the agent has made the account theirs.
+        self.assertEqual(503, run(auth.await_provisioned(self.table, result.to_value(), timeout=0.05))["status"])
+        with self.assertRaises(WebError) as caught:
+            authenticate(http_request(result.body["token"]), self.table, secrets=SECRETS, now=NOW_EPOCH)
+        self.assertEqual("invalid_session", caught.exception.details["reason"])
+
+        self.assertEqual("applied", apply_identity_request(self.table, self.audit, result.request_event, config=CONFIG, secrets=SECRETS, applied_at=NOW).status)
+        self.assertEqual(200, run(auth.await_provisioned(self.table, result.to_value()))["status"])
+        user = get_user(self.table, item["user_id"])
+        self.assertEqual(("active", "Ada", "Lovelace", None, ["editor"]), (user.status, user.first_name, user.last_name, user.invitation, user.group_ids))
+        self.assertFalse(user.password.must_change)
+        self.assertTrue(verify_password("analytical engines", user.password.hash))
+        self.assertIsNotNone(get_session(self.table, user.user_id, result.request_event.payload["session_id"]))
+        self.assertTrue({"user.invitation_accepted", "session.signed_in"} <= set(self.audited()))
+        principal = authenticate(http_request(result.body["token"]), self.table, secrets=SECRETS, now=NOW_EPOCH)
+        self.assertTrue(principal.can("materializations.create"))
+        # Spent: the link opens nothing now, and the password signs in.
+        with self.assertRaises(WebError) as caught:
+            auth.describe_invitation(self.table, {"token": item["link"]}, config=CONFIG, now=NOW_EPOCH)
+        self.assertEqual((404, "invitation_invalid"), (caught.exception.status_code, caught.exception.details["reason"]))
+        signed_in = run(auth.sign_in(self.table, {"email": "ada@example.com", "password": "analytical engines"}, request=http_request(), config=CONFIG, secrets=SECRETS, now=NOW_EPOCH))
+        self.assertEqual(200, signed_in.status)
+
+    def test_a_link_that_does_not_work_says_only_that(self) -> None:
+        item = self.invite("admin", ["ada@example.com"])["invitations"][0]
+        user_id, secret = item["link"][len("inv_"):].rsplit(".", 1)
+        forged = f"inv_{user_id}.{'A' * len(secret)}"
+        for token in ("", "inv_", "nonsense", forged, f"inv_usr-000000000000.{secret}", None):
+            with self.subTest(token=token):
+                result = self.accept(token)
+                self.assertEqual((404, "invitation_invalid"), (result.status, result.body["error"]["details"]["reason"]))
+                self.assertIsNone(result.request_event)
+        expired = run(auth.accept_invitation(self.table, {"token": item["link"], "first_name": "Ada", "last_name": "Lovelace", "password": "analytical engines"}, config=CONFIG, secrets=SECRETS, now=NOW_EPOCH + 7 * 86400))
+        self.assertEqual((410, "invitation_expired"), (expired.status, expired.body["error"]["details"]["reason"]))
+
+    def test_a_name_and_a_password_the_rules_refuse_are_refused(self) -> None:
+        link = self.invite("admin", ["ada@example.com"])["invitations"][0]["link"]
+        for fields, field in (({"password": "short"}, "password"), ({"password": "ada@example.com"}, "password"), ({"first_name": " "}, "first_name"), ({"last_name": None}, "last_name")):
+            with self.subTest(fields=fields):
+                result = self.accept(link, **fields)
+                self.assertEqual(400, result.status)
+                if field is not None:
+                    self.assertEqual(field, result.body["error"]["details"]["field"])
+        self.assertEqual(400, run(auth.accept_invitation(self.table, None, config=CONFIG, secrets=SECRETS, now=NOW_EPOCH)).status)
+        self.assertEqual(503, run(auth.accept_invitation(self.table, {"token": link}, config=CONFIG, secrets=IdentitySecrets(), now=NOW_EPOCH)).status)
+
+    def test_a_new_link_replaces_the_old_one_and_the_agent_checks_again(self) -> None:
+        item = self.invite("admin", ["ada@example.com"])["invitations"][0]
+        pending = self.accept(item["link"])
+        renewed = views.renew_invitation_request(self.table, self.principal("inviter"), item["user_id"], request=http_request(), config=CONFIG, now=self.LATER)
+        self.assertEqual("applied", apply_identity_request(self.table, self.audit, renewed.request_event, config=CONFIG, secrets=SECRETS).status)
+        self.assertNotEqual(item["link"], renewed.response["link"])
+        self.assertIn("user.invitation_renewed", self.audited())
+        # The old link was good when the person sent it, and is not when the agent applies it.
+        refused = apply_identity_request(self.table, self.audit, pending.request_event, config=CONFIG, secrets=SECRETS)
+        self.assertEqual("invitation_invalid", refused.reason)
+        self.assertEqual(409, run(auth.await_provisioned(self.table, pending.to_value()))["status"])
+        self.assertEqual(404, self.accept(item["link"]).status)
+        self.assertEqual(200, self.accept(renewed.response["link"]).status)
+        for user_id, status in (("viewer", 409), ("usr-nobody", 404)):
+            with self.subTest(user=user_id), self.assertRaises(WebError) as caught:
+                views.renew_invitation_request(self.table, self.principal("admin"), user_id, request=http_request(), config=CONFIG)
+            self.assertEqual(status, caught.exception.status_code)
+
+    def test_while_password_sign_in_is_off_invitations_have_no_link(self) -> None:
+        off = replace(CONFIG, password_sign_in_enabled=False)
+        item = self.invite("admin", ["ada@example.com"], config=off)["invitations"][0]
+        self.assertEqual((None, None), (item["link"], item["link_expires_at"]))
+        self.assertIsNone(get_user(self.table, item["user_id"]).invitation.link_hash)
+        with self.assertRaises(WebError) as caught:
+            views.renew_invitation_request(self.table, self.principal("admin"), item["user_id"], request=http_request(), config=off)
+        self.assertEqual((409, "password_sign_in_disabled"), (caught.exception.status_code, caught.exception.details["reason"]))
+        # A link made while it was on works only for an invited administrator once it is off.
+        viewer_link = self.invite("admin", ["bob@example.com"])["invitations"][0]["link"]
+        admin_link = self.invite("admin", ["root@example.com"], [ADMIN_GROUP_ID])["invitations"][0]["link"]
+        self.assertEqual((403, "password_sign_in_disabled"), (lambda result: (result.status, result.body["error"]["details"]["reason"]))(self.accept(viewer_link, config=off)))
+        self.assertEqual(200, self.accept(admin_link, config=off).status)
+        self.assertFalse(auth.describe_invitation(self.table, {"token": viewer_link}, config=off, now=NOW_EPOCH)["password_sign_in"])
+
+    def test_an_invitation_is_not_an_account_until_it_is_accepted(self) -> None:
+        from midstream.identity.access_tokens import TokenClaims, TokenOwner, new_token_id, sign_access_token
+
+        invited = self.invite("admin", ["ada@example.com"], ["editor"])["invitations"][0]["user_id"]
+        # No password, so nothing to sign in with - said as for any wrong password.
+        result = run(auth.sign_in(self.table, {"email": "ada@example.com", "password": "anything at all"}, request=http_request(), config=CONFIG, secrets=SECRETS, now=NOW_EPOCH))
+        self.assertEqual((401, "no_password"), (result.status, result.request_event.payload["reason"]))
+        # Another domain's token for this email reads as someone this domain does not know.
+        claims = TokenClaims(token_id=new_token_id(), issuer="domain_b", owner=TokenOwner(email="ada@example.com"), permissions=("catalog.read",), issued_at=NOW_EPOCH, expires_at=NOW_EPOCH + 3600)
+        with self.assertRaises(WebError) as caught:
+            authenticate(http_request(sign_access_token(claims, SECRETS)), self.table, secrets=SECRETS, now=NOW_EPOCH)
+        self.assertEqual("token_unknown_owner", caught.exception.details["reason"])
+        self.assertEqual("already_exists", apply(self.table, self.audit, "create_user", "admin", {"user_id": "usr-z", "email": "ada@example.com", "first_name": "A", "last_name": "B", "password_hash": HASH}).reason)
+        self.assertEqual("invitation_accepted", apply(self.table, self.audit, "accept_invitation", invited, {"user_id": "viewer", "method": "password"}).reason)
+
+    def test_the_bootstrap_administrator_takes_an_invitation_for_its_email(self) -> None:
+        table, audit = FakeTable(), FakeTable()
+        store_user(table, make_invited("usr-root", "root@example.com", groups=["viewer"]))
+        apply_identity_request(table, audit, request("bootstrap", "system"), config=CONFIG, secrets=SECRETS, applied_at=NOW)
+        user = get_user(table, "usr-root")
+        self.assertEqual(("active", "Root", "Admin", None), (user.status, user.first_name, user.last_name, user.invitation))
+        self.assertIn(ADMIN_GROUP_ID, user.group_ids)
+        self.assertEqual({"usr-root"}, DirectoryView.load(table).administrators())
+
+    def test_an_invitation_round_trips_and_an_invited_account_needs_one(self) -> None:
+        user = make_invited("usr-ada", "ada@example.com", link_hash="0" * 64, link_expires_at="2026-10-20T12:00:00Z")
+        self.assertEqual(user, User.from_dict(user.to_dict()))
+        with self.assertRaises(ValueError):
+            replace(user, invitation=None)
+        with self.assertRaises(ValueError):
+            replace(user, status="active", invitation=None)
+        with self.assertRaises(ValueError):
+            Invitation(invited_at=NOW, invited_by="a", link_hash="0" * 64)
+        self.assertEqual("Ada Lovelace", replace(user, first_name="Ada", last_name="Lovelace").display_name)

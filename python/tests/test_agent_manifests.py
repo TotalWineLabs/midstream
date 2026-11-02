@@ -138,6 +138,10 @@ CONFIG_RESOLVING_ENTRYPOINTS = (
     "change_password",
     "create_user_request",
     "set_user_password_request",
+    "invite_users_request",
+    "renew_invitation_request",
+    "describe_invitation",
+    "accept_invitation",
     "audit_view",
 )
 
@@ -669,6 +673,9 @@ SELF_AUTHENTICATING_ENTRYPOINTS = (
     "session_view",
     "change_password",
     "my_sessions_view",
+    # An invitation's link is its credential: whoever holds one that works may read and accept it.
+    "describe_invitation",
+    "accept_invitation",
 )
 
 

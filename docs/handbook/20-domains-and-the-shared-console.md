@@ -123,6 +123,7 @@ answers `degraded` while any domain cannot be read.
 |---|---|
 | `/`, `/materializations`, `/datasets`, `/search` | Every domain: the overview, the lists and search; rows link into their domain |
 | `/sign-in`, `/sign-in/<domain>` | The providers, and a password sign-in for one domain |
+| `/invitation#<domain>:<link>,…` | A person's invitation, one link for every domain that invited them: one provider sign-in, or one name and password, accepts it in each and signs the browser in to each (18 §18.18) |
 | `/settings/{account,live,data,live-tail,security,topics,diagnostics,domains,deployment,history}` | The console's own settings, stored in the settings home; the registry; your account in each domain; every domain's change history merged |
 | `/d/<domain>/…` | As before, inside the domain: its overview, materializations and their tabs, datasets |
 | `/d/<domain>/settings/{users,groups,roles,security,sign-in,audit,materializations,…,deployment,history}` | The domain's settings and directory |
@@ -201,7 +202,9 @@ unknown key but at most once a minute (`identity/providers/keys.py`). Then the p
 1. the account linked to this provider account (`external-identity:<provider>:<subject>` in the
    directory), so a person whose email changes at the provider keeps their account;
 2. else the account with the email the provider vouches for — linked from then on (identity request
-   `link_identity`, audit `user.identity_linked`);
+   `link_identity`, audit `user.identity_linked`); an invitation for that email is accepted, under
+   either policy (`accept_invitation`, audit `user.invitation_accepted`; 18 §18.18), so one sign-in
+   accepts the person's invitations in every domain that invited them;
 3. else, under the first-sign-in policy `open`, a new account in All Users (identity request
    `provision_user`, audit `user.provisioned`); under `invited`, `403 no_account`.
 

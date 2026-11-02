@@ -1,0 +1,42 @@
+{{- if include "midstream.controlPlaneEnabled" . }}
+apiVersion: kaspr.io/v1alpha1
+kind: KasprWebView
+metadata:
+  name: {{ include "midstream.fullname" . }}-auth-invitation
+  namespace: {{ .Release.Namespace }}
+  labels:
+    kaspr.io/app: {{ include "midstream.controlPlane" . }}
+spec:
+  name: auth-invitation
+  description: "Say what an invitation link is for - the invited email, who invited them, how they may accept - to whoever holds a link that works."
+  request:
+    method: POST
+    path: /auth/invitation
+  processors:
+    pipeline:
+      - describe-invitation
+    operations:
+      - name: describe-invitation
+        tables:
+          - name: {{ include "midstream.fullname" . }}-directory
+            paramName: directory_table
+          - name: {{ include "midstream.fullname" . }}-settings
+            paramName: settings_table
+        map:
+          entrypoint: describe_invitation_request
+          python: |
+            from midstream.web.auth import describe_invitation
+            from midstream.web.http import json_body
+
+            async def describe_invitation_request(request, directory_table, settings_table):
+                # The link in the body is the credential: no session is asked for.
+                body = await json_body(request, optional=True)
+                return describe_invitation(directory_table, body, settings_table=settings_table)
+  response:
+    contentType: application/json
+    bodySelector:
+      onSuccess:
+        python: |
+          def body(data):
+              return data
+{{- end }}

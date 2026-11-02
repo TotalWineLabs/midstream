@@ -50,9 +50,9 @@ All defined as module-level tuples and validated via `_validate_choice`.
 | `CONDITION_STATUSES` | `models/status.py` | `True`, `False`, `Unknown` (strings) |
 | `BATCH_STATES` | `runtime_app/models/processing_state.py` | `open`, `rolled`, `sealing`, `sealed`, `uploading`, `uploaded`, `failed` |
 | File decisions | `lakehouse/commits.py` | `accepted`, `covered`, `overlap`, `deferred`, `error` (10 §10.6) |
-| `USER_STATUSES` | `models/identity.py` | `active`, `deactivated` |
+| `USER_STATUSES` | `models/identity.py` | `active`, `invited` (an account waiting for its person's first sign-in, 18 §18.18), `deactivated` |
 | `GROUP_MEMBERSHIPS` | `models/identity.py` | `assigned`, `authenticated` (All Users), `guests` (Guest) |
-| `IDENTITY_ACTIONS` | `models/identity.py` | `DIRECTORY_ACTIONS` (`create_user`, `update_user`, `set_user_password`, `change_password`, `sign_out_user`, `unlock_user`, `delete_user`, `create_group`, `update_group`, `delete_group`, `create_role`, `update_role`, `delete_role`, `create_access_token`, `revoke_access_token`, `create_dataset`, `update_dataset`, `delete_dataset`, `set_dataset_grant`, `claim_tables`) + `SESSION_ACTIONS` (`sign_in_succeeded`, `sign_in_failed`, `session_refreshed`, `sign_out`) + `SYSTEM_ACTIONS` (`bootstrap`, `maintenance`, `release_tables`) |
+| `IDENTITY_ACTIONS` | `models/identity.py` | `DIRECTORY_ACTIONS` (`create_user`, `update_user`, `set_user_password`, `change_password`, `sign_out_user`, `unlock_user`, `delete_user`, `create_group`, `update_group`, `delete_group`, `create_role`, `update_role`, `delete_role`, `create_access_token`, `revoke_access_token`, `apply_token_revocation`, `create_dataset`, `update_dataset`, `delete_dataset`, `set_dataset_grant`, `link_identity`, `provision_user`, `invite_users`, `renew_invitation`, `accept_invitation`, `claim_tables`) + `SESSION_ACTIONS` (`sign_in_succeeded`, `sign_in_failed`, `session_refreshed`, `sign_out`) + `SYSTEM_ACTIONS` (`bootstrap`, `maintenance`, `release_tables`) |
 | `GRANT_PRINCIPAL_TYPES` | `models/identity.py` | `user`, `group`: who a dataset grant is for |
 | `REQUEST_STATUSES` | `models/identity.py` | `applied`, `rejected` |
 | `AUDIT_OUTCOMES` | `models/identity.py` | `success`, `failure` |
@@ -1039,7 +1039,7 @@ full key set. See [18 — Identity and access](./18-identity-and-access.md) for 
 |-------|------|---------|-------|
 | `user_id` | `str` | — | `usr-<12 hex>`; never changes |
 | `email` | `str` | — | unique without regard to case; how they sign in |
-| `first_name`, `last_name` | `str` | — | at most 100 characters each |
+| `first_name`, `last_name` | `str` | — | at most 100 characters each; both empty only while an invitation nobody named waits, whose `display_name` is its email |
 | `status` | `str` | `"active"` | ∈ `USER_STATUSES` |
 | `group_ids` | `list[str]` | `[]` | groups they were added to; Guest and All Users are implied |
 | `password` | `PasswordCredential \| None` | `None` | `{hash, set_at, set_by, must_change}`; `must_change` is set whenever someone else chose it |
@@ -1048,6 +1048,7 @@ full key set. See [18 — Identity and access](./18-identity-and-access.md) for 
 | `revision` | `int` | `1` | raised by every change; `base_revision` is checked against it |
 | `created_at`, `created_by`, `updated_at`, `updated_by` | `str` | — | `*_by` is an email, or `system` |
 | `deactivated_at`, `deactivated_by` | `str \| None` | `None` | |
+| `invitation` | `Invitation \| None` | `None` | set exactly while `status` is `invited`: `{invited_at, invited_by, link_hash, link_expires_at}` — who invited them and when, and the SHA-256 of the link's secret with its expiry, both `null` for an invitation without a link (18 §18.18) |
 
 ### `Group`
 

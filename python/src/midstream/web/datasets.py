@@ -225,8 +225,9 @@ def list_dataset_grants_view(directory_table: TableProtocol | None, principal: P
     """Who may use a dataset, and with which roles; the roles the caller can grant on it; and whom
     they can grant them to.
 
-    `candidates` are the active people and every group but Guest, so an owner who may not browse
-    users and groups can still share the dataset; the caller already holds `dataset.manage` on it.
+    `candidates` are the active people, those invited (`invited`), and every group but Guest, so an
+    owner who may not browse users and groups can still share the dataset - with someone before they
+    join, too; the caller already holds `dataset.manage` on it.
     """
     dataset = require_dataset(directory_table, name)
     view = DirectoryView.load(directory_table)
@@ -245,9 +246,9 @@ def list_dataset_grants_view(directory_table: TableProtocol | None, principal: P
         "candidates": {
             "users": sorted(
                 (
-                    {"user_id": user.user_id, "name": user.display_name or user.email, "email": user.email}
+                    {"user_id": user.user_id, "name": user.display_name or user.email, "email": user.email, "invited": user.invited}
                     for user in view.users.values()
-                    if user.active
+                    if user.active or user.invited
                 ),
                 key=lambda item: item["name"].lower(),
             ),
@@ -344,11 +345,14 @@ def owners(dataset: Dataset, view: DirectoryView) -> list[dict[str, str]]:
 
 def describe_grant(grant: DatasetGrant, view: DirectoryView) -> dict[str, Any]:
     reference = _principal_ref(grant, view)
+    holder = view.users.get(grant.principal_id) if grant.principal_type == "user" else None
     return {
         "principal_type": grant.principal_type,
         "principal_id": grant.principal_id,
         "name": reference["name"],
         "email": reference.get("email"),
+        # Shared with before they joined: theirs from their first sign-in.
+        "invited": holder is not None and holder.invited,
         "role_ids": list(grant.role_ids),
         "roles": [_role_ref(view.roles[role_id]) for role_id in grant.role_ids if role_id in view.roles],
         "updated_at": grant.updated_at,

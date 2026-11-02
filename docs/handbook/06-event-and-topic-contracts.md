@@ -799,8 +799,8 @@ delivery to every runtime (§6.7); otherwise it does nothing.
 **Producers:** the views that change people, groups, roles, datasets, their grants and access tokens
 (`users-*`, `groups-*`, `roles-*`, `datasets-*` mutations, `auth-password`, `auth-tokens-create`,
 `auth-tokens-revoke`), the auth views that record sessions (`auth-login`, `auth-refresh`,
-`auth-logout`), `request-intake` (claims and releases of table names), and the `identity-bootstrap`
-and `identity-maintenance` tasks.
+`auth-logout`) or accept an invitation (`auth-invitation-accept`), `request-intake` (claims and
+releases of table names), and the `identity-bootstrap` and `identity-maintenance` tasks.
 **Consumer:** the `identity-intake` agent, the only writer of the `directory` and `identity-audit`
 tables. It also reads the `state` table, for the claim sweep, and answers claims on
 `materialization-work` (§6.4).
@@ -829,13 +829,15 @@ tables. It also reads the `state` table, for the claim sweep, and answers claims
 One key means one partition: every identity change, sign-in event and housekeeping request is
 applied strictly in order by one agent instance. That is what lets the agent enforce rules that
 span records — one account per email, an active administrator always remains, nobody grants
-access they do not hold — without locks. Passwords and token secrets are hashed in the WebView,
-never in the agent, and never travel on the topic in plain text (18 §18.15).
+access they do not hold — without locks. Passwords, token secrets and invitation links are hashed in
+the WebView, never in the agent, and never travel on the topic in plain text (18 §18.15, §18.18).
 
 | Action group | Sent by | Outcome stored? |
 |---|---|---|
 | Directory changes (`create_user` … `delete_role`, `change_password`) | the directory views, `auth-password` | yes, `request:<id>`, for `GET /identity/requests/{id}` |
 | `create_access_token`, `revoke_access_token` | `auth-tokens-create`, `auth-tokens-revoke` | yes |
+| `invite_users`, `renew_invitation` | `users-invite`, `users-invitation` | yes |
+| `link_identity`, `provision_user`, `accept_invitation` | `auth-login` (a provider sign-in), `auth-invitation-accept` | yes; the sign-in waits for the account to be active, and each records the sign-in |
 | `create_dataset`, `update_dataset`, `delete_dataset`, `set_dataset_grant` | the `datasets-*` views | yes |
 | `claim_tables` | `request-intake`, for a create or an update adding tables | yes, and answered on `materialization-work` (`tables_claimed` / `claim_rejected`) |
 | `release_tables` | `request-intake`: a delete, or a change of topics that drops tables and adds none | no |

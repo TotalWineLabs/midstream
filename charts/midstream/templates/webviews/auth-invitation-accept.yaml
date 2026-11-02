@@ -1,0 +1,86 @@
+{{- if include "midstream.controlPlaneEnabled" . }}
+apiVersion: kaspr.io/v1alpha1
+kind: KasprWebView
+metadata:
+  name: {{ include "midstream.fullname" . }}-auth-invitation-accept
+  namespace: {{ .Release.Namespace }}
+  labels:
+    kaspr.io/app: {{ include "midstream.controlPlane" . }}
+spec:
+  name: auth-invitation-accept
+  description: "Accept an invitation with its link and a password of one's own, and start a session once the identity agent has made the account theirs."
+  request:
+    method: POST
+    path: /auth/invitation/accept
+  processors:
+    pipeline:
+      - accept-invitation
+      - send-identity-request
+      - await-account
+      - return-response
+    operations:
+      - name: accept-invitation
+        tables:
+          - name: {{ include "midstream.fullname" . }}-directory
+            paramName: directory_table
+          - name: {{ include "midstream.fullname" . }}-settings
+            paramName: settings_table
+        map:
+          entrypoint: accept_invitation_request
+          python: |
+            from midstream.web.auth import accept_invitation
+            from midstream.web.http import json_body
+
+            async def accept_invitation_request(request, directory_table, settings_table):
+                # The link in the body is the credential: no session is asked for.
+                body = await json_body(request, optional=True)
+                result = await accept_invitation(directory_table, body, request=request, settings_table=settings_table)
+                return result.to_value()
+      - name: send-identity-request
+        topicSend:
+          name: {{ include "midstream.fullname" . }}-identity-requests
+          passThrough: true
+          valueSerializer: json
+          predicate:
+            python: |
+              def has_request(value):
+                  return value.get("request_event") is not None
+          keySelector:
+            python: |
+              def select_key(value):
+                  from midstream.storage.identity import identity_routing_key
+
+                  return identity_routing_key()
+          valueSelector:
+            python: |
+              def select_value(value):
+                  return value["request_event"]
+      - name: await-account
+        tables:
+          - name: {{ include "midstream.fullname" . }}-directory
+            paramName: directory_table
+        map:
+          entrypoint: await_account
+          python: |
+            from midstream.web.auth import await_provisioned
+
+            async def await_account(value, directory_table):
+                return await await_provisioned(directory_table, value)
+      - name: return-response
+        map:
+          python: |
+            def return_response(value):
+                return {"status": value["status"], "body": value["body"]}
+  response:
+    contentType: application/json
+    statusCodeSelector:
+      onSuccess:
+        python: |
+          def status_code(data):
+              return data["status"]
+    bodySelector:
+      onSuccess:
+        python: |
+          def body(data):
+              return data["body"]
+{{- end }}

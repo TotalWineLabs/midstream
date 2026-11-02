@@ -95,12 +95,21 @@ PERMISSIONS: tuple[PermissionDefinition, ...] = (
         implies=("users.view",),
     ),
     PermissionDefinition(
+        "users.invite",
+        "users",
+        "Invite users",
+        "Invite people by email before they have an account, choosing the groups they join - only "
+        "groups whose access you hold yourself - and change, renew or revoke invitations nobody has "
+        "accepted yet. Each person has that access from their first sign-in.",
+        implies=("users.view_details", "groups.view"),
+    ),
+    PermissionDefinition(
         "users.manage",
         "users",
         "Manage users",
         "Add users, edit their details and groups, set their passwords, sign them out, and unlock, "
         "deactivate, reactivate or delete them. Only for people whose access you hold yourself.",
-        implies=("users.view_details", "groups.view"),
+        implies=("users.view_details", "users.invite", "groups.view"),
         danger=True,
     ),
     PermissionDefinition(

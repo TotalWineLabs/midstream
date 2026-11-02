@@ -16,12 +16,12 @@ import { forgetAllSessions, nobody, resolveAuth } from './principal.ts';
 import { AttemptLimiter } from './rateLimit.ts';
 import { testAuth, testPrincipal } from './testing.ts';
 
-type Stub = Partial<Record<'session' | 'login' | 'logout' | 'refresh', (...args: never[]) => unknown>>;
+type Stub = Partial<Record<'session' | 'login' | 'logout' | 'refresh' | 'describeInvitation' | 'acceptInvitation', (...args: never[]) => unknown>>;
 
 const domains = await installTestDomains(['domain_a', 'domain_b']);
 const a = domains.require('domain_a');
 const b = domains.require('domain_b');
-const originals = new Map<Domain, Pick<ControlPlaneClient, 'session' | 'login' | 'logout' | 'refresh'>>(
+const originals = new Map<Domain, Pick<ControlPlaneClient, 'session' | 'login' | 'logout' | 'refresh' | 'describeInvitation' | 'acceptInvitation'>>(
   domains.all().map((domain) => [
     domain,
     {
@@ -29,6 +29,8 @@ const originals = new Map<Domain, Pick<ControlPlaneClient, 'session' | 'login' |
       login: domain.controlPlane.login,
       logout: domain.controlPlane.logout,
       refresh: domain.controlPlane.refresh,
+      describeInvitation: domain.controlPlane.describeInvitation,
+      acceptInvitation: domain.controlPlane.acceptInvitation,
     },
   ]),
 );
@@ -294,6 +296,63 @@ describe('signing in and out', () => {
     const limited = await attempt('domain_b');
     assert.equal(limited.statusCode, 429);
     assert.ok(Number(limited.headers['retry-after']) > 0);
+  });
+
+  it('accepts an invitation with its link as a sign-in: the new session in the domain’s cookie, never the answer', async () => {
+    let sent: { token: string | null; input: unknown } | null = null;
+    stub({
+      session: (async () => guestSession()) as never,
+      acceptInvitation: (async (caller: { token: string | null }, input: unknown) => {
+        sent = { token: caller.token, input };
+        return { status: 200, body: { ...signedInSession(), token: 'v1.invited.token' } };
+      }) as never,
+    });
+    const server = await app();
+    const body = { token: 'inv_usr-ada.secret', first_name: 'Ada', last_name: 'Lovelace', password: 'analytical engines' };
+    const response = await server.inject({
+      method: 'POST',
+      url: '/api/d/domain_a/auth/invitation/accept',
+      headers: { 'sec-fetch-site': 'same-origin' },
+      payload: body,
+    });
+    assert.equal(response.statusCode, 200);
+    assert.match(String(response.headers['set-cookie']), /^midstream_session_domain_a=v1.invited.token; Path=\/; HttpOnly; SameSite=Lax; Max-Age=\d+$/);
+    assert.doesNotMatch(response.body, /v1\.invited\.token/);
+    // The link goes to the domain in the body, as a guest's request: the link is the credential.
+    assert.deepEqual(sent, { token: null, input: body });
+  });
+
+  it('says what an invitation link is for, and passes on why one does not work', async () => {
+    const description = { email: 'ada@example.com', first_name: '', last_name: '', invited_by: 'Admin Person', invited_at: '2026-11-02T12:00:00Z', link_expires_at: '2026-11-09T12:00:00Z', password_sign_in: true, providers: [], password_policy: { min_length: 12, max_length: 256 } };
+    stub({
+      session: (async () => guestSession()) as never,
+      describeInvitation: (async (_caller: unknown, token: string) =>
+        token === 'inv_usr-ada.secret'
+          ? { status: 200, body: description }
+          : { status: 410, body: { error: { code: 'gone', message: 'This invitation link has expired.', details: { reason: 'invitation_expired' } } } }) as never,
+    });
+    const server = await app();
+    const good = await server.inject({ method: 'POST', url: '/api/d/domain_a/auth/invitation', payload: { token: 'inv_usr-ada.secret' } });
+    assert.equal(good.statusCode, 200);
+    assert.deepEqual(good.json(), description);
+    assert.equal(good.headers['cache-control'], 'no-store');
+    const expired = await server.inject({ method: 'POST', url: '/api/d/domain_a/auth/invitation', payload: { token: 'inv_usr-ada.old' } });
+    assert.equal(expired.statusCode, 410);
+    assert.equal(expired.json().error.details.reason, 'invitation_expired');
+    const accepting = await server.inject({ method: 'POST', url: '/api/d/domain_a/auth/invitation/accept', payload: { token: 'inv_usr-ada.secret', first_name: 'Ada' } });
+    assert.equal(accepting.statusCode, 400, 'every field it needs');
+  });
+
+  it('counts invitation links against the sign-in attempts of an address', async () => {
+    applySettingOverrides({ signInAttemptsPerMinute: 1 });
+    stub({
+      session: (async () => guestSession()) as never,
+      describeInvitation: (async () => ({ status: 404, body: { error: { code: 'not_found', message: 'no', details: { reason: 'invitation_invalid' } } } })) as never,
+    });
+    const server = await app();
+    const attempt = () => server.inject({ method: 'POST', url: '/api/d/domain_a/auth/invitation', remoteAddress: '8.8.8.8', payload: { token: 'inv_x.y' } });
+    assert.equal((await attempt()).statusCode, 404);
+    assert.equal((await attempt()).statusCode, 429);
   });
 
   it('refuses a change from another site before anything else', async () => {

@@ -8,7 +8,7 @@ metadata:
     kaspr.io/app: {{ include "midstream.controlPlane" . }}
 spec:
   name: users-delete
-  description: "Delete a deactivated person's account, and emit the request the identity agent applies."
+  description: "Delete a deactivated person's account, or revoke an invitation nobody accepted, and emit the request the identity agent applies."
   request:
     method: DELETE
     path: /users/{user_id}
@@ -29,7 +29,8 @@ spec:
             from midstream.web.identity import delete_user_request
 
             def prepare_request(request, user_id, directory_table):
-                principal = authorize(request, directory_table, "users.manage")
+                # An invitation needs Invite users; any other account, Manage users (checked after).
+                principal = authorize(request, directory_table, "users.invite")
                 return delete_user_request(directory_table, principal, user_id, request=request).to_value()
       - name: send-identity-request
         topicSend:

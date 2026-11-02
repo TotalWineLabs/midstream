@@ -15,6 +15,8 @@ import type {
   CpGroupList,
   CpIdentityAccepted,
   CpIdentityOutcome,
+  CpInvitationDescription,
+  CpInvitationMade,
   CpListResponse,
   CpMaintenanceAccepted,
   CpMySessions,
@@ -376,6 +378,25 @@ export class ControlPlaneClient {
     return this.raw<CpAuthSession>(caller, '/auth/login', { method: 'POST', body: input, timeoutMs: Math.max(config.controlPlaneTimeoutMs, 25_000) });
   }
 
+  /**
+   * What an invitation link is for (handbook 18 §18.18). The link is the credential, so the call goes
+   * as a guest, and its token travels in the body, never in a URL.
+   */
+  describeInvitation(caller: Caller, token: string): Promise<CpRawResponse<CpInvitationDescription>> {
+    return this.raw<CpInvitationDescription>(caller, '/auth/invitation', { method: 'POST', body: { token } });
+  }
+
+  /**
+   * Accept an invitation with its link and a password of one's own. 200 carries the session token
+   * once the domain has made the account theirs, which it waits for, as for a first sign-in.
+   */
+  acceptInvitation(
+    caller: Caller,
+    input: { token: string; first_name: string; last_name: string; password: string },
+  ): Promise<CpRawResponse<CpAuthSession>> {
+    return this.raw<CpAuthSession>(caller, '/auth/invitation/accept', { method: 'POST', body: input, timeoutMs: Math.max(config.controlPlaneTimeoutMs, 25_000) });
+  }
+
   /** Who the caller's session belongs to, or a guest; never refuses. */
   session(caller: Caller, signal?: AbortSignal): Promise<CpAuthSession> {
     return this.request<CpAuthSession>(caller, '/auth/session', { signal });
@@ -445,6 +466,18 @@ export class ControlPlaneClient {
 
   createUser(caller: Caller, input: Record<string, unknown>): Promise<CpIdentityAccepted> {
     return this.request<CpIdentityAccepted>(caller, '/users', { method: 'POST', body: input });
+  }
+
+  /** Invite people by email; the answer carries each invitation's link, never shown again. */
+  inviteUsers(caller: Caller, input: { emails: string[]; group_ids?: string[] }): Promise<CpIdentityAccepted & { invitations: CpInvitationMade[] }> {
+    return this.request<CpIdentityAccepted & { invitations: CpInvitationMade[] }>(caller, '/users/invitations', { method: 'POST', body: input });
+  }
+
+  /** A new link for an invitation; the one before it stops working. */
+  renewInvitation(caller: Caller, userId: string): Promise<CpIdentityAccepted & { link: string; link_expires_at: string }> {
+    return this.request<CpIdentityAccepted & { link: string; link_expires_at: string }>(caller, `/users/${pathId(userId, 'user_id')}/invitation`, {
+      method: 'POST',
+    });
   }
 
   updateUser(caller: Caller, userId: string, input: Record<string, unknown>): Promise<CpIdentityAccepted> {

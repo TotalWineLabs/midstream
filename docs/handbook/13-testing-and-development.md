@@ -183,8 +183,8 @@ win.
 | `test_storage.py` | 33 | Key layout, envelopes, persistence, schema-projection history per table, bounded listings, records an earlier release left that this one cannot read |
 | `test_models.py` | 33 | `to_dict`/`from_dict` round trips and validation for every persisted model, a pending change of topics, a claim's answer, the settings lineage and the live tail's messages included, and the live tail switch of a record from before 4.3 read and dropped |
 | `test_settings.py` | 60 | A destination any of the three storage URIs, a `file://` one only where the deployment allows it, and the deployment settings reporting the object stores' own; the protection default as a `choice_map` stored as text, refused unknown kinds and masks, and its own permission to set or reset; the settings catalog against config and env vars, precedence, applying changes, views — the runtime view saying how members are autoscaled — the runtime settings' lineage begun at startup (the task's own code run) and carried by every delivery, the runtime rollout by lineage and revision, a runtime upgraded from before lineages included |
-| `test_identity.py` | 86 | `dataset.protect` (Dataset Owner) and `settings.manage_protection` (administrators only); permissions, their scopes and built-in roles, passwords, session and access tokens, authorization, bootstrap, every directory rule, sign-in and lockout, the views; `503 starting` for every caller, the session view and sign-in while a restarted control plane reads its tables back (`StartingTests`) |
-| `test_sso.py` | 37 | Sign-in through a provider (18 §18.17), against a fake of each provider's endpoints: Entra ID by tenant, client and key, Google's verified emails and hosted domains, a generic issuer's discovery, GitHub's token check with the App's secret; nonces used once, old and unsigned tokens refused, an unknown key read again at most once a minute, a provider that cannot be reached; then each domain's side — linking by email, `open` making one account for two sign-ins at once, `invited` refusing without counting towards a lockout, allowed email domains first, a deactivated account, a provider session needing no password change; password sign-in off for everyone but administrators |
+| `test_identity.py` | 100 | `dataset.protect` (Dataset Owner) and `settings.manage_protection` (administrators only); permissions, their scopes and built-in roles, passwords, session and access tokens, authorization, bootstrap, every directory rule, sign-in and lockout, the views; `503 starting` for every caller, the session view and sign-in while a restarted control plane reads its tables back (`StartingTests`); invitations (`InvitationTests`, 18 §18.18): an invited account per email holding its groups, every email checked first, no inviting into access you lack, changing and revoking with `users.invite`, never an administrator, accepting with the link and a password, links that do not work, a new link and the agent checking it again, no links while password sign-in is off, an invitation no account until accepted, the bootstrap email |
+| `test_sso.py` | 41 | Sign-in through a provider (18 §18.17), against a fake of each provider's endpoints: Entra ID by tenant, client and key, Google's verified emails and hosted domains, a generic issuer's discovery, GitHub's token check with the App's secret; nonces used once, old and unsigned tokens refused, an unknown key read again at most once a minute, a provider that cannot be reached; then each domain's side — linking by email, `open` making one account for two sign-ins at once, `invited` refusing without counting towards a lockout, allowed email domains first, a deactivated account, a provider session needing no password change; password sign-in off for everyone but administrators; a provider sign-in accepting an invitation for its email, under either policy, twice at once, and refused once it was revoked |
 | `test_federated_tokens.py` | 16 | Federated access tokens and revocations (20 §20.8): the format, any change breaking the signature, the previous key still checking; a token made in one domain read in another as its owner there, never with more than they hold there, dataset limits per domain, the owner found by provider account before email, refused where the owner has no account; a revocation signed, forged ones refused by the view and the agent, listed for the console to hand on, kept until its token has expired |
 | `test_chart_domains.py` | 25 | The protection key from the auth Secret on the control plane, the tail and maintenance apps and every runtime; the chart's domains (20 §20.2): a console alone, a domain alone, the control plane told which domain it is, the federation key from the auth Secret, the registry with no token in it and the console rolled when it changes, the routes and the redirect (Gateway API and ingress-nginx), and every values combination the chart refuses |
 | `test_versioning.py` | 11 | Version reporting across the control plane and its runtimes, the protection key's id with it |
@@ -892,6 +892,38 @@ Found and fixed, each with a regression test:
 - Wording: a run that only purged was badged *masked*, "1 file … hold", moved values were counted beside the masked ones rather than among them, and "1 snapshots kept" (d0dde4c, 1e7cf35).
 
 Not run on the test cluster: a reprotect of a kept table, a key the maintenance app lacks, permission refusals (no test accounts were made), compaction of reprotected files, and `_unmapped` or collapsed JSON text. Unit tests cover each.
+
+## 13.8m Verified on a test cluster: invitations
+
+On 2026-11-02 two domains on a test cluster ran `feature/invitations` — at c300dbc, then at 4375ce1,
+aae82b5 and 60b26a3 with what the run found — with the shared console in the cluster and Playwright
+(Chromium) in light and dark, at desktop width and on a phone (390 px, with reduced motion too). Domain A
+took passwords and GitHub; Domain B passwords, Microsoft, GitHub and Google. An administrator of both
+acted, beside an Editor the run invited.
+
+| Step | Observed |
+|---|---|
+| 1. The permission | `GET /permissions` listed *Invite users* (`users.invite`), implied by *Manage users*; the Editor's `POST /users/invitations` answered `403` |
+| 2. Inviting | Two emails with Editor: `202`, applied by the agent, each answer carrying its link `inv_<user id>.…` once. The list showed both *Invited*, holding Editor, and carried no link or hash. A request naming an account and two strings that are not emails invited nobody (`400`), each email with its reason |
+| 3. The link | `POST /auth/invitation` said who was invited, by whom and that a password is taken; a made-up link `404 invitation_invalid`; a short password refused under its field. Accepting started a session — theirs, with Editor's permissions — and their password then signed them in with nothing to change; the link was spent (`404`) |
+| 4. New link, revoke | A new link replaced the old, which answered `404` from then on; an accepted invitation got none (`409`). Revoking needed no deactivation, after which the link opened nothing and the account was gone. The audit log recorded `user.invited`, `user.invitation_accepted`, `user.invitation_renewed` and `user.invitation_revoked` |
+| 5. The console, one domain | **Invite people** leading the Users page; an address that is not one named before sending; the links shown once, with **Copy every email and link**; the *Invited* filter; an email invited already given a new link with the groups it had, the rest invited beside it; an invitation's page saying how it is accepted, with **New link** and **Revoke invitation**; **Share** on a dataset offering the invitation. In a fresh browser the link opened *Join Midstream* naming the email, left the address bar, survived a reload, and a name and password signed the browser in to Domain A with Editor; a spent link read *This invitation link does not work*, one cut short *… is incomplete*, and the tab forgot a dead link. 22 of 22 on 4375ce1 in light and dark, at 1440 px and on a phone; 23 of 23 on 60b26a3; no page errors |
+| 6. Across domains | Signed in to both, the dialog offered **Domains**, both ticked, and **Groups in Domain A** and **Groups in Domain B**: Editor in A, Viewer in B. Someone invited in Domain B alone beforehand got a new link there with the groups they had. Each person got one link naming both domains; **New link** from Domain A's page renewed both, **Revoke invitation** from Domain B's withdrew both. The join page read *It gives you access to Domain A and Domain B.*, offered GitHub alone (the one provider both take), and one name and password joined both: Editor in A, Viewer's access in B. 20 of 20 on 60b26a3, in light at 1440 px and in dark on a phone |
+| 7. The setting | *Invitation links last* under Sign-in: 7 days, bounds 1–90 |
+
+Found and fixed:
+
+- The invite dialog listed a refused email and a toast repeated it, lingering onto the next page; a link
+  that no longer works repeated its title in its message and stayed in the tab, so a later visit without
+  a link read the dead one (4375ce1).
+- On a phone the Users list's four columns squeezed every name to a letter (aae82b5).
+- The join page offered every provider some domain of the invitation took: Microsoft, which only Domain B
+  takes, would have accepted B's part alone, and back from the provider nothing says what became of A's.
+  Only the providers every domain takes are offered now (60b26a3).
+
+Not run on the test cluster: acceptance through a real provider, a link expiring, password sign-in off
+(no links), and a domain taking no passwords in an invitation to several. Unit tests cover each
+(`test_sso.py`, `test_identity.py::InvitationTests`, `console/src/features/access/logic.test.ts`).
 
 ## 13.9 Pre-finish checklist
 

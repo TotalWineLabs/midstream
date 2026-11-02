@@ -965,6 +965,8 @@ Use the console's Settings → Users, Groups, Roles and Audit log. Common cases:
 | Task | In the console | Without it |
 |---|---|---|
 | Add someone | Users → Add user, with a generated password to pass on | `POST /users` |
+| Give someone access before they join | Users → Invite people: their emails and groups; send each the link shown once, or let them sign in through a provider with that email (18 §18.18) | `POST /users/invitations` |
+| An invitation link expired, or was lost | Their invitation's page → New link; the invitation itself still waits | `POST /users/{id}/invitation` |
 | Someone forgot their password | Their user page → Reset password; they choose a new one at sign-in | `POST /users/{id}/password` |
 | Someone is locked out | Their user page → Unlock, or wait out the lockout (15 min) | `POST /users/{id}/unlock` |
 | Someone left | Deactivate (ends their sessions at once), delete later if wanted | `PATCH /users/{id}` `{"status":"deactivated"}` |

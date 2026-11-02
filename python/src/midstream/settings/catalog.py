@@ -537,8 +537,9 @@ CONTROL_PLANE_SETTINGS: tuple[SettingDefinition, ...] = (
         description=(
             "What happens when someone this domain has never seen signs in through a provider. open "
             "makes them an account in All Users, which holds Viewer and reads every dataset made with "
-            "the default grant. invited refuses them until an administrator adds their account, by "
-            "their email. Someone this domain already knows signs in to their account either way."
+            "the default grant. invited refuses them until someone invites them, or an administrator "
+            "adds their account, by their email. Someone this domain already knows, or has invited, "
+            "signs in to their account either way."
         ),
         effect="new sign-ins",
     ),
@@ -566,6 +567,21 @@ CONTROL_PLANE_SETTINGS: tuple[SettingDefinition, ...] = (
             "so the first administrator can always get in; everyone else signs in through a provider."
         ),
         effect="new sign-ins",
+    ),
+    _cp(
+        "invitation_link_lifetime_days",
+        section="sign-in",
+        label="Invitation links last",
+        kind="integer",
+        unit="days",
+        minimum=1,
+        maximum=90,
+        description=(
+            "How long the link an invitation gives works: whoever holds it may accept the invitation "
+            "with a password of their own. Expired, the invitation stays: its person can still sign "
+            "in through a provider with the invited email, or be given a new link."
+        ),
+        effect="new invitation links",
     ),
     _cp(
         "session_idle_timeout_minutes",
