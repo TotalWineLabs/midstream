@@ -8,9 +8,12 @@ import { PasswordInput } from '../auth/PasswordInput';
 import { ConfirmDialog } from './ConfirmDialog';
 import { DatasetGrantsPanel } from './DatasetGrantsPanel';
 import { GroupPicker } from './GroupPicker';
+import { invitationsOf, renewInvitations, revokeInvitations, type Renewed } from './invitations';
+import { andList } from './logic';
 import { SessionList } from './SessionList';
 import {
   BackLink,
+  IDENTITY_QUERY_ROOTS,
   UserStatusBadges,
   errorField,
   formatDate,
@@ -27,10 +30,12 @@ import { Avatar } from '@/components/Avatar';
 import { CopyButton, RelativeTime } from '@/components/Inline';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button, EmptyState, Field, Input, Panel, PanelHeader, Skeleton } from '@/components/ui/primitives';
-import { useAuth } from '@/lib/auth';
+import { useToast } from '@/components/ui/Toast';
+import { useAuth, useConsoleAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
-import { useApi, useDomain, useDomainPath } from '@/lib/domains';
-import type { CpPermissionCatalog, CpUserDetail, InvitationLinkResult } from '@shared/types';
+import { useApi, useDomain, useDomainPath, useDomains } from '@/lib/domains';
+import { queryClientFor } from '@/lib/queryClient';
+import type { CpPermissionCatalog, CpUserDetail } from '@shared/types';
 
 type Confirm = 'sign-out' | 'deactivate' | 'reactivate' | 'delete' | 'revoke' | null;
 
@@ -71,8 +76,8 @@ export function UserDetail({ userId }: { userId: string }): ReactNode {
     },
   );
   const remove = useIdentityChange(() => api.deleteUser(userId), {
-    success: () => (invited ? `The invitation for ${detail?.email ?? name} was revoked` : `${name} was deleted`),
-    failure: invited ? 'The invitation was not revoked' : 'The account was not deleted',
+    success: () => `${name} was deleted`,
+    failure: 'The account was not deleted',
     onApplied: () => navigate(domainPath('/settings/users')),
   });
 
@@ -183,15 +188,11 @@ export function UserDetail({ userId }: { userId: string }): ReactNode {
       {invited ? (
         <>
           <NewLinkDialog open={linking} onClose={() => setLinking(false)} user={detail} />
-          <ConfirmDialog
+          <RevokeDialog
             open={confirm === 'revoke'}
-            title={`Revoke the invitation for ${detail.email}?`}
-            description="Its account is deleted with its groups and dataset roles, and its link stops working. You can invite them again."
-            confirmLabel="Revoke invitation"
-            danger
-            pending={remove.isPending}
-            onConfirm={() => remove.mutate(undefined)}
             onClose={() => setConfirm(null)}
+            user={detail}
+            onRevoked={() => navigate(domainPath('/settings/users'))}
           />
         </>
       ) : (
@@ -378,37 +379,73 @@ function InvitationPanel({ user }: { user: CpUserDetail }): ReactNode {
   );
 }
 
-/** Make an invitation a new link, saying first that the one before stops working; then show it, once. */
-function NewLinkDialog({ open, onClose, user }: { open: boolean; onClose: () => void; user: CpUserDetail }): ReactNode {
-  const api = useApi();
-  const domain = useDomain();
-  const [made, setMade] = useState<InvitationLinkResult | null>(null);
-  const renew = useIdentityChange(() => api.renewInvitation(user.user_id), {
-    success: () => `A new link for ${user.email}`,
-    failure: 'No new link was made',
-    quiet: true,
-    onApplied: (result) => setMade(result),
+/**
+ * The person's invitation in every domain where the person asking may invite, this one first: to them
+ * it is one invitation, with one link. Found when a dialog about it opens.
+ */
+function useHeldInvitations(email: string, open: boolean) {
+  const here = useDomain();
+  const consoleAuth = useConsoleAuth();
+  const served = useDomains();
+  const domains = useMemo(
+    () => [here, ...served.filter((domain) => domain.id !== here.id && domain.status !== 'misconfigured' && consoleAuth.forDomain(domain.id).can('users.invite'))],
+    [here, served, consoleAuth],
+  );
+  return useQuery({
+    queryKey: ['invitation-domains', email, domains.map((domain) => domain.id).join(',')],
+    queryFn: () => invitationsOf(email, domains),
+    enabled: open,
+    staleTime: 0,
   });
-  const { reset } = renew;
+}
+
+/** Refresh what a change to the person's invitations touched, in every domain it was in. */
+function refreshAll(domainIds: string[]): void {
+  for (const id of domainIds) {
+    for (const root of IDENTITY_QUERY_ROOTS) void queryClientFor(id).invalidateQueries({ queryKey: [root] });
+  }
+}
+
+/**
+ * A new link for the person's invitation, in every domain that holds one, saying first that the link
+ * before stops working; then the one link that joins them all, shown once.
+ */
+function NewLinkDialog({ open, onClose, user }: { open: boolean; onClose: () => void; user: CpUserDetail }): ReactNode {
+  const held = useHeldInvitations(user.email, open);
+  const [made, setMade] = useState<Renewed | null>(null);
+  const [pending, setPending] = useState(false);
   useEffect(() => {
-    if (!open) return;
-    setMade(null);
-    reset();
-  }, [open, reset]);
-  const url = made ? invitationLink(window.location.origin, domain.id, made.link) : null;
+    if (open) setMade(null);
+  }, [open]);
+  const where = held.data ?? [];
+  const names = andList(where.map((item) => item.domain.name));
+  const many = where.length > 1;
+  const url = made && made.entries.length > 0 ? invitationLink(window.location.origin, made.entries) : null;
+
+  const renew = async (): Promise<void> => {
+    setPending(true);
+    try {
+      setMade(await renewInvitations(where));
+      refreshAll(where.map((item) => item.domain.id));
+    } finally {
+      setPending(false);
+    }
+  };
 
   return (
     <Dialog
       open={open}
       onClose={onClose}
-      title={made ? `A new link for ${user.email}` : `Make a new link for ${user.email}?`}
+      title={url ? `A new link for ${user.email}` : `Make a new link for ${user.email}?`}
       description={
-        made
-          ? `Send it to them privately: whoever has it can join as them until ${new Date(made.link_expires_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}. It is not shown again.`
-          : 'The link sent before stops working. The new one is shown once.'
+        url && made
+          ? `Send it to them privately: whoever has it can join as them${many ? ` in ${names}` : ''}${made.expires ? ` until ${new Date(made.expires).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}. It is not shown again.`
+          : many
+            ? `Their invitation is to ${names}. The link sent before stops working; the new one joins them all, and is shown once.`
+            : 'The link sent before stops working. The new one is shown once.'
       }
       footer={
-        made ? (
+        url ? (
           <Button variant="primary" onClick={onClose}>
             Done
           </Button>
@@ -417,7 +454,7 @@ function NewLinkDialog({ open, onClose, user }: { open: boolean; onClose: () => 
             <Button variant="ghost" onClick={onClose}>
               Cancel
             </Button>
-            <Button variant="primary" loading={renew.isPending} onClick={() => renew.mutate(undefined)}>
+            <Button variant="primary" loading={pending || held.isLoading} disabled={where.length === 0} onClick={() => void renew()}>
               Make a new link
             </Button>
           </>
@@ -431,12 +468,64 @@ function NewLinkDialog({ open, onClose, user }: { open: boolean; onClose: () => 
           </span>
           <CopyButton value={url} label={`Copy the link for ${user.email}`} className="h-8 px-2" />
         </div>
-      ) : renew.error ? (
-        <p role="alert" className="rounded-[var(--radius-control)] bg-[var(--color-flare-wash)] px-3 py-2.5 text-[13px]">
-          {(renew.error as Error).message}
-        </p>
+      ) : null}
+      {made && made.failed.length > 0 ? (
+        <ul role="alert" className="mt-3 space-y-1 rounded-[var(--radius-control)] bg-[var(--color-flare-wash)] px-3 py-2.5 text-[13px]">
+          {made.failed.map((item) => (
+            <li key={item.domain.id}>{many ? `${item.domain.name}: ${item.message}` : item.message}</li>
+          ))}
+        </ul>
       ) : null}
     </Dialog>
+  );
+}
+
+/** Withdraw the person's invitation in every domain that holds one, naming them first. */
+function RevokeDialog({ open, onClose, user, onRevoked }: { open: boolean; onClose: () => void; user: CpUserDetail; onRevoked: () => void }): ReactNode {
+  const held = useHeldInvitations(user.email, open);
+  const toast = useToast();
+  const consoleAuth = useConsoleAuth();
+  const [pending, setPending] = useState(false);
+  const where = held.data ?? [];
+  const names = andList(where.map((item) => item.domain.name));
+
+  const revoke = async (): Promise<void> => {
+    setPending(true);
+    try {
+      const failed = await revokeInvitations(where);
+      refreshAll(where.map((item) => item.domain.id));
+      await consoleAuth.reload();
+      if (failed.length === where.length) {
+        toast.error('The invitation was not revoked', failed.map((item) => item.message).join(' '));
+        return;
+      }
+      if (failed.length > 0) {
+        toast.error(`Revoked, except in ${andList(failed.map((item) => item.domain.name))}`, failed.map((item) => item.message).join(' '));
+      } else {
+        toast.success(`The invitation for ${user.email} was revoked`);
+      }
+      onClose();
+      onRevoked();
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <ConfirmDialog
+      open={open}
+      title={`Revoke the invitation for ${user.email}?`}
+      description={
+        where.length > 1
+          ? `It is withdrawn in ${names}: each domain's invited account is deleted with its groups and dataset roles, and the link stops working. You can invite them again.`
+          : 'Its account is deleted with its groups and dataset roles, and its link stops working. You can invite them again.'
+      }
+      confirmLabel="Revoke invitation"
+      danger
+      pending={pending || held.isLoading}
+      onConfirm={() => void revoke()}
+      onClose={onClose}
+    />
   );
 }
 

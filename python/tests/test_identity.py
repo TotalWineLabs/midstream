@@ -1615,10 +1615,14 @@ class InvitationTests(unittest.TestCase):
                 0: ("already_exists", "viewer@example.com already has an account."),
                 1: ("invalid", "Enter a valid email address, such as jane@example.com"),
                 3: ("duplicate", "new@example.com is named twice."),
-                4: ("already_exists", "ada@example.com is invited already."),
+                4: ("invited", "ada@example.com is invited already."),
             },
             problems,
         )
+        # An invitation says which, so a client can give it a new link rather than invite again.
+        invited = next(problem for problem in caught.exception.details["problems"] if problem["reason"] == "invited")
+        self.assertEqual(find_user_by_email(self.table, "ada@example.com").user_id, invited["user_id"])
+        self.assertNotIn("user_id", caught.exception.details["problems"][0])
         with self.assertRaises(WebError) as caught:
             views.invite_users_request(self.table, self.principal("admin"), {"emails": ["viewer@example.com"]}, request=http_request(), config=CONFIG)
         self.assertEqual((409, "emails"), (caught.exception.status_code, caught.exception.details["field"]))

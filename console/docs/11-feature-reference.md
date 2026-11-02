@@ -69,9 +69,10 @@ accepts), *Use your Google account for ada@example.com.*; and, while passwords a
 a password** — first and last name, prefilled when the invitation was named, and a password with its
 minimum length — then **Join <domain>**, which signs the browser in there and opens the domain. Someone
 signed in there as someone else is told that accepting signs them in as the invited person instead. A
-link that does not work says so and nothing more — *This invitation link does not work* with the
-domain's message, *This invitation link has expired. Ask whoever invited you for a new one.*, or *This
-invitation link is incomplete* — with **Sign in** below.
+link that does not work says so and nothing more — *This invitation link does not work* (a newer link
+replaced it, or the invitation was revoked or accepted), *This invitation link has expired. Ask whoever
+invited you for a new one.*, or *This invitation link is incomplete* — with **Sign in** below, and the
+tab forgets it.
 
 ### `LiveIndicator`
 

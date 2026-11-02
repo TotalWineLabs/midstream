@@ -30,7 +30,7 @@ export function App(): ReactNode {
       <Routes>
         <Route path="/sign-in" element={<SignInPage />} />
         <Route path="/sign-in/:domain" element={<SignInPage />} />
-        <Route path="/invitation/:domain" element={<InvitationPage />} />
+        <Route path="/invitation" element={<InvitationPage />} />
         <Route path="*" element={<ShellRoutes />} />
       </Routes>
     </SessionGate>

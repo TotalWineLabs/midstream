@@ -12,9 +12,11 @@ import {
   describeMethod,
   expandPermissions,
   generatePassword,
+  andList,
+  invitationEntries,
   invitationLink,
-  invitationToken,
   joinWays,
+  joinWaysAcross,
   orList,
   parseEmails,
   refusalDetails,
@@ -134,13 +136,16 @@ describe('invitations', () => {
     assert.deepEqual(parseEmails('   '), { emails: [], invalid: [] });
   });
 
-  it('put the token after # in the link, and read it back only when it is one', () => {
-    const token = `inv_usr-0123456789ab.${'A'.repeat(43)}`;
-    const link = invitationLink('https://midstream.example.com/', 'domain_a', token);
-    assert.equal(link, `https://midstream.example.com/invitation/domain_a#${token}`);
-    assert.equal(invitationToken(new URL(link).hash), token);
-    for (const hash of ['', '#', '#inv_usr-1.short', `#tok_${'A'.repeat(43)}`, '#inv_.x']) {
-      assert.equal(invitationToken(hash), null, hash);
+  it('carry every domain’s invitation after # in one link, and read back only what could be one', () => {
+    const a = { domain: 'domain_a', token: `inv_usr-0123456789ab.${'A'.repeat(43)}` };
+    const b = { domain: 'domain_b', token: `inv_usr-ba9876543210.${'B'.repeat(43)}` };
+    const link = invitationLink('https://midstream.example.com/', [a, b]);
+    assert.equal(link, `https://midstream.example.com/invitation#domain_a:${a.token},domain_b:${b.token}`);
+    assert.deepEqual(invitationEntries(new URL(link).hash), [a, b]);
+    // One per domain; anything that is not a domain's invitation is left out.
+    assert.deepEqual(invitationEntries(`#domain_a:${a.token},domain_a:${b.token},Domain_C:${a.token},domain_d:inv_usr-1.short`), [a]);
+    for (const hash of ['', '#', `#${a.token}`, `#tok_${'A'.repeat(43)}`, `#domain_a:${a.token}:x`, '#%E0%A4%A']) {
+      assert.deepEqual(invitationEntries(hash), [], hash);
     }
   });
 
@@ -154,6 +159,14 @@ describe('invitations', () => {
     assert.equal(orList(['Microsoft', 'Google', 'GitHub']), 'Microsoft, Google or GitHub');
     assert.equal(orList(['Google']), 'Google');
     assert.equal(orList([]), '');
+    assert.equal(andList(['Domain A', 'Domain B']), 'Domain A and Domain B');
+    assert.equal(andList(['A', 'B', 'C']), 'A, B and C');
+    // Across domains: any of their providers, and a link where any takes passwords.
+    assert.deepEqual(joinWaysAcross([[{ ...password, administrators_only: true }, google], [github, google]]), {
+      providers: ['Google', 'GitHub'],
+      links: false,
+    });
+    assert.equal(joinWaysAcross([[password], [github]]).links, true);
   });
 
   it('name what each invitation step did in the audit log', () => {

@@ -125,24 +125,52 @@ export function parseEmails(text: string): { emails: string[]; invalid: string[]
   return { emails, invalid };
 }
 
-/**
- * An invitation's link: the console's page for it, the token after `#` so it never reaches a
- * server's log or a referrer - the page hands it to the domain in a request body.
- */
-export function invitationLink(origin: string, domain: string, token: string): string {
-  return `${origin.replace(/\/+$/, '')}/invitation/${encodeURIComponent(domain)}#${token}`;
+/** One domain's invitation of a person, as a link carries it. */
+export interface InvitationEntry {
+  domain: string;
+  token: string;
 }
 
-/** The token in an invitation link's `#`, or null when there is none. */
-export function invitationToken(hash: string): string | null {
-  const token = decodeURIComponent(hash.replace(/^#/, '')).trim();
-  return /^inv_[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.[A-Za-z0-9_-]{43}$/.test(token) ? token : null;
+const DOMAIN_ID = /^[a-z][a-z0-9_]{0,31}$/;
+const INVITATION_TOKEN = /^inv_[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.[A-Za-z0-9_-]{43}$/;
+
+/**
+ * A person's invitation link: the console's page for it, with their invitation in every domain that
+ * invited them after `#`, as `<domain>:<token>` separated by commas. After `#`, no token reaches a
+ * server's log or a referrer: the page hands each to its domain in a request body.
+ */
+export function invitationLink(origin: string, entries: InvitationEntry[]): string {
+  return `${origin.replace(/\/+$/, '')}/invitation#${entries.map((entry) => `${entry.domain}:${entry.token}`).join(',')}`;
+}
+
+/** The invitations in a link's `#`, one per domain; none when it holds nothing that could be one. */
+export function invitationEntries(hash: string): InvitationEntry[] {
+  let text: string;
+  try {
+    text = decodeURIComponent(hash.replace(/^#/, ''));
+  } catch {
+    return [];
+  }
+  const entries: InvitationEntry[] = [];
+  for (const part of text.split(',')) {
+    const [domain = '', token = '', ...rest] = part.trim().split(':');
+    if (rest.length === 0 && DOMAIN_ID.test(domain) && INVITATION_TOKEN.test(token) && !entries.some((entry) => entry.domain === domain)) {
+      entries.push({ domain, token });
+    }
+  }
+  return entries;
 }
 
 /** Names joined as a sentence says them: "Google", "Google or GitHub", "Microsoft, Google or GitHub". */
 export function orList(items: string[]): string {
   if (items.length <= 1) return items[0] ?? '';
   return `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`;
+}
+
+/** Names joined as a sentence lists them: "Domain A", "Domain A and Domain B", "A, B and C". */
+export function andList(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? '';
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
 
 /**
@@ -154,6 +182,15 @@ export function joinWays(providers: AuthProvider[]): { providers: string[]; link
   return {
     providers: providers.filter((provider) => provider.type === 'sso').map((provider) => provider.label),
     links: password !== undefined && !password.administrators_only,
+  };
+}
+
+/** How people invited to several domains join: through any of their providers, with a link where any takes one. */
+export function joinWaysAcross(domains: AuthProvider[][]): { providers: string[]; links: boolean } {
+  const ways = domains.map(joinWays);
+  return {
+    providers: [...new Set(ways.flatMap((way) => way.providers))],
+    links: ways.some((way) => way.links),
   };
 }
 

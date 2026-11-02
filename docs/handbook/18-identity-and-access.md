@@ -893,8 +893,9 @@ offers them, and a group's members list them (console 11 §11.8d).
 **Inviting.** `POST /users/invitations` with `{emails, group_ids}`: 1 to 100 addresses
 (`identity/invitations.py::MAX_INVITATIONS`), all invited or none. Every email is checked before any is
 invited, and a refusal lists each problem in `details.problems` (`index`, `email`, `reason` —
-`invalid`, `duplicate` or `already_exists` — and `message`): `400`, or `409` when every problem is an
-email that has an account or an invitation already. The groups follow the rule every grant does: only
+`invalid`, `duplicate`, `already_exists` for an account, or `invited` for an invitation, with its
+`user_id` — and `message`): `400`, or `409` when every problem is an email that has an account or an
+invitation already. The groups follow the rule every grant does: only
 groups whose access the inviter holds (§18.3). The agent makes one `User` per email — `status:
 invited`, no password, and no names until someone gives them — with an `invitation`: who invited
 them, when, and the link's hash and expiry. Audit: `user.invited`.

@@ -29,7 +29,8 @@ const SORT_LABELS: Record<UserSort, string> = {
   created: 'Sort by date added',
 };
 
-const GRID = 'grid grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_minmax(0,1fr)_120px] items-center gap-4';
+// On a phone a row is who and their status; groups and last activity join from a tablet's width.
+const GRID = 'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_minmax(0,1fr)_120px]';
 
 /**
  * Everyone who can sign in, like a team directory - who they are, their groups, how active they are -
@@ -112,9 +113,9 @@ export function UsersSection(): ReactNode {
       <Panel className="overflow-hidden">
         <div className={cn(GRID, tableHeaderClass)}>
           <span>Name</span>
-          <span>Groups</span>
+          <span className="hidden md:block">Groups</span>
           <span>Status</span>
-          <span className="text-right">Last active</span>
+          <span className="hidden text-right md:block">Last active</span>
         </div>
         {users.isLoading ? (
           <div className="space-y-px p-5">
@@ -195,7 +196,7 @@ function UserRow({ user, link }: { user: CpUser; link: boolean }): ReactNode {
           {named ? <span className="block truncate text-[12px] text-[var(--color-ink-muted)]">{user.email}</span> : null}
         </span>
       </span>
-      <Chips items={['All Users', ...user.groups.map((group) => group.name)]} />
+      <Chips items={['All Users', ...user.groups.map((group) => group.name)]} className="hidden md:flex" />
       <span className="flex min-w-0 flex-wrap items-center gap-1">
         {user.status === 'active' && !user.locked_until && !user.must_change_password ? (
           <span className="text-[12px] text-[var(--color-ink-muted)]">Active</span>
@@ -203,9 +204,9 @@ function UserRow({ user, link }: { user: CpUser; link: boolean }): ReactNode {
         <UserStatusBadges user={{ ...user, administrator: false, self: false }} />
       </span>
       {invited ? (
-        <RelativeTime value={user.invitation?.invited_at ?? user.created_at} prefix="Invited" className="text-right text-[12px] text-[var(--color-ink-muted)]" />
+        <RelativeTime value={user.invitation?.invited_at ?? user.created_at} prefix="Invited" className="hidden text-right text-[12px] text-[var(--color-ink-muted)] md:block" />
       ) : (
-        <RelativeTime value={user.last_active_at} className="text-right text-[12px] text-[var(--color-ink-muted)]" />
+        <RelativeTime value={user.last_active_at} className="hidden text-right text-[12px] text-[var(--color-ink-muted)] md:block" />
       )}
     </div>
   );

@@ -235,7 +235,9 @@ def invite_users_request(
     sign-in: through a provider with that email, or with the invitation's link. While password
     sign-in is on, each invitation gets a link, and the answer's `invitations` carry them - the only
     time a link is shown: only its hash is kept. Every email is checked before any is invited; the
-    refusal lists each problem in `details.problems` (`index`, `email`, `reason`, `message`).
+    refusal lists each problem in `details.problems` (`index`, `email`, `reason`, `message`): an
+    email `invalid` or named twice (`duplicate`), one with an account (`already_exists`), or one
+    invited already (`invited`, with the invitation's `user_id`, so a client may give it a new link).
     """
     require(principal, "users.invite")
     cfg = resolve_config(settings_table) if config is None else config
@@ -257,12 +259,14 @@ def invite_users_request(
         holder = view.user_by_email(email)
         if email in emails:
             problems.append({"index": index, "email": email, "reason": "duplicate", "message": f"{email} is named twice."})
+        elif holder is not None and holder.invited:
+            problems.append({"index": index, "email": email, "reason": "invited", "message": email_taken(holder), "user_id": holder.user_id})
         elif holder is not None:
             problems.append({"index": index, "email": email, "reason": "already_exists", "message": email_taken(holder)})
         emails.append(email)
     if problems:
         message = problems[0]["message"] if len(problems) == 1 else f"{len(problems)} of these cannot be invited: " + " ".join(problem["message"] for problem in problems[:5])
-        if all(problem["reason"] == "already_exists" for problem in problems):
+        if all(problem["reason"] in ("already_exists", "invited") for problem in problems):
             error = already_exists(message, resource="user", identifier="", field_name="emails")
         else:
             error = invalid_request(message, field_name="emails")

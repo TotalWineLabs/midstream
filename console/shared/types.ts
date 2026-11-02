@@ -2122,8 +2122,10 @@ export interface InvitationLinkResult extends IdentityChangeResult {
 export interface CpInvitationProblem {
   index: number;
   email: string | null;
-  reason: 'invalid' | 'duplicate' | 'already_exists';
+  /** `already_exists`: an account has it; `invited`: an invitation has it, whose id is `user_id`. */
+  reason: 'invalid' | 'duplicate' | 'already_exists' | 'invited';
   message: string;
+  user_id?: string;
 }
 
 /** `POST /api/d/<domain>/auth/invitation`: what a link that works is for. */
