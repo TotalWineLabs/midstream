@@ -1,11 +1,13 @@
-import { Database, Lock, TriangleAlert } from 'lucide-react';
+import { Lock, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 import { RelativeTime } from '@/components/Inline';
+import { StatusLabel } from '@/components/Status';
 import { Badge, Panel } from '@/components/ui/primitives';
 import { useAuth } from '@/lib/auth';
-import { formatBytes, formatCount, formatExact } from '@/lib/format';
+import { formatBytes, formatCount, formatExact, humanize } from '@/lib/format';
+import { plainStatus } from '@/lib/status';
 import type { CpDetail, CpLiveTable, CpTableSpec, CpTableSummary, TableState } from '@shared/types';
 import { useDomainPath } from '@/lib/domains';
 import { tablePath } from '@/lib/paths';
@@ -124,7 +126,7 @@ export function TablesPanel({ detail }: { detail: CpDetail }): ReactNode {
                   <td className="numeric px-2 py-2 text-right whitespace-nowrap">{record ? formatBytes(record.totals.bytes ?? 0) : '—'}</td>
                   <td className="numeric px-2 py-2 text-right whitespace-nowrap text-[var(--color-ink-muted)]">{record ? formatExact(record.totals.files ?? 0) : '—'}</td>
                   <td className="numeric px-2 py-2 text-right whitespace-nowrap" title={topicLag?.error ?? (written ? undefined : 'Not read any more')}>
-                    {topicLag?.error ? <span className="text-[var(--color-phase-paused)]">?</span> : written ? formatCount(topicLag?.total_lag ?? null) : '—'}
+                    {topicLag?.error ? <span className="text-[var(--color-buoy-ink)]">?</span> : written ? formatCount(topicLag?.total_lag ?? null) : '—'}
                   </td>
                   <td className="numeric px-2 py-2 whitespace-nowrap text-[var(--color-ink-muted)]">{record?.schema_id != null ? `schema ${record.schema_id}` : '—'}</td>
                   <td className="px-2 py-2 whitespace-nowrap text-[var(--color-ink-muted)]">
@@ -146,9 +148,9 @@ export function TablesPanel({ detail }: { detail: CpDetail }): ReactNode {
 function TableStatus({ record, block, state }: { record: CpTableSummary | null; block: CpLiveTable | null; state: TableState }): ReactNode {
   if (state === 'dropping' && !record?.last_error) {
     return (
-      <Badge tone="pending" title="Its files and records are being deleted. It left its dataset, and freed its name there, when its drop was asked for.">
-        dropping
-      </Badge>
+      <span title="Its files and records are being deleted. It left its dataset, and freed its name there, when its drop was asked for." className="inline-flex">
+        <StatusLabel status={plainStatus('starting', 'Dropping')} className="text-[12px]" />
+      </span>
     );
   }
   if (state === 'dropped') {
@@ -167,15 +169,14 @@ function TableStatus({ record, block, state }: { record: CpTableSummary | null; 
   }
   if (!record) {
     return (
-      <Badge tone="pending" title="The control plane creates each table after it has sampled its topic.">
-        <Database className="size-3" />
-        not created yet
-      </Badge>
+      <span title="The control plane creates each table after it has sampled its topic." className="inline-flex">
+        <StatusLabel status={plainStatus('starting', 'Not created yet')} className="text-[12px]" />
+      </span>
     );
   }
   if (record.last_error) {
     return (
-      <span className="flex min-w-0 items-start gap-1.5 text-[var(--color-phase-failed)]" title={record.last_error.message}>
+      <span className="flex min-w-0 items-start gap-1.5 text-[var(--color-flare-ink)]" title={record.last_error.message}>
         <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
         <span className="line-clamp-2">{record.last_error.message}</span>
       </span>
@@ -184,9 +185,12 @@ function TableStatus({ record, block, state }: { record: CpTableSummary | null; 
   const running = record.maintenance_job ?? block?.maintenance ?? null;
   if (running) {
     return (
-      <Badge tone="pending" title={running.partition ? `${running.job.replace(/_/g, ' ')} · ${running.partition}` : undefined}>
-        {running.job === 'compaction' ? 'compacting' : running.job === 'reprotect' ? 'masking rows' : running.job.replace(/_/g, ' ')}
-      </Badge>
+      <span title={running.partition ? `${running.job.replace(/_/g, ' ')} · ${running.partition}` : undefined} className="inline-flex">
+        <StatusLabel
+          status={plainStatus('starting', running.job === 'compaction' ? 'Compacting' : running.job === 'reprotect' ? 'Masking rows' : humanize(running.job))}
+          className="text-[12px]"
+        />
+      </span>
     );
   }
   if ((block?.pending_files ?? 0) > 0) {

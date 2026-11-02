@@ -85,7 +85,7 @@ export function Popover({
             'fade-in absolute z-40 max-w-[calc(100vw-2rem)]',
             side === 'top' ? 'bottom-[calc(100%+6px)]' : 'top-[calc(100%+6px)]',
             'rounded-[var(--radius-panel)] border border-[var(--color-line-strong)]',
-            'bg-[var(--color-pop)] shadow-xl shadow-black/10 dark:shadow-black/50',
+            'bg-[var(--color-pop)] shadow-[var(--shadow-float)]',
             align === 'end' ? 'right-0' : 'left-0',
             className,
           )}

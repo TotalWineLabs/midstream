@@ -1,8 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2, ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 import { RelativeTime } from '@/components/Inline';
+import { StatusLabel } from '@/components/Status';
 import { Dialog } from '@/components/ui/Dialog';
 import { useToast } from '@/components/ui/Toast';
 import { Badge, Button, Panel } from '@/components/ui/primitives';
@@ -10,7 +11,8 @@ import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import { useApi } from '@/lib/domains';
-import { formatBytes, formatExact } from '@/lib/format';
+import { formatBytes, formatExact, humanize } from '@/lib/format';
+import { plainStatus } from '@/lib/status';
 import {
   readableTables,
   type CpDetail,
@@ -148,21 +150,18 @@ function ReprotectRowItem({ row }: { row: ReprotectRow }): ReactNode {
             'none in plain text'
           )}
           {row.running ? (
-            <Badge tone="pending">
-              <Loader2 className="size-3 animate-spin" />
-              rewriting
-            </Badge>
+            <StatusLabel status={plainStatus('starting', 'Rewriting')} className="text-[12px]" />
           ) : row.asked ? (
-            <Badge tone="pending" title={`Asked by ${row.asked.requested_by}${row.asked.purge ? ', with a purge' : ''}`}>
-              requested
-            </Badge>
+            <span title={`Asked by ${row.asked.requested_by}${row.asked.purge ? ', with a purge' : ''}`} className="inline-flex">
+              <StatusLabel status={plainStatus('starting', 'Requested')} className="text-[12px]" />
+            </span>
           ) : last ? (
             <LastRunBadge run={last} />
           ) : null}
         </span>
       </div>
       {report && report.blocked_files > 0 ? (
-        <p className="mt-1 text-[12px] text-[var(--color-phase-paused)]">
+        <p className="mt-1 text-[12px] text-[var(--color-buoy-ink)]">
           {formatExact(report.blocked_files)} {report.blocked_files === 1 ? 'file' : 'files'} cannot be rewritten yet: {report.blocked.join('; ')}.
         </p>
       ) : null}
@@ -179,7 +178,7 @@ function ReprotectRowItem({ row }: { row: ReprotectRow }): ReactNode {
         </p>
       ) : null}
       {last?.message && last.outcome !== 'succeeded' ? (
-        <p className={cn('mt-1 text-[12px]', last.outcome === 'failed' ? 'text-[var(--color-phase-failed)]' : 'text-[var(--color-ink-muted)]')}>
+        <p className={cn('mt-1 text-[12px]', last.outcome === 'failed' ? 'text-[var(--color-flare-ink)]' : 'text-[var(--color-ink-muted)]')}>
           {last.message}
         </p>
       ) : null}
@@ -191,11 +190,11 @@ function ReprotectRowItem({ row }: { row: ReprotectRow }): ReactNode {
 function LastRunBadge({ run }: { run: CpMaintenanceRun }): ReactNode {
   const rewrote = (run.counts?.inputs ?? 0) > 0;
   const purged = (run.counts?.expired_snapshots ?? 0) > 0 || (run.counts?.deleted_files ?? 0) > 0;
-  if (run.outcome === 'succeeded' && rewrote) return <Badge tone="running">masked</Badge>;
-  if (run.outcome === 'succeeded' && purged) return <Badge tone="running">purged</Badge>;
-  if (run.outcome === 'succeeded' || run.outcome === 'skipped') return <Badge>nothing to mask</Badge>;
-  if (run.outcome === 'failed') return <Badge tone="failed">failed</Badge>;
-  return <Badge tone="pending">{run.outcome}</Badge>;
+  if (run.outcome === 'failed') return <StatusLabel status={plainStatus('failed', 'Failed')} className="text-[12px]" />;
+  if (run.outcome === 'succeeded' && rewrote) return <Badge>Masked</Badge>;
+  if (run.outcome === 'succeeded' && purged) return <Badge>Purged</Badge>;
+  if (run.outcome === 'succeeded' || run.outcome === 'skipped') return <Badge>Nothing to mask</Badge>;
+  return <Badge>{humanize(run.outcome)}</Badge>;
 }
 
 function ReprotectDialog({

@@ -92,7 +92,7 @@ export function AccountOverview({ domainId }: { domainId: string | null }): Reac
                 {you.signedIn ? (
                   <span className="flex items-center gap-2">
                     {selected ? null : (
-                      <Link to={`/settings/account/${encodeURIComponent(domain.id)}`} className="text-[12px] font-medium text-[var(--color-accent)] hover:underline">
+                      <Link to={`/settings/account/${encodeURIComponent(domain.id)}`} className="text-[12px] font-medium link">
                         Show
                       </Link>
                     )}

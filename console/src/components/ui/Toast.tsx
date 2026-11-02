@@ -72,7 +72,7 @@ export function ToastProvider({ children }: { children: ReactNode }): ReactNode 
             role="status"
             className={cn(
               'fade-in pointer-events-auto flex items-start gap-3 rounded-[var(--radius-panel)] border p-3.5',
-              'border-[var(--color-line-strong)] bg-[var(--color-pop)] shadow-lg shadow-black/10 dark:shadow-black/40',
+              'border-[var(--color-line-strong)] bg-[var(--color-pop)] shadow-[var(--shadow-float)]',
             )}
           >
             {toast.tone === 'success' ? (

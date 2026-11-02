@@ -5,8 +5,10 @@ import { useDeferredValue, useState, type ReactNode } from 'react';
 import { describeAgent, describeDetail } from './logic';
 import { auditActionLabel, tableHeaderClass } from './shared';
 import { RelativeTime } from '@/components/Inline';
-import { Badge, Button, EmptyState, Input, Panel, Select, Skeleton } from '@/components/ui/primitives';
+import { StatusLabel } from '@/components/Status';
+import { Button, EmptyState, Input, Panel, Select, Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/cn';
+import { plainStatus } from '@/lib/status';
 import { useApi } from '@/lib/domains';
 import type { CpAuditEntry } from '@shared/types';
 
@@ -119,7 +121,7 @@ function AuditRow({ entry }: { entry: CpAuditEntry }): ReactNode {
         <RelativeTime value={entry.occurred_at} className="text-[12px] text-[var(--color-ink-muted)]" />
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="truncate">{auditActionLabel(entry.action)}</span>
-          {entry.outcome === 'failure' ? <Badge tone="failed">Failed</Badge> : null}
+          {entry.outcome === 'failure' ? <StatusLabel status={plainStatus('failed', 'Failed')} className="text-[12px]" /> : null}
         </span>
         <span className="truncate text-[var(--color-ink-muted)]">{entry.actor_email ?? entry.actor_id ?? '—'}</span>
         <span className="truncate text-[var(--color-ink-muted)]">{entry.target_label ?? '—'}</span>

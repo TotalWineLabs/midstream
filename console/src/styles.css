@@ -63,18 +63,18 @@
   --color-primary: #0a1218;
   --color-on-primary: #ffffff;
   --color-veil: rgba(16, 36, 56, 0.07);
-
-  /*
-   * Before Current: names still used across the screens. `accent` was the interaction colour —
-   * links, selection, focus, toggles — which in Current is ink, never aqua.
-   */
-  --color-accent: #0a1218;
-  --color-accent-soft: rgba(16, 36, 56, 0.08);
-  --color-phase-running: #007a5c;
-  --color-phase-pending: #5643d1;
-  --color-phase-paused: #9a5800;
-  --color-phase-failed: #c2252b;
-  --color-phase-idle: #6b7785;
+  /* What destroys data: the danger button, in Flare. */
+  --color-danger: #c2252b;
+  --color-on-danger: #ffffff;
+  /* The marks inside a state's shape: the bar of Flare's octagon, the stroke in Buoy's diamond. */
+  --color-on-flare: #ffffff;
+  --color-on-buoy: #1a1300;
+  /* What floats: the dimmed page behind a dialog, and the shadow of a menu, popover or toast. */
+  --color-scrim: rgba(7, 9, 12, 0.25);
+  --shadow-float: 0 16px 32px -8px rgba(16, 36, 56, 0.16), 0 2px 8px rgba(16, 36, 56, 0.06);
+  /* The app icon: ink on a Current tile, the same in either theme (§10.2). */
+  --brand-tile: #3ef0c5;
+  --brand-ink: #07090c;
 }
 
 /* Deep: the dark theme */
@@ -109,14 +109,10 @@
   --color-primary: #e7eef5;
   --color-on-primary: #07090c;
   --color-veil: rgba(150, 172, 198, 0.08);
-
-  --color-accent: #e7eef5;
-  --color-accent-soft: rgba(150, 172, 198, 0.12);
-  --color-phase-running: #4ff5ce;
-  --color-phase-pending: #b9aeff;
-  --color-phase-paused: #ffc14d;
-  --color-phase-failed: #ff8086;
-  --color-phase-idle: #8e9bac;
+  --color-danger: #ff6369;
+  --color-on-danger: #07090c;
+  --color-scrim: rgba(0, 0, 0, 0.55);
+  --shadow-float: 0 20px 40px -8px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
 @layer base {
@@ -272,6 +268,23 @@
   background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: shimmer 2.2s linear infinite;
+}
+
+/* A placeholder while its content loads: the shimmer's sweep, across a block instead of words. */
+@keyframes skeleton-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+.skeleton {
+  background-color: var(--color-raised);
+  background-image: linear-gradient(90deg, transparent 0%, transparent 35%, var(--color-ridge) 50%, transparent 65%, transparent 100%);
+  background-size: 200% 100%;
+  animation: skeleton-sweep 2.2s linear infinite;
 }
 
 /* A value that just changed: a wash that fades out. */
@@ -513,6 +526,11 @@
 
   .ticker-digit.rolling > .ticker-strip {
     transition: none;
+  }
+
+  .skeleton {
+    animation: none;
+    background-image: none;
   }
 
   /* Still says "working" in its words; only the sweep stops. */

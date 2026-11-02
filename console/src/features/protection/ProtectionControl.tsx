@@ -48,7 +48,7 @@ export function ProtectionControl({
             <li key={option.value} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3 py-2.5">
               <div className="min-w-0 flex-1">
                 <div id={labelId} className="flex items-center gap-1.5 text-[13px] font-medium">
-                  {current ? <Shield className="size-3.5 shrink-0 text-[var(--color-accent)]" aria-hidden /> : null}
+                  {current ? <Shield className="size-3.5 shrink-0 text-[var(--color-ink-muted)]" aria-hidden /> : null}
                   {option.label}
                 </div>
                 <div className="text-[12px] text-[var(--color-ink-muted)]">

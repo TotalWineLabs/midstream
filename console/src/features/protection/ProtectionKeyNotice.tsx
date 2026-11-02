@@ -12,7 +12,7 @@ export function ProtectionKeyNotice(): ReactNode {
   if (!text) return null;
   return (
     <Panel role="alert" className="flex items-start gap-2.5 px-5 py-3.5">
-      <AlertTriangle className="mt-[3px] size-4 shrink-0 text-[var(--color-phase-failed)]" aria-hidden />
+      <AlertTriangle className="mt-[3px] size-4 shrink-0 text-[var(--color-flare-ink)]" aria-hidden />
       <div className="space-y-0.5">
         <p className="text-[13px] font-medium">This domain has no protection key</p>
         <p className="text-[12px] text-[var(--color-ink-muted)]">{text}</p>

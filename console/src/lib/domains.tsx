@@ -4,7 +4,8 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
 import { PageBody } from '@/components/AppShell';
-import { EmptyState, Panel, Spinner } from '@/components/ui/primitives';
+import { Mark } from '@/components/Logo';
+import { EmptyState, Panel } from '@/components/ui/primitives';
 import { api, domainApi, type DomainApi } from './api';
 import { queryClientFor, rootQueryClient } from './queryClient';
 import { domainPath } from './paths';
@@ -44,7 +45,8 @@ export function DomainScope({ children }: { children: ReactNode }): ReactNode {
   if (config.isLoading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
-        <Spinner className="size-5 text-[var(--color-ink-faint)]" />
+        {/* The console itself is waiting: its mark flows (§10.7). */}
+        <Mark size={32} working label="Loading" className="text-[var(--color-ink-faint)]" />
       </div>
     );
   }
@@ -57,7 +59,7 @@ export function DomainScope({ children }: { children: ReactNode }): ReactNode {
             title={`This console serves no domain ${id ?? ''}`}
             description="The link may be old, or the domain was removed from the console's registry."
             action={
-              <Link className="text-[13px] font-medium text-[var(--color-accent)] hover:underline" to="/">
+              <Link className="link text-[13px] font-medium" to="/">
                 See every domain
               </Link>
             }

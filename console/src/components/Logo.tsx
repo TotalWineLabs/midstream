@@ -48,7 +48,7 @@ export function Mark({
       aria-label={label}
       aria-hidden={label ? undefined : true}
     >
-      {tile ? <rect width="64" height="64" rx="15" fill="#3EF0C5" /> : null}
+      {tile ? <rect width="64" height="64" rx="15" fill="var(--brand-tile)" /> : null}
       {motion ? (
         <mask id={mask} maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
           {/* The pen's path, wide enough to uncover every width of the stroke as it travels. */}
@@ -56,7 +56,8 @@ export function Mark({
             d={text ? MARK_TEXT_LINE : MARK_DISPLAY_LINE}
             pathLength={100}
             fill="none"
-            stroke="#fff"
+            // A mask: white is what shows, not a colour.
+            stroke="white"
             strokeWidth={11}
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -64,7 +65,7 @@ export function Mark({
           />
         </mask>
       ) : null}
-      <path d={text ? MARK_TEXT : MARK_DISPLAY} fill={tile ? '#07090C' : 'currentColor'} mask={motion ? `url(#${mask})` : undefined} />
+      <path d={text ? MARK_TEXT : MARK_DISPLAY} fill={tile ? 'var(--brand-ink)' : 'currentColor'} mask={motion ? `url(#${mask})` : undefined} />
     </svg>
   );
 }

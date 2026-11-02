@@ -5,7 +5,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { PageBody, PageHeader } from '@/components/AppShell';
 import { DomainChip } from '@/components/DomainChip';
-import { EmptyState, Input, Panel, Skeleton, Spinner } from '@/components/ui/primitives';
+import { Shimmer } from '@/components/motion/Shimmer';
+import { EmptyState, Input, Panel, Skeleton } from '@/components/ui/primitives';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useDomains } from '@/lib/domains';
@@ -97,7 +98,9 @@ export function SearchPage(): ReactNode {
               aria-controls="search-results"
               aria-activedescendant={ordered[active] ? `search-result-${active}` : undefined}
             />
-            {search.isFetching ? <Spinner className="absolute top-1/2 right-3 size-4 -translate-y-1/2 text-[var(--color-ink-faint)]" /> : null}
+            {search.isFetching ? (
+              <Shimmer className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[12px] text-[var(--color-ink-faint)]">Searching</Shimmer>
+            ) : null}
           </div>
         </div>
       </PageHeader>

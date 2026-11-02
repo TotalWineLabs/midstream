@@ -73,7 +73,7 @@ function ConnectPanel({
   const location = metadata?.location ?? record?.location ?? '<table location>';
   const text = snippet(engine, connection, table.dataset, table.name, location, storage);
   const notes = [
-    !connection.enabled ? { tone: 'paused', text: 'The REST catalog is turned off (Settings › Iceberg catalog); engines can still read the table by path.' } : null,
+    !connection.enabled ? { tone: 'attention', text: 'The REST catalog is turned off (Settings › Iceberg catalog); engines can still read the table by path.' } : null,
     storage === null
       ? { tone: 'muted', text: 'This console has no storage profile for the table’s location, so the snippet names no endpoint, region or account of its own: add your storage’s where it needs them.' }
       : null,
@@ -107,7 +107,7 @@ function ConnectPanel({
           key={note.text}
           className={cn(
             'border-t border-[var(--color-line)] px-5 py-2.5 text-[12px]',
-            note.tone === 'paused' ? 'text-[var(--color-buoy-ink)]' : 'text-[var(--color-ink-muted)]',
+            note.tone === 'attention' ? 'text-[var(--color-buoy-ink)]' : 'text-[var(--color-ink-muted)]',
           )}
         >
           {note.text}

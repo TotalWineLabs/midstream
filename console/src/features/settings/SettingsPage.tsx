@@ -46,7 +46,7 @@ import {
 
 const SCOPE_NOTES: Record<SettingsScope, string> = {
   'control-plane': 'Applies to the control plane.',
-  runtime: 'Delivered to every running runtime.',
+  runtime: 'Delivered to every running worker.',
   console: 'Applies to this console, wherever it runs.',
 };
 
@@ -157,7 +157,7 @@ export function SettingsPage(): ReactNode {
       } else {
         toast.success(
           'Settings saved',
-          scopes.has('runtime') ? 'Running runtimes pick the change up within seconds.' : 'They apply from now on.',
+          scopes.has('runtime') ? 'Running workers pick the change up within seconds.' : 'They apply from now on.',
         );
       }
     },

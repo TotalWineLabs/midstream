@@ -110,7 +110,7 @@ export function AddUserDialog({ open, onClose }: { open: boolean; onClose: () =>
         <div className="space-y-1.5">
           <span className="text-[13px] font-medium">Groups</span>
           <GroupPicker value={draft.group_ids} onChange={(ids) => set('group_ids', ids)} />
-          {fieldError('group_ids') ? <span className="block text-[12px] text-[var(--color-phase-failed)]">{fieldError('group_ids')}</span> : null}
+          {fieldError('group_ids') ? <span className="block text-[12px] text-[var(--color-flare-ink)]">{fieldError('group_ids')}</span> : null}
         </div>
       </form>
     </Dialog>

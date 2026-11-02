@@ -1,8 +1,10 @@
 import { Shield } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { StatusLabel } from '@/components/Status';
 import { Badge } from '@/components/ui/primitives';
 import { useMaterializationDefaults } from '@/lib/defaults';
+import { plainStatus } from '@/lib/status';
 import type { CpProtectionCatalog, CpProtectionSummary, ProtectionPolicy } from '@shared/types';
 
 import { choiceOf, kindLabel, maskName } from './protection';
@@ -36,9 +38,9 @@ export function ProtectionStateBadge({ summary }: { summary: CpProtectionSummary
   switch (summary.state) {
     case 'applying':
       return (
-        <Badge tone="pending" title={applyingTitle(summary)}>
-          Applying revision {summary.revision}
-        </Badge>
+        <span title={applyingTitle(summary)} className="inline-flex">
+          <StatusLabel status={plainStatus('starting', `Applying revision ${summary.revision}`)} className="text-[12px]" />
+        </span>
       );
     case 'stopped':
       return <Badge tone="neutral">Applies on resume</Badge>;
@@ -82,7 +84,7 @@ function ProtectedMarkIcon({
     protection.since_schema_id !== undefined ? ` since schema ${protection.since_schema_id}` : ''
   }`;
   return (
-    <span className="inline-flex shrink-0 items-center text-[var(--color-accent)]" title={title} aria-label={title} role="img">
+    <span className="inline-flex shrink-0 items-center text-[var(--color-ink-muted)]" title={title} aria-label={title} role="img">
       <Shield className="size-3.5" aria-hidden />
     </span>
   );

@@ -3,11 +3,13 @@ import { ArrowLeft, Lock } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
+import { StatusLabel } from '@/components/Status';
 import { Badge } from '@/components/ui/primitives';
 import { useToast } from '@/components/ui/Toast';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
+import { plainStatus } from '@/lib/status';
 import { useApi } from '@/lib/domains';
 import type { CpUser, IdentityChangeResult } from '@shared/types';
 
@@ -69,12 +71,12 @@ export function UserStatusBadges({ user }: { user: Pick<CpUser, 'status' | 'lock
     <>
       {user.status === 'deactivated' ? <Badge tone="neutral">Deactivated</Badge> : null}
       {user.locked_until ? (
-        <Badge tone="failed" title={`Locked out until ${new Date(user.locked_until).toLocaleString()}`}>
-          Locked out
-        </Badge>
+        <span title={`Locked out until ${new Date(user.locked_until).toLocaleString()}`} className="inline-flex">
+          <StatusLabel status={plainStatus('attention', 'Locked out')} className="text-[12px]" />
+        </span>
       ) : null}
       {user.must_change_password && user.status === 'active' ? (
-        <Badge tone="paused" title="Signs in with a password someone else chose, and must replace it">
+        <Badge title="Signs in with a password someone else chose, and must replace it">
           Password to change
         </Badge>
       ) : null}

@@ -24,7 +24,7 @@ export function HiddenDomains({ hidden, what }: { hidden: readonly DomainFleet[]
             <Link
               to={signIn.length === 1 ? `/sign-in/${encodeURIComponent(signIn[0]!.domain)}` : '/sign-in'}
               state={{ from: location }}
-              className="font-medium text-[var(--color-accent)] hover:underline"
+              className="font-medium link"
             >
               Sign in
             </Link>{' '}

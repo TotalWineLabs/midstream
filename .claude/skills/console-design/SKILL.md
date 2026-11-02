@@ -36,8 +36,9 @@ to judge by.
   is not a state, use ink strength — ink against ink-muted against faint.
 - Text in a state's colour uses its `-ink` token; shapes use the base token.
 - A new colour pairing is measured — 4.5:1 for text, 3:1 for shapes — in both themes before it ships.
-- The pre-Current names (`--color-accent`, `--color-phase-*`) are for screens not rebuilt yet. New
-  code never uses them.
+- The pre-Current names (`--color-accent`, `--color-phase-*`) are gone, and the check refuses them.
+  What was the accent is ink. What floats takes `--shadow-float`, and a dialog's backdrop
+  `--color-scrim`; the danger button `--color-danger`.
 
 ## 2. Status (§10.6)
 
@@ -105,11 +106,10 @@ cd console && node --test src/design.test.ts
 ```
 
 - **Fix the code.** Never raise the baseline (`src/design-baseline.json`) to make the check pass.
-- Screens built before Current still break some rules; the baseline counts them per rule and file,
-  and only goes down. Touching an old screen, leave it better: fix what breaks the rules in the
-  lines you change. The check then fails with *lower the baseline*; run
-  `DESIGN_BASELINE=lower node --test src/design.test.ts` and commit the lowered file. It lowers and
-  never raises.
+- The baseline is empty: every screen keeps every rule, so any violation fails the check. (It once
+  counted the screens built before Current; it only goes down, and reached zero. Should it ever
+  hold counts again, `DESIGN_BASELINE=lower node --test src/design.test.ts` lowers it after a fix,
+  and never raises it.)
 - A deliberate exception is added to the baseline by hand, and the PR says why.
 - A rule the document gains that a script can check is added to `DESIGN_RULES`, with unit cases.
 

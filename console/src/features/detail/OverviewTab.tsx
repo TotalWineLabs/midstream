@@ -1,11 +1,13 @@
-import { ChevronsUp, CircleCheck, Minus, TrendingDown, TrendingUp } from 'lucide-react';
+import { ChevronsUp } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 
 import { formatEta, lagTrend, type LagTrend } from '@shared/lagTrend';
 import { RelativeTime } from '@/components/Inline';
+import { StatusLabel } from '@/components/Status';
 import { TimeSeriesChart, type ChartPoint } from '@/components/TimeSeriesChart';
 import { Badge, KeyValue, Panel, PanelHeader, SegmentedControl } from '@/components/ui/primitives';
 import { cn } from '@/lib/cn';
+import { plainStatus, type StatusKind } from '@/lib/status';
 import { useAutoscaling, useMaterializationDefaults } from '@/lib/defaults';
 import { ProtectionChips, ProtectionStateBadge } from '../protection/ProtectionSummary';
 import { THROUGHPUT_WINDOWS, type ThroughputWindow } from './throughputHistory';
@@ -248,7 +250,7 @@ function ScaledUp({ autoscale, stopped }: { autoscale: CpAutoscale | undefined; 
   if (!autoscale?.replicas || stopped) return null;
   return (
     <p className="flex items-start gap-2 border-t border-[var(--color-line)] px-5 py-3 text-[13px] leading-relaxed text-[var(--color-ink-muted)]">
-      <ChevronsUp className="mt-[3px] size-3.5 shrink-0 text-[var(--color-accent)]" aria-hidden />
+      <ChevronsUp className="mt-[3px] size-3.5 shrink-0 text-[var(--color-ink-muted)]" aria-hidden />
       <span>
         <span className="font-medium text-[var(--color-ink)]">Scaled up to {autoscale.replicas} members</span>{' '}
         <RelativeTime value={autoscale.changed_at} />
@@ -274,14 +276,21 @@ export function newestCommit(detail: CpDetail): string | null {
   return commits.reduce<string | null>((last, value) => (last === null || Date.parse(value) > Date.parse(last) ? value : last), null);
 }
 
-const LAG_STATE: Record<LagTrend['state'], { label: string; tone: 'running' | 'paused' | 'neutral'; icon: ReactNode }> = {
-  'caught-up': { label: 'Caught up', tone: 'running', icon: <CircleCheck className="size-3" /> },
-  draining: { label: 'Catching up', tone: 'neutral', icon: <TrendingDown className="size-3" /> },
-  growing: { label: 'Falling behind', tone: 'paused', icon: <TrendingUp className="size-3" /> },
-  steady: { label: 'Holding steady', tone: 'neutral', icon: <Minus className="size-3" /> },
-  stale: { label: 'Not measured lately', tone: 'neutral', icon: <Minus className="size-3" /> },
-  unknown: { label: 'Measuring', tone: 'neutral', icon: <Minus className="size-3" /> },
+/** Which way lag is heading, as one of the six states where it is one (§10.6), and in words otherwise. */
+const LAG_STATE: Record<LagTrend['state'], { label: string; kind: StatusKind | null }> = {
+  'caught-up': { label: 'Caught up', kind: 'flowing' },
+  draining: { label: 'Catching up', kind: 'catching-up' },
+  growing: { label: 'Falling behind', kind: 'attention' },
+  steady: { label: 'Holding steady', kind: null },
+  stale: { label: 'Not measured lately', kind: null },
+  unknown: { label: 'Measuring', kind: null },
 };
+
+/** A state's shape and word where there is one, a plain word where there is none. */
+function StateWord({ kind, label }: { kind: StatusKind | null; label: string }): ReactNode {
+  if (kind === null) return <span className="text-[12px] text-[var(--color-ink-muted)]">{label}</span>;
+  return <StatusLabel status={plainStatus(kind, label)} className="text-[12px]" />;
+}
 
 /**
  * How far the runtime trails its source topic, and which way that is heading.
@@ -346,12 +355,7 @@ function ConsumerLagPanel({
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5 px-5 pt-4">
         <span className="numeric text-[22px] leading-none font-semibold tracking-tight">{formatCount(totalLag)}</span>
         <span className="text-[12px] text-[var(--color-ink-muted)]">records behind</span>
-        <Badge tone={state.tone}>
-          <span className="flex items-center gap-1">
-            {state.icon}
-            {state.label}
-          </span>
-        </Badge>
+        <StateWord kind={state.kind} label={state.label} />
         <span className="numeric text-[12px] text-[var(--color-ink-muted)]">
           {trend.state === 'draining' && trend.perSecond !== null
             ? `−${formatCount(Math.round(-trend.perSecond))}/s · about ${formatEta(trend.etaMs ?? Number.NaN)} to go`
@@ -384,7 +388,7 @@ function ConsumerLagPanel({
       {partitions.length > 0 ? (
         <div className="border-t border-[var(--color-line)] px-5 py-3">
           <div className="flex flex-wrap items-center gap-1.5">
-            <Badge tone={behind > 0 ? 'neutral' : 'running'}>
+            <Badge>
               {behind > 0 ? `${behind} of ${partitions.length} partitions behind` : `All ${partitions.length} partitions caught up`}
             </Badge>
             <button
@@ -405,7 +409,7 @@ function ConsumerLagPanel({
                   </span>
                   <span className="relative h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--color-raised)]">
                     <span
-                      className="absolute inset-y-0 left-0 rounded-full bg-[var(--color-accent)] opacity-60"
+                      className="absolute inset-y-0 left-0 rounded-full bg-[var(--color-current)] opacity-60"
                       style={{ width: `${(lag / largest) * 100}%` }}
                     />
                   </span>
@@ -525,11 +529,11 @@ function SkippedRecords({ total, reasons }: { total: number; reasons: CpSkipReas
 /** Members silent for longer than this are gone (scaled away or replaced); mirrors the control plane. */
 const MEMBER_FRESHNESS_MS = 120_000;
 
-const MEMBER_STATES: Record<string, { label: string; tone: 'running' | 'paused' | 'failed' | 'neutral' }> = {
-  degraded: { label: 'reporting errors', tone: 'failed' },
-  waiting_for_table: { label: 'loading tables', tone: 'neutral' },
-  processing: { label: 'processing', tone: 'running' },
-  waiting_for_source_records: { label: 'idle', tone: 'neutral' },
+const MEMBER_STATES: Record<string, { label: string; kind: StatusKind | null }> = {
+  degraded: { label: 'reporting errors', kind: 'attention' },
+  waiting_for_table: { label: 'loading tables', kind: null },
+  processing: { label: 'processing', kind: 'flowing' },
+  waiting_for_source_records: { label: 'idle', kind: null },
 };
 
 function memberState(member: CpMemberProgress): string {
@@ -576,9 +580,9 @@ function MemberStates({
     <div className="border-t border-[var(--color-line)] px-5 py-3">
       <div className="flex flex-wrap items-center gap-1.5">
         {counts.map(([state, count]) => (
-          <Badge key={state} tone={MEMBER_STATES[state]?.tone ?? 'neutral'}>
-            {count} {MEMBER_STATES[state]?.label ?? humanize(state)}
-          </Badge>
+          <span key={state} className="mr-1.5">
+            <StateWord kind={MEMBER_STATES[state]?.kind ?? null} label={`${count} ${MEMBER_STATES[state]?.label ?? humanize(state)}`} />
+          </span>
         ))}
         <button
           type="button"
@@ -599,9 +603,7 @@ function MemberStates({
                 <span className="numeric w-16 shrink-0 truncate" title={memberId}>
                   {memberId.split('-').slice(-2).join('-')}
                 </span>
-                <Badge tone={MEMBER_STATES[state]?.tone ?? 'neutral'}>
-                  {MEMBER_STATES[state]?.label ?? humanize(state)}
-                </Badge>
+                <StateWord kind={MEMBER_STATES[state]?.kind ?? null} label={MEMBER_STATES[state]?.label ?? humanize(state)} />
                 {memberId === committer ? (
                   <Badge tone="accent" title="This member commits every member's files to the table, and runs its maintenance.">
                     committer

@@ -963,19 +963,18 @@ function GridArea({
   onSearchAllTime: () => void;
 }): ReactNode {
   if (startError) {
-    return <Notice tone="failed" title="The query could not start" description={startError.message} />;
+    return <Failure title="The query could not start" description={startError.message} />;
   }
   if (run?.state === 'failed') {
     return (
-      <Notice
-        tone="failed"
+      <Failure
         title={run.request.kind === 'sql' ? 'The statement failed' : 'The query failed'}
         description={run.error?.message ?? 'Unknown error'}
       />
     );
   }
   if (pageError) {
-    return <Notice tone="failed" title="This page could not be read" description={pageError instanceof Error ? pageError.message : String(pageError)} />;
+    return <Failure title="This page could not be read" description={pageError instanceof Error ? pageError.message : String(pageError)} />;
   }
   if (run && run.state !== 'running' && run.rows === 0) {
     const scoped = !sameRange(range, ALL_TIME);
@@ -1066,10 +1065,11 @@ function LoadingRows(): ReactNode {
   );
 }
 
-function Notice({ tone, title, description }: { tone: 'failed'; title: string; description: string }): ReactNode {
+/** Why the grid has no rows to show: a run that failed to start, or a page that could not be read. */
+function Failure({ title, description }: { title: string; description: string }): ReactNode {
   return (
-    <div className="m-3 rounded-[var(--radius-control)] border border-[color-mix(in_srgb,var(--color-phase-failed)_35%,transparent)] bg-[color-mix(in_srgb,var(--color-phase-failed)_8%,transparent)] px-3 py-2.5">
-      <p className={cn('text-[12px] font-medium', tone === 'failed' && 'text-[var(--color-phase-failed)]')}>{title}</p>
+    <div role="alert" className="m-3 rounded-[var(--radius-control)] bg-[var(--color-flare-wash)] px-3 py-2.5">
+      <p className="text-[12px] font-medium text-[var(--color-flare-ink)]">{title}</p>
       <p className="numeric mt-1 text-[12px] whitespace-pre-wrap text-[var(--color-ink)]">{description}</p>
     </div>
   );

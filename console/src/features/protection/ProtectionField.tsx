@@ -70,7 +70,7 @@ export function ProtectionField({
         className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-[var(--color-raised)]"
       >
         <ChevronRight className={cn('size-3.5 shrink-0 transition-transform', open && 'rotate-90')} />
-        <Shield className="size-3.5 shrink-0 text-[var(--color-accent)]" aria-hidden />
+        <Shield className="size-3.5 shrink-0 text-[var(--color-ink-muted)]" aria-hidden />
         <span id={`${idPrefix}-title`} className="shrink-0 text-[13px] font-medium">
           {title}
         </span>
@@ -104,7 +104,7 @@ export function ProtectionField({
         </div>
       ) : null}
       {hashes(value) && !catalog.key_configured ? (
-        <p role="alert" className="flex items-start gap-1.5 border-t border-[var(--color-line)] px-3 py-2.5 text-[12px] text-[var(--color-phase-failed)]">
+        <p role="alert" className="flex items-start gap-1.5 border-t border-[var(--color-line)] px-3 py-2.5 text-[12px] text-[var(--color-flare-ink)]">
           <AlertTriangle className="mt-[2px] size-3.5 shrink-0" aria-hidden />
           <span>
             This domain has no protection key, so nothing can be {maskName('hash', catalog).toLowerCase()}: the control
@@ -114,14 +114,14 @@ export function ProtectionField({
         </p>
       ) : null}
       {changed && locked ? (
-        <p role="alert" className="border-t border-[var(--color-line)] px-3 py-2.5 text-[12px] text-[var(--color-phase-failed)]">
+        <p role="alert" className="border-t border-[var(--color-line)] px-3 py-2.5 text-[12px] text-[var(--color-flare-ink)]">
           {lockText}{' '}
           <button type="button" className="underline" onClick={() => onChange(defaultChoice)}>
             {resetLabel}
           </button>
         </p>
       ) : null}
-      {error ? <p className="border-t border-[var(--color-line)] px-3 py-2.5 text-[12px] text-[var(--color-phase-failed)]">{error}</p> : null}
+      {error ? <p className="border-t border-[var(--color-line)] px-3 py-2.5 text-[12px] text-[var(--color-flare-ink)]">{error}</p> : null}
     </section>
   );
 }

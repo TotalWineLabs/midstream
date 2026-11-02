@@ -254,9 +254,9 @@ CONTROL_PLANE_SETTINGS: tuple[SettingDefinition, ...] = (
         minimum=1,
         maximum=100,
         description=(
-            "The most source topics one materialization may read, each into a table of its own. One "
-            "runtime commits to and maintains every table of its materialization, a table at a time, "
-            "so more topics make each table's commits and maintenance wait longer for their turn. "
+            "The most source topics one materialization may read, each into a table of its own. A "
+            "materialization's workers commit to and maintain every one of its tables, a table at a "
+            "time, so more topics make each table's commits and maintenance wait longer for their turn. "
             "Lowering it does not change materializations that read more."
         ),
         effect="new materializations",
@@ -678,8 +678,8 @@ CONTROL_PLANE_SETTINGS: tuple[SettingDefinition, ...] = (
         maximum=10_000_000,
         description=(
             "Most uncommitted records the tail keeps for one table, and how far behind the topic's "
-            "head a runtime may be for the tail to apply: further behind - a new materialization's "
-            "backfill - the table is backlogged and the tail reads nothing until the runtime catches "
+            "head a materialization's workers may be for the tail to apply: further behind - a new "
+            "materialization's backfill - the table is backlogged and the tail reads nothing until they catch "
             "up; past it during a burst the tail pauses, and queries say the newest records are not "
             "shown yet."
         ),
@@ -839,7 +839,7 @@ RUNTIME_SETTINGS: tuple[SettingDefinition, ...] = (
         minimum=5,
         maximum=3600,
         description=(
-            "How often a runtime commits the files its members uploaded to its table. A row becomes "
+            "How often a materialization commits the files its workers uploaded to each table. A row becomes "
             "queryable at the first commit after its file is uploaded; a commit also happens as soon "
             "as the limits below are reached."
         ),
@@ -888,8 +888,8 @@ RUNTIME_SETTINGS: tuple[SettingDefinition, ...] = (
         minimum=1,
         maximum=60,
         description=(
-            "How long a runtime collects new fields before it changes its table's schema once for "
-            "all of them."
+            "How long a materialization's workers collect new fields before they change the table's "
+            "schema once for all of them."
         ),
     ),
     _rt(
@@ -1163,7 +1163,7 @@ RUNTIME_SETTINGS: tuple[SettingDefinition, ...] = (
         label="Protocol logging",
         kind="boolean",
         description=(
-            "Log one structured line per runtime protocol event, such as a file announced or a "
+            "Log one structured line per worker protocol event, such as a file announced or a "
             "commit completed."
         ),
     ),
@@ -1176,7 +1176,7 @@ RUNTIME_SETTINGS: tuple[SettingDefinition, ...] = (
         minimum=1,
         maximum=3600,
         advanced=True,
-        description="How often a runtime logs that a batch is still waiting for a schema change.",
+        description="How often a worker logs that a batch is still waiting for a schema change.",
     ),
 )
 
@@ -1190,23 +1190,23 @@ DEPLOYMENT_SETTINGS: tuple[DeploymentSetting, ...] = (
     DeploymentSetting(
         "default_namespace",
         "control-plane",
-        "Runtime namespace",
+        "Workers' namespace",
         "CONTROL_PLANE_DEFAULT_NAMESPACE",
-        "Namespace new runtimes deploy into. It needs the runtimes' role and secrets, so it is set "
-        "with the deployment.",
+        "Namespace new materializations' workers deploy into. It needs their role and secrets, so it "
+        "is set with the deployment.",
     ),
     DeploymentSetting(
         "default_runtime_name_prefix",
         "control-plane",
-        "Runtime name prefix",
+        "Workers' name prefix",
         "CONTROL_PLANE_RUNTIME_NAME_PREFIX",
-        "Runtimes are named <prefix>-<materialization id>; deleting one removes the Kafka topics "
-        "that start with that name.",
+        "A materialization's workers are named <prefix>-<materialization id>; deleting it removes the "
+        "Kafka topics that start with that name.",
     ),
     DeploymentSetting(
         "default_runtime_template_version",
         "control-plane",
-        "Runtime template version",
+        "Workers' template version",
         "CONTROL_PLANE_RUNTIME_TEMPLATE_VERSION",
     ),
     DeploymentSetting("kaspr_app_name", "control-plane", "Control-plane app", "K_APP_NAME"),
@@ -1231,16 +1231,16 @@ DEPLOYMENT_SETTINGS: tuple[DeploymentSetting, ...] = (
     DeploymentSetting(
         "schema_authority_updates_topic",
         "control-plane",
-        "Runtime control topic",
+        "Workers' control topic",
         "CONTROL_PLANE_SCHEMA_AUTHORITY_UPDATES_TOPIC",
-        "Carries settings changes and maintenance requests to running runtimes. Its name predates 1.0.",
+        "Carries settings changes and maintenance requests to running workers. Its name predates 1.0.",
     ),
     DeploymentSetting(
         "table_events_topic",
         "control-plane",
         "Table events topic",
         "CONTROL_PLANE_TABLE_EVENTS_TOPIC",
-        "Carries every runtime's schema changes, commits and maintenance runs to the control plane.",
+        "Carries every materialization's schema changes, commits and maintenance runs to the control plane.",
     ),
     DeploymentSetting(
         "storage_prefix",
@@ -1255,7 +1255,7 @@ DEPLOYMENT_SETTINGS: tuple[DeploymentSetting, ...] = (
         "control-plane",
         "S3 endpoint",
         "STORAGE_S3_ENDPOINT",
-        "The S3-compatible server that s3:// destinations are reached at, by every app and runtime. "
+        "The S3-compatible server that s3:// destinations are reached at, by every app and worker. "
         "Unset: Amazon S3.",
     ),
     DeploymentSetting(
@@ -1287,7 +1287,7 @@ DEPLOYMENT_SETTINGS: tuple[DeploymentSetting, ...] = (
         "Local file destinations",
         "CONTROL_PLANE_ALLOW_FILE_DESTINATIONS",
         "Whether a destination may be a file:/// path on the local disk. For tests only: every app "
-        "and runtime would need the same disk. Never set by the chart.",
+        "and worker would need the same disk. Never set by the chart.",
     ),
     DeploymentSetting(
         "catalog_base_url",
@@ -1393,7 +1393,7 @@ DEPLOYMENT_SETTINGS: tuple[DeploymentSetting, ...] = (
         "runtime",
         "Package revision",
         None,
-        "The control-plane commit every runtime is pinned to when it is deployed.",
+        "The control-plane commit every materialization's workers are pinned to when they are deployed.",
     ),
     DeploymentSetting(
         "resources",
@@ -1408,7 +1408,7 @@ DEPLOYMENT_SETTINGS: tuple[DeploymentSetting, ...] = (
         "runtime",
         "Vertical autoscaling",
         "CONTROL_PLANE_RUNTIME_APP_SPEC",
-        "Whether a VerticalPodAutoscaler sets each runtime's requests from what its members use, and "
+        "Whether a VerticalPodAutoscaler sets each materialization's worker requests from what they use, and "
         "between which bounds. The limits stay the ceilings unless it controls them too.",
     ),
     DeploymentSetting(
@@ -1422,14 +1422,14 @@ DEPLOYMENT_SETTINGS: tuple[DeploymentSetting, ...] = (
         "runtime",
         "Heartbeat interval",
         None,
-        "How often each runtime member reports its status. Built in.",
+        "How often each worker reports its status. Built in.",
     ),
     DeploymentSetting(
         "upload_interval",
         "runtime",
         "Pipeline interval",
         None,
-        "How often each runtime member seals due batches, uploads them and announces their files. Built in.",
+        "How often each worker seals due batches, uploads them and announces their files. Built in.",
     ),
 )
 

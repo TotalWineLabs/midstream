@@ -58,7 +58,7 @@ export function TimeRangePicker({
           className={cn(
             'inline-flex h-8 shrink-0 items-center gap-2 rounded-[var(--radius-control)] border px-2.5 text-[12px] transition-colors',
             scoped
-              ? 'border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-ink)]'
+              ? 'border-[var(--color-line-strong)] bg-[var(--color-raised)] text-[var(--color-ink)]'
               : 'border-[var(--color-line-strong)] bg-[var(--color-surface)] text-[var(--color-ink)] hover:bg-[var(--color-raised)]',
           )}
         >
@@ -226,8 +226,8 @@ function PresetOption({
         className={cn(
           'flex w-full items-baseline justify-between gap-2 rounded-[var(--radius-control)] px-1.5 py-1 text-left text-[12px] transition-colors',
           selected
-            ? 'bg-[var(--color-accent-soft)] font-medium text-[var(--color-accent)]'
-            : 'text-[var(--color-accent)] hover:bg-[var(--color-raised)]',
+            ? 'bg-[var(--color-raised)] font-medium text-[var(--color-ink)]'
+            : 'text-[var(--color-ink)] hover:bg-[var(--color-raised)]',
         )}
       >
         <span className="whitespace-nowrap">{rangeLabel(spec)}</span>
@@ -391,7 +391,7 @@ function SpanNote({ summary }: { summary: DataSummary | null }): ReactNode {
         ) : null}
       </p>
       {summary.untimedRows > 0 ? (
-        <p className="text-[var(--color-phase-paused)]">
+        <p className="text-[var(--color-buoy-ink)]">
           {summary.untimedRows.toLocaleString()} rows were written without a Kafka timestamp and only
           appear under All time.
         </p>

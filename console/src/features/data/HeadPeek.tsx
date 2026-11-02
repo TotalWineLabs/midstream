@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { Eye, Loader2, X } from 'lucide-react';
+import { Eye, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 
 import { buildColumnLabels, defaultVisibleColumns, gridOrder } from './columns';
 import { DataGrid } from '@/components/DataGrid';
+import { Shimmer } from '@/components/motion/Shimmer';
 import { Button } from '@/components/ui/primitives';
 import { ApiError } from '@/lib/api';
 import { formatExact } from '@/lib/format';
@@ -65,24 +66,22 @@ export function HeadPeek({
 
   return (
     <div
-      className="absolute inset-0 z-20 flex flex-col border-t-2 border-[var(--color-phase-paused)] bg-[var(--color-surface)]"
+      className="absolute inset-0 z-20 flex flex-col border-t-2 border-[var(--color-current)] bg-[var(--color-surface)]"
       role="dialog"
       aria-label="Newest incoming records"
       data-role="head-peek"
     >
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--color-line)] px-3 py-2">
-        <Eye className="size-4 shrink-0 text-[var(--color-phase-paused)]" aria-hidden />
+        <Eye className="size-4 shrink-0 text-[var(--color-current-ink)]" aria-hidden />
         <span className="text-[13px] font-medium text-[var(--color-ink)]">Newest incoming records</span>
-        <span className="rounded-full bg-[color-mix(in_srgb,var(--color-phase-paused)_14%,transparent)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-phase-paused)]">
+        <span className="rounded-full bg-[var(--color-current-wash)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-current-ink)]">
           not in the table yet
         </span>
         <span className="numeric min-w-0 truncate text-[11px] text-[var(--color-ink-muted)]">
           {peek
             ? `${formatExact(peek.rows)} newest · ${formatExact(peek.behind)} records behind${peek.settling > 0 ? ` · ${formatExact(peek.settling)} with new fields` : ''}`
-            : failure ?? 'Loading…'}
+            : (failure ?? <Shimmer>Reading the newest records…</Shimmer>)}
         </span>
-        {/* The first read only: a spinner on every re-read would flash each `refreshMs`. */}
-        {query.isPending ? <Loader2 className="size-3.5 animate-spin text-[var(--color-ink-faint)]" aria-hidden /> : null}
         <Button size="sm" variant="ghost" className="ml-auto h-7 px-2 text-[12px]" onClick={onClose} title="Close the peek">
           <X className="size-3.5" />
           Close
@@ -90,7 +89,7 @@ export function HeadPeek({
       </div>
       <div className="flex min-h-0 flex-1 flex-col">
         {failure && !peek ? (
-          <p className="m-3 text-[12px] text-[var(--color-phase-failed)]">{failure}</p>
+          <p className="m-3 text-[12px] text-[var(--color-flare-ink)]">{failure}</p>
         ) : (
           <DataGrid columns={columns} rows={query.data?.rows ?? []} labels={labels} emptyMessage={query.isPending ? 'Loading…' : 'No incoming records'} />
         )}

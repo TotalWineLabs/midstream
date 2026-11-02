@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, Loader2, Play, TriangleAlert } from 'lucide-react';
+import { ChevronDown, Play, TriangleAlert } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { reprotectCounts } from '../protection/protection';
 import { PageBody } from '@/components/AppShell';
 import { RelativeTime } from '@/components/Inline';
+import { StatusLabel } from '@/components/Status';
 import { StatCard } from '@/components/StatCard';
 import { useToast } from '@/components/ui/Toast';
 import { Badge, Button, EmptyState, Panel, PanelHeader, Skeleton } from '@/components/ui/primitives';
@@ -15,6 +16,7 @@ import { cn } from '@/lib/cn';
 import { formatBytes, formatDuration, formatExact, formatTimestamp, humanize } from '@/lib/format';
 import { useApi, useDomainPath } from '@/lib/domains';
 import { tablePath } from '@/lib/paths';
+import { plainStatus } from '@/lib/status';
 import type { CpMaintenanceRun, CpTable, CpTableSpec, DetailSnapshot, MaintenanceJob, TableMetadataView, TableSnapshotRow } from '@shared/types';
 
 /** A table's record and its metadata, read from the control plane and from the table itself. */
@@ -154,7 +156,7 @@ function offsetsText(offsets: Record<string, number> | null): string {
 }
 
 function operationLabel(snapshot: TableSnapshotRow): ReactNode {
-  if (snapshot.operation === 'append') return <Badge tone="running">append</Badge>;
+  if (snapshot.operation === 'append') return <Badge>append</Badge>;
   // Files rewritten to mask what was written in plain text (handbook 22 §22.14).
   if (snapshot.materializerOperation === 'reprotect') return <Badge tone="accent">reprotect</Badge>;
   if (snapshot.operation === 'replace') return <Badge tone="accent">compaction</Badge>;
@@ -330,14 +332,11 @@ function MaintenancePanel({
                 <p className="flex flex-wrap items-center gap-2 text-[13px] font-medium">
                   {item.label}
                   {active ? (
-                    <Badge tone="pending">
-                      <Loader2 className="size-3 animate-spin" />
-                      running{running?.partition ? ` · ${running.partition}` : ''}
-                    </Badge>
+                    <StatusLabel status={plainStatus('starting', `Running${running?.partition ? ` · ${running.partition}` : ''}`)} className="text-[12px]" />
                   ) : asked ? (
-                    <Badge tone="pending" title={`Asked by ${asked.requested_by}`}>
-                      requested
-                    </Badge>
+                    <span title={`Asked by ${asked.requested_by}`} className="inline-flex">
+                      <StatusLabel status={plainStatus('starting', 'Requested')} className="text-[12px]" />
+                    </span>
                   ) : last ? (
                     <OutcomeBadge outcome={last.outcome} />
                   ) : null}
@@ -357,7 +356,7 @@ function MaintenancePanel({
                   <p
                     className={cn(
                       'mt-1 text-[12px]',
-                      last.outcome === 'skipped' ? 'text-[var(--color-ink-muted)]' : 'text-[var(--color-phase-paused)]',
+                      last.outcome === 'skipped' ? 'text-[var(--color-ink-muted)]' : 'text-[var(--color-buoy-ink)]',
                     )}
                   >
                     {last.message}
@@ -384,12 +383,12 @@ function MaintenancePanel({
   );
 }
 
+/** How a job's last run ended: a failure in Flare with its shape, anything else in plain words. */
 function OutcomeBadge({ outcome }: { outcome: string }): ReactNode {
-  if (outcome === 'succeeded') return <Badge tone="running">succeeded</Badge>;
-  if (outcome === 'skipped') return <Badge>nothing to do</Badge>;
-  if (outcome === 'failed') return <Badge tone="failed">{outcome}</Badge>;
+  if (outcome === 'failed') return <StatusLabel status={plainStatus('failed', 'Failed')} className="text-[12px]" />;
+  if (outcome === 'succeeded') return <Badge>Succeeded</Badge>;
+  if (outcome === 'skipped') return <Badge>Nothing to do</Badge>;
   // Stopped for a drop, or by a maintenance member that went away: it runs again when it is next due.
-  if (outcome === 'abandoned' || outcome === 'cancelled') return <Badge tone="pending">{outcome}</Badge>;
   return <Badge>{humanize(outcome)}</Badge>;
 }
 

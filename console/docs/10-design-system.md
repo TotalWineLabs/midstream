@@ -113,6 +113,11 @@ Neutrals do the work, so the signal can speak. Tokens live in `src/styles.css`: 
 | `--color-slate` | Slate | `#808c99` | `#6f7c8c` | Stopped |
 | `--color-*-wash` | Wash | 11–13% of the colour | 12–14% | A state's pill, selection |
 | `--color-veil` | Veil | 7% ink | 8% mist | A masked column: a fine 135° hatch behind its values (`.veil`), which are quieter and fixed-width |
+| `--color-danger` / `--color-on-danger` | Danger | Flare's ink, white text | Flare, Abyss text | The danger button: what destroys data |
+| `--color-on-flare`, `--color-on-buoy` | — | white, `#1a1300` | the same | The marks inside a state's shape: Flare's bar, Buoy's stroke |
+| `--color-scrim` | Scrim | 25% Abyss | 55% black | The page dimmed behind a dialog or the command menu |
+| `--shadow-float` | — | a soft drop | a deeper one | The one shadow: what floats (§10.5) |
+| `--brand-tile` / `--brand-ink` | — | `#3ef0c5` / `#07090c` | the same | The app icon, the same in either theme (§10.2) |
 
 Rules:
 
@@ -128,8 +133,10 @@ Rules:
   Every shape colour reads at 3:1 or more (Current 3.0, Slate 3.0, Buoy 3.0, Flare 3.4, Dawn 4.3 in
   Shallows; far more in Deep). Ridge carries only Mist text. A new token passes the same test before
   it ships.
-- The pre-Current names (`--color-accent`, `--color-phase-*`) still resolve, to Current's values,
-  for screens not yet rebuilt. New code uses the names above.
+- The pre-Current names (`--color-accent`, `--color-phase-*`) are gone: every screen is in Current,
+  and the design check refuses them (§10.13). What was the accent is ink; a state goes through
+  `statusOf`, or `plainStatus` for one that is not a materialization's (a job under way, a failed
+  sign-in), and `components/Status.tsx`.
 
 ### Themes
 
@@ -192,8 +199,9 @@ Three faces, each with one job, all open source and self-hosted (`@fontsource-va
   48 px or more on touch.
 - **Radius:** `--radius-control` 8 px for controls, `--radius-panel` 12 px for panels,
   `--radius-pill` for pills.
-- **Elevation:** borders, not shadows. Only what floats (menus, popovers, dialogs, toasts) gets a
-  shadow, on `--color-pop`.
+- **Elevation:** borders, not shadows. Only what floats (menus, popovers, dialogs, toasts, a chart's
+  readout) gets a shadow, `--shadow-float`, on `--color-pop`; a dialog dims the page behind it with
+  `--color-scrim`.
 
 ## 10.6 Status
 
@@ -236,11 +244,11 @@ shimmer Claude and ChatGPT put on text while they work.
 | Movement | Means | Where | Timing | Use |
 |---|---|---|---|---|
 | **Roll** | A live number changed, and which way | Readouts, live counts, rates, lag | `--duration-roll` 520 ms, ease-out | `Ticker` |
-| **Shimmer** | Work is under way | "Running…", "Creating tables", a pending step | 2.2 s sweep, linear | `Shimmer` |
+| **Shimmer** | Work is under way | "Running…", "Creating tables", a pending step, a button's words while it works, and a `Skeleton` while its content loads | 2.2 s sweep, linear | `Shimmer`, `Button loading`, `.skeleton` |
 | **Value flash** | A value changed that doesn't roll | Cells in a list | 1.2 s fade | `.value-flash` |
 | **Row arrives** | A live row just came into a table's grid | The Data tab, streaming | 1.2 s, from a stronger Current to the live ground | `.row-arrive` |
 | **Mark draws in** | The console opened | The sidebar mark, once a page load | `--duration-draw` 900 ms | `Mark` |
-| **Mark flows** | The console itself is waiting | Sign-in, first load | 1.8 s loop | `Mark working` |
+| **Mark flows** | The console itself is waiting | Sign-in, first load, a page waiting for the console's configuration or session | 1.8 s loop | `Mark working` |
 | **Wave drifts** | This is flowing now | The one status a page is about, never a list; **Streaming** while rows stream in | 2.4 s loop, linear | `StatusGlyph animate` |
 | **Ring turns** | On its way somewhere | Starting, Updating, Resuming, Stopping, Deleting | 8 s loop | `StatusGlyph` |
 | **Ring fills** | How far a catch-up has come | Catching up | 900 ms | `StatusGlyph progress` |
@@ -460,8 +468,9 @@ This document stays the one source: the skill points into it rather than repeati
 encodes its mechanical rules. What only judgment can tell — one question per screen, plain words,
 Current only for what flows — is the skill's checklist and review's.
 
-Screens built before Current still break some rules. The check counts them per rule and file in
-`src/design-baseline.json`, which only goes down: a file may not gain a violation, a file not in it
-may have none, and a change that fixes one lowers it (`DESIGN_BASELINE=lower node --test
-src/design.test.ts`, which lowers and never raises). A deliberate exception is added by hand, where
-review sees it. A new rule a script can check joins `DESIGN_RULES` with its own unit cases.
+Every screen keeps every rule: `src/design-baseline.json`, which counted the screens built before
+Current per rule and file and only ever went down, is empty. A file may have no violation; a change
+that would add one fails the check. Should the baseline hold counts again, a change that fixes one
+lowers it (`DESIGN_BASELINE=lower node --test src/design.test.ts`, which lowers and never raises). A
+deliberate exception is added by hand, where review sees it. A new rule a script can check joins
+`DESIGN_RULES` with its own unit cases.

@@ -212,7 +212,7 @@ function ColumnRow({
           checked={visible}
           onChange={onToggleVisible}
           aria-label={`Show ${column.name}`}
-          className="size-3.5 shrink-0 cursor-pointer accent-[var(--color-accent)]"
+          className="size-3.5 shrink-0 cursor-pointer accent-[var(--color-primary)]"
         />
         <button
           type="button"
@@ -240,7 +240,7 @@ function ColumnRow({
           className={cn(
             'shrink-0 rounded p-0.5 transition-opacity hover:text-[var(--color-ink)]',
             pinned
-              ? 'text-[var(--color-accent)] opacity-100'
+              ? 'text-[var(--color-ink)] opacity-100'
               : 'text-[var(--color-ink-faint)] opacity-0 group-hover:opacity-100',
           )}
         >
@@ -322,12 +322,12 @@ function ColumnProfilePanel({
     <div className="space-y-2 border-y border-[var(--color-line)] bg-[var(--color-canvas)] px-3 py-2.5">
       <div className="numeric flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-[var(--color-ink-muted)]">
         <span title="Approximate distinct values">{formatCount(profile.distinct)} distinct</span>
-        <span className={nullCount > 0 ? 'text-[var(--color-phase-paused)]' : undefined}>
+        <span className={nullCount > 0 ? 'text-[var(--color-buoy-ink)]' : undefined}>
           {nullPercent}% null
         </span>
         {profile.partial ? (
           <span
-            className="text-[var(--color-phase-paused)]"
+            className="text-[var(--color-buoy-ink)]"
             title="One of the profile queries ran out of time; these figures are incomplete."
           >
             partial
@@ -350,7 +350,7 @@ function ColumnProfilePanel({
               >
                 <span
                   aria-hidden
-                  className="absolute inset-y-0 left-0 bg-[var(--color-accent-soft)]"
+                  className="absolute inset-y-0 left-0 bg-[var(--color-line)]"
                   style={{ width: `${(entry.count / maxCount) * 100}%` }}
                 />
                 <span className="numeric relative flex items-baseline justify-between gap-2 text-[11px]">

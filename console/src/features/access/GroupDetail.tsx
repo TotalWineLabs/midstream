@@ -48,7 +48,7 @@ export function GroupDetail({ groupId }: { groupId: string }): ReactNode {
     <div className="space-y-5">
       <BackLink to={domainPath('/settings/groups')}>All groups</BackLink>
       <div className="flex items-start gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--color-raised)] text-[var(--color-ink-muted)]">
           <UsersRound className="size-5" />
         </span>
         <div className="min-w-0">
@@ -104,7 +104,7 @@ function RolesPanel({ group, editable }: { group: CpGroupDetail; editable: boole
                 <label className={cn('flex items-start gap-3 px-5 py-3 text-[13px]', locked.has(role.role_id) ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-[var(--color-raised)]')}>
                   <input
                     type="checkbox"
-                    className="mt-0.5 size-4 accent-[var(--color-accent)]"
+                    className="mt-0.5 size-4 accent-[var(--color-primary)]"
                     checked={checked}
                     disabled={locked.has(role.role_id)}
                     onChange={() => setDraft(checked ? draft.filter((id) => id !== role.role_id) : [...draft, role.role_id])}
@@ -263,7 +263,7 @@ function AddMembersDialog({ open, onClose, group }: { open: boolean; onClose: ()
                 <label className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-[var(--color-raised)]">
                   <input
                     type="checkbox"
-                    className="size-4 accent-[var(--color-accent)]"
+                    className="size-4 accent-[var(--color-primary)]"
                     checked={checked}
                     onChange={() => setChosen(checked ? chosen.filter((id) => id !== user.user_id) : [...chosen, user.user_id])}
                   />

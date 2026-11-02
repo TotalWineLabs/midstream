@@ -1,7 +1,8 @@
-import { AlertTriangle, Ban, CheckCircle2, Hourglass, Loader2, RotateCw } from 'lucide-react';
+import { AlertTriangle, Ban, CheckCircle2, Hourglass, RotateCw } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { newerSnapshot, type TailNotice } from './live';
+import { Shimmer } from '@/components/motion/Shimmer';
 import { cn } from '@/lib/cn';
 import { formatDuration, formatExact } from '@/lib/format';
 import type { DataSummary, RunSnapshot } from '@shared/types';
@@ -50,10 +51,7 @@ export function StatusBar({
       <div className="flex min-h-[40px] flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5">
         <div className="flex min-w-0 flex-1 items-center gap-2" aria-live="polite" data-role="run-status">
           {starting || !run ? (
-            <>
-              <Loader2 className="size-4 shrink-0 animate-spin text-[var(--color-accent)]" />
-              <span className="text-[12px] text-[var(--color-ink-muted)]">Starting…</span>
-            </>
+            <Shimmer className="text-[12px] text-[var(--color-ink-muted)]">Starting…</Shimmer>
           ) : (
             <RunSummary run={run} />
           )}
@@ -97,7 +95,7 @@ function LiveWarning({ notice }: { notice: TailNotice }): ReactNode {
       role="status"
       data-role="live-notice"
       title={notice.detail ?? undefined}
-      className="inline-flex min-w-0 items-center gap-1.5 text-[12px] font-medium text-[var(--color-phase-paused)]"
+      className="inline-flex min-w-0 items-center gap-1.5 text-[12px] font-medium text-[var(--color-buoy-ink)]"
     >
       <Icon className={cn('size-3.5 shrink-0', notice.behind && 'hourglass-turn')} aria-hidden />
       <span className="numeric truncate">{notice.text}</span>
@@ -109,10 +107,8 @@ function RunSummary({ run }: { run: RunSnapshot }): ReactNode {
   if (run.state === 'running') {
     return (
       <>
-        <Loader2 className="size-4 shrink-0 animate-spin text-[var(--color-accent)]" />
-        <span className="numeric min-w-0 truncate text-[12px] text-[var(--color-ink)]">
-          {runningText(run)}
-        </span>
+        {/* Work under way: its words shimmer (§10.7). */}
+        <Shimmer className="numeric min-w-0 truncate text-[12px] text-[var(--color-ink)]">{runningText(run)}</Shimmer>
         <span className="numeric shrink-0 text-[11px] text-[var(--color-ink-faint)]">
           {formatDuration(run.elapsedMs)}
           {remaining(run)}
@@ -124,8 +120,8 @@ function RunSummary({ run }: { run: RunSnapshot }): ReactNode {
   if (run.state === 'failed') {
     return (
       <>
-        <AlertTriangle className="size-4 shrink-0 text-[var(--color-phase-failed)]" />
-        <span className="numeric min-w-0 truncate text-[12px] text-[var(--color-phase-failed)]" title={run.error?.message}>
+        <AlertTriangle className="size-4 shrink-0 text-[var(--color-flare-ink)]" />
+        <span className="numeric min-w-0 truncate text-[12px] text-[var(--color-flare-ink)]" title={run.error?.message}>
           {run.error?.message ?? 'The run failed'}
         </span>
       </>
@@ -146,12 +142,12 @@ function RunSummary({ run }: { run: RunSnapshot }): ReactNode {
 
   return (
     <>
-      <CheckCircle2 className="size-4 shrink-0 text-[var(--color-phase-running)]" />
+      <CheckCircle2 className="size-4 shrink-0 text-[var(--color-ink-muted)]" />
       <span className="numeric shrink-0 text-[13px] font-semibold text-[var(--color-ink)]" title={`Took ${formatDuration(run.elapsedMs)}`}>
         {formatExact(run.rows)} {run.rows === 1 ? 'row' : 'rows'}
       </span>
       {run.truncated && run.rowsRetained !== null ? (
-        <span className="numeric shrink-0 text-[11px] text-[var(--color-phase-paused)]" title="Only the first rows of a large result are kept for paging and export; the total is exact.">
+        <span className="numeric shrink-0 text-[11px] text-[var(--color-buoy-ink)]" title="Only the first rows of a large result are kept for paging and export; the total is exact.">
           first {formatExact(run.rowsRetained)} kept
         </span>
       ) : null}
@@ -201,15 +197,13 @@ function remaining(run: RunSnapshot): string {
 
 function ProgressBar({ run }: { run: RunSnapshot }): ReactNode {
   const fraction = run.progress.fraction;
+  // A phase that cannot say how far it has got draws no bar rather than inventing a width: its words shimmer.
+  if (fraction === null) return null;
   return (
     <div className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-transparent" aria-hidden>
       <div
-        className={cn(
-          'h-full bg-[var(--color-accent)] transition-[width] duration-300 ease-out',
-          // A phase that cannot say how far it has got pulses rather than inventing a width.
-          fraction === null && 'w-1/4 animate-pulse',
-        )}
-        style={fraction === null ? undefined : { width: `${Math.max(2, Math.round(fraction * 100))}%` }}
+        className="h-full bg-[var(--color-ink-muted)] transition-[width] duration-300 ease-out"
+        style={{ width: `${Math.max(2, Math.round(fraction * 100))}%` }}
       />
     </div>
   );

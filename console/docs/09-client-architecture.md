@@ -459,7 +459,7 @@ The header is a sticky CSS grid; rows are translated by `start * ROW_HEIGHT` ins
   locks body scroll, and restores the previous overflow on unmount.
 - Toasts are `role="status"` (polite), so they are announced without interrupting.
 - Icon-only buttons carry `aria-label` (`Copy <id>`, `Toggle theme`, `Dismiss`, `Previous page`).
-- Focus is visible globally via `:focus-visible { outline: 2px solid var(--color-accent) }`.
+- Focus is visible globally via `:focus-visible { outline: 2px solid var(--color-ink) }`.
 - `@media (prefers-reduced-motion: reduce)` disables the pulse and fade animations.
 - All text meets contrast requirements in both themes; phase colours are always paired with a text
   label, never colour alone.

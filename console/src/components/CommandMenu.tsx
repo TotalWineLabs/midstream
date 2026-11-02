@@ -243,12 +243,12 @@ function CommandPanel({ onClose }: { onClose: () => void }): ReactNode {
   let lastGroup = '';
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-3 pt-[10vh] sm:p-6 sm:pt-[12vh]">
-      <div className="fixed inset-0 bg-black/25 backdrop-blur-[2px] dark:bg-black/55" onClick={onClose} aria-hidden />
+      <div className="fixed inset-0 bg-[var(--color-scrim)] backdrop-blur-[2px]" onClick={onClose} aria-hidden />
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Search or jump to"
-        className="fade-in relative flex max-h-[72vh] w-full max-w-[640px] flex-col overflow-hidden rounded-[16px] border border-[var(--color-line-strong)] bg-[var(--color-pop)] shadow-2xl shadow-black/15 dark:shadow-black/60"
+        className="fade-in relative flex max-h-[72vh] w-full max-w-[640px] flex-col overflow-hidden rounded-[16px] border border-[var(--color-line-strong)] bg-[var(--color-pop)] shadow-[var(--shadow-float)]"
       >
         <div className="flex items-center gap-3 border-b border-[var(--color-line)] px-4">
           <Search className="size-4 shrink-0 text-[var(--color-ink-faint)]" />

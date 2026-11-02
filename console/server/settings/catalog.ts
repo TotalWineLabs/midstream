@@ -125,7 +125,7 @@ export const CONSOLE_SETTINGS: readonly ConsoleSettingDefinition[] = [
     section: 'live',
     label: 'Ingest rate window',
     description:
-      'Span each runtime member’s row rate is measured over. Keep it at least twice the runtime ' +
+      'Span each worker’s row rate is measured over. Keep it at least twice the workers’ ' +
       'heartbeat (30 s); longer is steadier, shorter is livelier.',
     kind: 'integer',
     unit: 'ms',

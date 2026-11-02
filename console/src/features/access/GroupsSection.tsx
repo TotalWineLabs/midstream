@@ -85,7 +85,7 @@ function GroupRow({ group }: { group: CpGroup }): ReactNode {
     <li>
       <Link to={domainPath(`/settings/groups/${group.group_id}`)} className={cn(GRID, 'px-5 py-3 transition-colors hover:bg-[var(--color-raised)]')}>
         <span className="flex min-w-0 items-center gap-2.5">
-          <UsersRound className="size-4 shrink-0 text-[var(--color-accent)]" />
+          <UsersRound className="size-4 shrink-0 text-[var(--color-ink-muted)]" />
           <span className="min-w-0">
             <span className="flex items-center gap-1.5 text-[13px] font-medium">
               <span className="truncate">{group.name}</span>

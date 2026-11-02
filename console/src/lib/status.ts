@@ -113,6 +113,14 @@ export function reasonWords(code: string | null | undefined): string | null {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
+/**
+ * A state that is not a materialization's — a job under way, a failed sign-in, a locked account —
+ * drawn the same way (§10.6). Starting is always on its way, so its ring turns.
+ */
+export function plainStatus(kind: StatusKind, label: string): Status {
+  return { kind, label, reason: null, moving: kind === 'starting' };
+}
+
 /** Read one materialization's phases, health and lag as one state. */
 export function statusOf(input: StatusInput): Status {
   const { desired, observed, catchingUp = false } = input;

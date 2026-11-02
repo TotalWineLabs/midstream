@@ -106,7 +106,7 @@ export function SqlPanel({
               className={cn(
                 'inline-flex h-7 items-center gap-1 rounded-[var(--radius-control)] px-2 text-[11px] transition-colors',
                 autoRerun.on
-                  ? 'bg-[var(--color-accent-soft)] font-medium text-[var(--color-accent)]'
+                  ? 'bg-[var(--color-raised)] font-medium text-[var(--color-ink)]'
                   : 'text-[var(--color-ink-muted)] hover:bg-[var(--color-raised)]',
               )}
               data-role="auto-rerun"

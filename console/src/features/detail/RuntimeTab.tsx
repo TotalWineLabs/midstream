@@ -86,7 +86,7 @@ export function RuntimeTab({ snapshot }: { snapshot: DetailSnapshot }): ReactNod
                   <span className="flex shrink-0 items-center gap-2 text-[12px] text-[var(--color-ink-muted)]">
                     <span
                       className={cn('size-1.5 rounded-full')}
-                      style={{ backgroundColor: AGENT_TONE[state] ?? 'var(--color-phase-idle)' }}
+                      style={{ backgroundColor: AGENT_TONE[state] ?? 'var(--color-ink-faint)' }}
                     />
                     {humanize(state)}
                   </span>

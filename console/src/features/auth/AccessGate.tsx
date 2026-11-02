@@ -4,7 +4,8 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 
 import { ChangePasswordForm } from './ChangePasswordForm';
 import { PageBody } from '@/components/AppShell';
-import { Button, EmptyState, Panel, Spinner } from '@/components/ui/primitives';
+import { Mark } from '@/components/Logo';
+import { Button, EmptyState, Panel } from '@/components/ui/primitives';
 import { useAuth, useConsoleAuth } from '@/lib/auth';
 import { DomainProvider, useConsoleConfig, useManyDomains, useOptionalDomain } from '@/lib/domains';
 
@@ -20,7 +21,8 @@ export function SessionGate({ children }: { children: ReactNode }): ReactNode {
   if (consoleAuth.loading) {
     return (
       <div className="flex min-h-full items-center justify-center">
-        <Spinner className="size-5 text-[var(--color-ink-faint)]" />
+        {/* The console itself is waiting: its mark flows (§10.7). */}
+        <Mark size={32} working label="Loading" className="text-[var(--color-ink-faint)]" />
       </div>
     );
   }
@@ -55,7 +57,7 @@ function PasswordChangeScreen({ domainName }: { domainName: string | null }): Re
     <div className="flex min-h-full items-center justify-center bg-[var(--color-raised)] px-4 py-12">
       <div className="w-full max-w-[400px]">
         <div className="mb-6 text-center">
-          <span className="mx-auto grid size-10 place-items-center rounded-full bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
+          <span className="mx-auto grid size-10 place-items-center rounded-full bg-[var(--color-raised)] text-[var(--color-ink-muted)]">
             <Lock className="size-5" />
           </span>
           <h1 className="mt-4 text-[20px] font-semibold tracking-tight">

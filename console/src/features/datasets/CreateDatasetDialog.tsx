@@ -94,7 +94,7 @@ export function CreateDatasetDialog({ open, onClose }: { open: boolean; onClose:
           You become its owner, and everyone signed in can read it. Its owners decide who may read it, add tables to it and
           manage it.
         </p>
-        {error ? <p className="text-[12px] text-[var(--color-phase-failed)]">{error}</p> : null}
+        {error ? <p className="text-[12px] text-[var(--color-flare-ink)]">{error}</p> : null}
       </form>
     </Dialog>
   );

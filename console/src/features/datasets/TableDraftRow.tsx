@@ -49,10 +49,10 @@ export function TableDraftRow({
           aria-invalid={shown?.field === 'name'}
           spellCheck={false}
           autoComplete="off"
-          className={cn('numeric h-8 min-w-0 flex-1 text-[13px]', shown?.field === 'name' && 'border-[var(--color-phase-failed)]')}
+          className={cn('numeric h-8 min-w-0 flex-1 text-[13px]', shown?.field === 'name' && 'border-[var(--color-flare)]')}
         />
       </div>
-      {shown ? <p className="pl-[18px] text-[11px] text-[var(--color-phase-failed)]">{shown.message}</p> : null}
+      {shown ? <p className="pl-[18px] text-[11px] text-[var(--color-flare-ink)]">{shown.message}</p> : null}
     </div>
   );
 }

@@ -62,7 +62,7 @@ export function RolesSection(): ReactNode {
               <li key={role.role_id}>
                 <Link to={domainPath(`/settings/roles/${role.role_id}`)} className={cn(GRID, 'px-5 py-3 transition-colors hover:bg-[var(--color-raised)]')}>
                   <span className="flex min-w-0 items-center gap-2.5">
-                    <ShieldCheck className="size-4 shrink-0 text-[var(--color-accent)]" />
+                    <ShieldCheck className="size-4 shrink-0 text-[var(--color-ink-muted)]" />
                     <span className="truncate text-[13px] font-medium">{role.name}</span>
                   </span>
                   <span className="truncate text-[13px] text-[var(--color-ink-muted)]" title={role.description}>
