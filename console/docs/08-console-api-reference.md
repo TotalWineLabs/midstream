@@ -1106,9 +1106,11 @@ Changes answer once the identity agent has applied them:
 **Invitations** (control-plane handbook 18 §18.18). `POST /api/users/invitations` with
 `{emails, group_ids}` answers the same, with `invitations`: each `{user_id, email, link,
 link_expires_at}`, the link — `inv_<user id>.<secret>`, `null` while password sign-in is off — shown
-this once; the page builds `<console>/invitation/<domain>#<link>` from it. A refusal of the emails
-lists each in `details.problems` (or `details.upstream_details.problems`, when the control plane refused
-the request itself): `{index, email, reason, message}`. `POST /api/users/:userId/invitation` answers
+this once. The page invites in every domain chosen, each with its own request, and builds each
+person's one link from their invitations in all of them: `<console>/invitation#<domain>:<link>,…`. A
+refusal of the emails lists each in `details.problems` (or `details.upstream_details.problems`, when
+the control plane refused the request itself): `{index, email, reason, message}`, with `user_id` when
+the reason is `invited` — the page then gives that invitation a new link instead. `POST /api/users/:userId/invitation` answers
 `link` and `link_expires_at`. The page a link opens calls, with no session — the link is the
 credential, and travels in the body, never the URL:
 

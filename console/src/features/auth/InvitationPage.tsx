@@ -3,7 +3,7 @@ import { AlertTriangle, ArrowRight } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
-import { andList, invitationEntries, orList, type InvitationEntry } from '../access/logic';
+import { andList, invitationEntries, orList, takenByAll, type InvitationEntry } from '../access/logic';
 import { PasswordInput } from './PasswordInput';
 import { Mark } from '@/components/Logo';
 import { Button, Field, Input } from '@/components/ui/primitives';
@@ -86,8 +86,12 @@ export function InvitationPage(): ReactNode {
 
   const byPassword = parts.filter((part) => part.description.password_sign_in);
   const minimum = Math.max(12, ...byPassword.map((part) => part.description.password_policy.min_length));
-  // The providers this console signs people in with that some domain of the invitation takes.
-  const providers = consoleAuth.providers.filter((provider) => parts.some((part) => part.description.providers.some((offered) => offered.id === provider.id)));
+  // The providers every domain of the invitation takes, so one sign-in accepts all of it: back from the
+  // provider, nothing would tell the person a part was left. Only when none is, and no password can be
+  // chosen instead, those some domain takes, each accepting its part.
+  const shared = takenByAll(parts.map((part) => part.description.providers));
+  const offered = shared.length > 0 || byPassword.length > 0 ? shared : parts.flatMap((part) => part.description.providers);
+  const providers = consoleAuth.providers.filter((provider) => offered.some((item) => item.id === provider.id));
   const destination = parts.length === 1 && parts[0] ? domainPath(parts[0].domain.id) : '/';
   const inviters = [...new Set(parts.map((part) => part.description.invited_by))];
   const elsewhere = parts.find((part) => {

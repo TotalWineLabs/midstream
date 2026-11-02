@@ -955,8 +955,11 @@ through a provider or with its link.
   invitation stays until it is accepted or revoked, so its person can still accept it through a
   provider months later. *To consider:* a lifetime for the invitation itself, swept by the hourly
   maintenance.
-- **Per domain.** An invitation is an account in one domain, as every account is; inviting someone to
-  several domains takes an invitation in each. One provider sign-in accepts all of them at once.
+- **One invitation, an account in each domain.** The console invites in several domains at once and
+  gives the person one link, but each domain holds its own invitation: a domain added later needs the
+  person invited there too (their one link is then renewed to cover it). Nothing across domains is
+  atomic: each domain's invitation is made, renewed or revoked on its own, and a refusal in one is
+  named while the others go through.
 - **Dataset roles are given on the dataset**, through its Share popover, not in the invitation dialog,
   which chooses groups only.
 

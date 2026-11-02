@@ -9,8 +9,8 @@ invited email, or with the invitation's link, which carries the account's id and
 The directory keeps only the secret's SHA-256 (`Invitation.link_hash`) and when the link stops
 working, so neither the identity topic nor the directory's changelog holds anything a link could be
 made from. The secret has 256 bits, so a plain hash is enough: there is nothing to guess. The console
-puts the token after `#` in the link it shows, `<console>/invitation/<domain>#<token>`, so it never
-reaches a server's log or a referrer; its page hands it to the control plane in a request body.
+puts each domain's token after `#` in the one link it shows a person, `<console>/invitation#<domain>:<token>,…`,
+so none reaches a server's log or a referrer; its page hands each to its own domain in a request body.
 """
 
 from __future__ import annotations

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { CpPermissionCatalog } from '@shared/types';
+import type { AuthProvider, CpPermissionCatalog } from '@shared/types';
 
 import {
   AUDIT_ACTION_LABELS,
@@ -16,10 +16,12 @@ import {
   invitationEntries,
   invitationLink,
   joinWays,
+  joinSentence,
   joinWaysAcross,
   orList,
   parseEmails,
   refusalDetails,
+  takenByAll,
 } from './logic.ts';
 
 const catalog: CpPermissionCatalog = {
@@ -161,12 +163,42 @@ describe('invitations', () => {
     assert.equal(orList([]), '');
     assert.equal(andList(['Domain A', 'Domain B']), 'Domain A and Domain B');
     assert.equal(andList(['A', 'B', 'C']), 'A, B and C');
-    // Across domains: any of their providers, and a link where any takes passwords.
-    assert.deepEqual(joinWaysAcross([[{ ...password, administrators_only: true }, google], [github, google]]), {
-      providers: ['Google', 'GitHub'],
-      links: false,
-    });
-    assert.equal(joinWaysAcross([[password], [github]]).links, true);
+  });
+
+  it('say how people invited to several domains join, one invitation to them', () => {
+    const password = { id: 'password', type: 'password', label: 'Email and password', administrators_only: false };
+    const google = { id: 'google', type: 'sso', label: 'Google' };
+    const github = { id: 'github', type: 'sso', label: 'GitHub' };
+    const entra = { id: 'entra', type: 'sso', label: 'Microsoft' };
+    const domainA = (...providers: AuthProvider[]) => ({ name: 'Domain A', providers });
+    const domainB = (...providers: AuthProvider[]) => ({ name: 'Domain B', providers });
+
+    // Only a provider every domain takes joins them all; the link joins each taking passwords.
+    const both = joinWaysAcross([domainA(password, github), domainB(password, entra, github, google)]);
+    assert.deepEqual(both, { providers: ['GitHub'], links: true, elsewhere: [] });
+    assert.equal(joinSentence(both, 2), 'They join by signing in through GitHub with that email, or with the one link each gets here, for every domain.');
+    assert.equal(
+      joinSentence(joinWaysAcross([domainA(password, github), domainB(password, google)]), 2),
+      'They join with the one link each gets here, for every domain, choosing their own password.',
+    );
+    // A domain taking no passwords gets no link: said, with how it is joined.
+    const mixed = joinWaysAcross([domainA(password, github), domainB({ ...password, administrators_only: true }, entra)]);
+    assert.deepEqual(mixed, { providers: [], links: true, elsewhere: [{ name: 'Domain B', providers: ['Microsoft'] }] });
+    assert.equal(
+      joinSentence(mixed, 2),
+      'They join with the one link each gets here, choosing their own password. Domain B takes no passwords: there they sign in through Microsoft.',
+    );
+    // No link anywhere: a shared provider is enough; with none, each domain's own.
+    assert.equal(joinSentence(joinWaysAcross([domainA(github, google), domainB(google)]), 2), 'They join by signing in through Google with that email.');
+    assert.equal(
+      joinSentence(joinWaysAcross([domainA(github), domainB()]), 2),
+      'Domain A takes no passwords: there they sign in through GitHub. Nobody can join Domain B yet: it takes no sign-in provider, and only administrators may use a password.',
+    );
+    // One domain reads as before.
+    assert.equal(joinSentence(joinWaysAcross([domainA(password, google)]), 1), 'They join by signing in through Google with that email, or with the link each one gets here.');
+    assert.equal(joinSentence(joinWaysAcross([domainA()]), 1), 'Nobody can join yet: no sign-in provider is on, and only administrators may use a password.');
+    assert.deepEqual(takenByAll([[github, google], [google, github], [entra, google]]), [google]);
+    assert.deepEqual(takenByAll([]), []);
   });
 
   it('name what each invitation step did in the audit log', () => {

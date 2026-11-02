@@ -185,13 +185,59 @@ export function joinWays(providers: AuthProvider[]): { providers: string[]; link
   };
 }
 
-/** How people invited to several domains join: through any of their providers, with a link where any takes one. */
-export function joinWaysAcross(domains: AuthProvider[][]): { providers: string[]; links: boolean } {
-  const ways = domains.map(joinWays);
+/** The providers every one of these domains takes, in the first one's order. */
+export function takenByAll<T extends { id: string }>(domains: T[][]): T[] {
+  const [first = [], ...rest] = domains;
+  return first.filter((provider) => rest.every((providers) => providers.some((other) => other.id === provider.id)));
+}
+
+/** How people invited to several domains join. */
+export interface JoinWays {
+  /** The provider sign-ins that join every domain at once. */
+  providers: string[];
+  /** Whether each gets a link: some domain takes passwords, and the link joins each that does. */
+  links: boolean;
+  /** The domains neither of those joins, each with the providers that do. */
+  elsewhere: Array<{ name: string; providers: string[] }>;
+}
+
+/**
+ * How people invited to these domains join (each domain with the sign-ins it takes). Only a provider
+ * every domain takes joins them all, so to the person it stays one invitation.
+ */
+export function joinWaysAcross(domains: Array<{ name: string; providers: AuthProvider[] }>): JoinWays {
+  const each = domains.map((domain) => ({ name: domain.name, ...joinWays(domain.providers) }));
+  const shared = takenByAll(domains.map((domain) => domain.providers.filter((provider) => provider.type === 'sso')));
+  const links = each.some((domain) => domain.links);
   return {
-    providers: [...new Set(ways.flatMap((way) => way.providers))],
-    links: ways.some((way) => way.links),
+    providers: shared.map((provider) => provider.label),
+    links,
+    // A domain making no link is joined through its own providers alone: worth saying when a link joins
+    // the others, or when no provider joins them all.
+    elsewhere: each.filter((domain) => !domain.links && (links || shared.length === 0)).map(({ name, providers }) => ({ name, providers })),
   };
+}
+
+/** How invited people join, for whoever invites them to these many domains. */
+export function joinSentence(ways: JoinWays, domains: number): string {
+  const through = ways.providers.length > 0 ? `signing in through ${orList(ways.providers)} with that email` : '';
+  const link = domains > 1 ? `the one link each gets here${ways.elsewhere.length > 0 ? '' : ', for every domain'}` : 'the link each one gets here';
+  if (through && ways.links) return [`They join by ${through}, or with ${link}.`, elsewhereSentence(ways)].filter(Boolean).join(' ');
+  if (through) return `They join by ${through}.`;
+  if (ways.links) return [`They join with ${link}, choosing their own password.`, elsewhereSentence(ways)].filter(Boolean).join(' ');
+  if (domains > 1 && ways.elsewhere.length > 0) return elsewhereSentence(ways);
+  return 'Nobody can join yet: no sign-in provider is on, and only administrators may use a password.';
+}
+
+/** How each domain the link and the shared providers leave out is joined: through its providers, or not yet. */
+export function elsewhereSentence(ways: JoinWays): string {
+  return ways.elsewhere
+    .map((domain) =>
+      domain.providers.length > 0
+        ? `${domain.name} takes no passwords: there they sign in through ${orList(domain.providers)}.`
+        : `Nobody can join ${domain.name} yet: it takes no sign-in provider, and only administrators may use a password.`,
+    )
+    .join(' ');
 }
 
 /** What an audit entry's action reads as. */

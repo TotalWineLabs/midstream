@@ -917,14 +917,31 @@ or to `POST /users/{id}/invitation`, which makes a new link and stops the old on
 the directory keeps only the secret's SHA-256, so neither the identity topic nor the directory's
 changelog holds anything a link could be made from. A link works for `invitation_link_lifetime_days`
 (7); once it expires the invitation stays, and its person can still accept it through a provider or be
-given a new link. While password sign-in is off, invitations get no link. The console shows a link as
-`<console>/invitation/<domain>#<token>`: after `#`, the token never reaches a server's log or a
-referrer, and the page moves it out of the address bar and hands it to the control plane in request
-bodies (`POST /auth/invitation`, `…/accept`). Neither view asks for a session — the link is the
+given a new link. While password sign-in is off, invitations get no link. The console shows a person
+one link for every domain that invited them, `<console>/invitation#<domain>:<token>,<domain>:<token>`
+(below): after `#`, no token reaches a server's log or a referrer, and the page moves them out of the
+address bar and hands each to its domain's control plane in request bodies (`POST /auth/invitation`,
+`…/accept`). Neither view asks for a session — the link is the
 credential — and neither says anything to a link that does not work: `404 invitation_invalid` whatever
 is wrong with it, `410 invitation_expired` for one that worked until it expired. The agent checks the
 link again as it applies the acceptance, since a new one may have replaced it in between. The console
 counts both views against the address's sign-in attempts (§18.6).
+
+**Across domains: one invitation.** An invitation is an account in one domain, as every account is
+(chapter 20), but to the person it is one invitation. The console's **Invite people** invites in every
+domain where the person inviting holds `users.invite` — all of them unless they choose fewer — with each
+domain's own groups, sending each domain its own `POST /users/invitations`. Where an email has an
+account already, that domain invites the rest and leaves it out; where it is invited already
+(`reason: invited`, with the invitation's `user_id`), the console gives that invitation a new link,
+its groups unchanged. Each person then gets **one link** carrying every domain's token. Their join page
+reads *Join Midstream*: one provider sign-in accepts every domain's invitation at once (each domain
+checks the provider's credential itself, §18.17), so the page offers the providers every domain of the
+invitation takes; and one name and password accepts it in each domain that takes passwords and signs
+the browser in to each. A domain taking no passwords makes no link, so the link does not reach it; the
+dialog says so, and how that domain is joined. **New link** and **Revoke** on an invitation's
+page act on the person's invitation in every domain that holds one where the person asking may invite.
+Each domain still decides alone: a refusal in one leaves the others as they are, and is named with its
+domain.
 
 **Until it is accepted** an invitation is nobody. No password signs in to it, and a password sign-in
 with its email reads as any wrong password. A session naming it is refused (`invalid_session`), and an

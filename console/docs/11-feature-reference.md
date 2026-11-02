@@ -58,21 +58,26 @@ carries on. A session started through a provider is never held back by it.
 A session that ends elsewhere — signed out by an administrator, deactivated, expired — turns the
 page into that domain's guest's at the next request, and open streams close within 30 seconds.
 
-### Accepting an invitation (`/invitation/:domain#<link>`)
+### Accepting an invitation (`/invitation#<domain>:<link>,…`)
 
-The page an invitation's link opens (`features/auth/InvitationPage.tsx`; control-plane handbook 18
-§18.18), outside the shell like sign-in. It moves the link out of the address bar at once — into the
-tab's session storage, so a reload keeps it — and asks the domain what it is for: **Join <domain>**
-(*Join Midstream* with one domain), *Jane Doe invited you as ada@example.com.* Then the ways in that
-domain takes: **Continue with Google** (and each provider the console is registered with and the domain
-accepts), *Use your Google account for ada@example.com.*; and, while passwords are on there, **or choose
-a password** — first and last name, prefilled when the invitation was named, and a password with its
-minimum length — then **Join <domain>**, which signs the browser in there and opens the domain. Someone
-signed in there as someone else is told that accepting signs them in as the invited person instead. A
-link that does not work says so and nothing more — *This invitation link does not work* (a newer link
-replaced it, or the invitation was revoked or accepted), *This invitation link has expired. Ask whoever
-invited you for a new one.*, or *This invitation link is incomplete* — with **Sign in** below, and the
-tab forgets it.
+The page a person's invitation link opens (`features/auth/InvitationPage.tsx`; control-plane handbook
+18 §18.18), outside the shell like sign-in. To the person it is one invitation, whichever domains
+invited them. The page moves the link out of the address bar at once — into the tab's session storage,
+so a reload keeps it — and asks each domain what its part is for: **Join Midstream**, *Jane Doe invited
+you as ada@example.com. It gives you access to Domain A and Domain B.* Then the ways in:
+**Continue with Google** (each provider the console is registered with that every domain of the
+invitation takes; only when none is and no password can be chosen, each that some domain takes),
+*Use your Google account for ada@example.com.*, which accepts it in every domain at once; and,
+where passwords are on, **or choose a password** — first and last name, prefilled when the invitation
+was named, and a password with the strictest minimum length — then **Join Midstream**, which accepts it
+in each such domain, signs the browser in to each, and opens the domain (every domain's Overview with
+several). When some domain says no — its part of the invitation was revoked or renewed, or it takes
+provider sign-ins only — the page says *You joined Domain A* and why not the other, with **Continue**.
+Someone signed in as someone else is told that joining signs them in as the invited person instead. A
+link that does not work at all says so and nothing more — *This invitation link does not work* (a newer
+link replaced it, or the invitation was revoked or accepted), *This invitation link has expired. Ask
+whoever invited you for a new one.*, or *This invitation link is incomplete* — with **Sign in** below,
+and the tab forgets it.
 
 ### `LiveIndicator`
 
@@ -1013,15 +1018,22 @@ named shows its email alone.
 
 **Invite people** (`users.invite`, the header's primary action; control-plane handbook 18 §18.18):
 **Emails** — typed or pasted, separated by commas, spaces or new lines, a `Name <address>` read as its
-address — and **Groups**, only those whose access the person inviting holds. A line says how they will
-join: *They join by signing in through Google or GitHub with that email, or with the link each one gets
-here.* **Invite 3 people** makes an invited account for each, all or none: an email that is not one is
-named before anything is sent, and one the domain refuses — *viewer@example.com already has an account*,
-*ada@example.com is invited already* — is listed with **Remove them and invite the rest**. Once made, the
-dialog becomes *3 people are invited*: each email with its link and **Copy**, **Copy every email and
+address — then, where the console serves several domains, **Domains**: every domain where the person
+inviting may invite, all of them ticked, at least one; and for each, **Groups in Domain A**, only those
+whose access the person inviting holds there. A line says how they will join: *They join by signing in
+through Google with that email, or with the one link each gets here, for every domain.* — a provider
+named only when every domain chosen takes it, since only that joins them all at once. A domain taking
+no passwords makes no link, and the line says how it is joined instead (*Domain B takes no passwords:
+there they sign in through Microsoft.*). An email that is not one is named before anything is sent. **Invite 3 people** invites in each domain: an
+email with an account there already is left out there (*Not in Domain B: viewer@example.com already has
+an account*), and one invited there already gets a new link, keeping its groups (*Invited already in
+Domain A: a new link, with the groups they had*). The dialog then becomes *3 people are invited*: each
+email with the domains it joins, its **one link** for all of them and **Copy**, **Copy every email and
 link**, and what to do with them — *Send each person their link, privately: whoever has it can join as
-them until Nov 9. The links are not shown again.* While password sign-in is off there are no links: they
-join through a provider. The list then shows **Invited**.
+them until Nov 9, in every domain it names. The links are not shown again.* A domain that refused
+outright is named, with why. While password sign-in is off there are no links: they join through a
+provider. Nothing invited anywhere keeps the dialog open with each domain's reasons. The list then shows
+**Invited**.
 
 **Add user** (`users.manage`): first and last name, email, an **Initial password** — generated,
 20 characters from an alphabet without lookalikes, with **Copy password** and **Generate a new
@@ -1051,9 +1063,11 @@ Their access is theirs from their first sign-in.*, then how they accept it: thro
 providers with the invited email, and their link, *It works until Nov 9, 2026* or *expired … Make a new
 one to send them* — then Profile (names optional: *Their name, if you know it - otherwise they give it
 when they accept*), Groups, Access and Dataset access, as for anyone; no Sessions or Activity. Its
-actions, with `users.invite` and holding everything it holds: **New link** — *The link sent before stops
-working. The new one is shown once.*, then the link with **Copy** — and **Revoke invitation**, which
-names what goes (*Its account is deleted with its groups and dataset roles, and its link stops
+actions, with `users.invite` and holding everything it holds, act on the person's invitation in every
+domain that holds one where you may invite: **New link** — *Their invitation is to Domain A and Domain B.
+The link sent before stops working; the new one joins them all, and is shown once.*, then the one link
+with **Copy** — and **Revoke invitation**, which names what goes (*It is withdrawn in Domain A and Domain
+B: each domain's invited account is deleted with its groups and dataset roles, and the link stops
 working*). A group's **Add people** offers invitations too, marked *Invited*, and its members list them.
 
 ## 11.8e Groups (`/settings/groups[/:groupId]`)

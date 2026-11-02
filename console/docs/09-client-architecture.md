@@ -12,7 +12,7 @@ main.tsx
               └── AuthProvider         Who is using the page, in every domain (lib/auth.tsx)
                   └── App              SessionGate + SsoOutcomeToast + route table
                       ├── SignInPage   /sign-in, /sign-in/:domain
-                      ├── InvitationPage   /invitation/:domain#<link>
+                      ├── InvitationPage   /invitation#<domain>:<link>,…
                       └── AppShell     Sidebar with the domain switcher, account menu, ⌘K, theme
                           ├── <console page>      Overview | Materializations | Datasets | Search | Settings: every domain
                           └── DomainScope         /d/:domain/*: the domain, its API and a query cache of its own
@@ -48,7 +48,7 @@ under `/api/d/<domain>`) and its cache; `useDomain()`, `useDomainPath()` read th
 ```tsx
 <Route path="/sign-in"            element={<SignInPage />} />                     // the providers, or a password for a chosen domain
 <Route path="/sign-in/:domain"    element={<SignInPage />} />                     // a password for that domain
-<Route path="/invitation/:domain" element={<InvitationPage />} />                 // an invitation's link: accept it
+<Route path="/invitation"         element={<InvitationPage />} />                 // a person's invitation link: accept it in every domain
 // Every domain:
 <Route path="/"                   element={<Overview />} />
 <Route path="/materializations"   element={<Materializations />} />
@@ -340,7 +340,8 @@ features/
     AccountSection.tsx                      Your profile, password and sessions
     UsersSection.tsx / UserDetail.tsx       Users list (filter, search, sort) and one person's account
     AddUserDialog.tsx / GroupPicker.tsx     Add a user with a generated password; groups you may grant
-    InviteUsersDialog.tsx                   Invite people by email with their groups, then each link, shown once
+    InviteUsersDialog.tsx                   Invite people by email in every domain chosen, each with its groups; then each person's one link, shown once
+    invitations.ts                          A person's invitation across domains: find it, give it a new link, revoke it
     GroupsSection.tsx / GroupDetail.tsx     Groups, members and roles
     RolesSection.tsx / RoleEditor.tsx       Roles and the permission editor, with implications
     AuditSection.tsx                        The audit log, a page at a time

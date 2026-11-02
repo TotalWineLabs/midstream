@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { GroupPicker } from './GroupPicker';
 import { IDENTITY_QUERY_ROOTS, invitationLink, orList } from './shared';
-import { andList, joinWaysAcross, parseEmails, refusalDetails, type InvitationEntry } from './logic';
+import { andList, elsewhereSentence, joinSentence, joinWaysAcross, parseEmails, refusalDetails, type InvitationEntry, type JoinWays } from './logic';
 import { CopyButton } from '@/components/Inline';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button, Field, Textarea } from '@/components/ui/primitives';
@@ -48,7 +48,7 @@ export function InviteUsersDialog({ open, onClose, onInvited }: { open: boolean;
   const [runs, setRuns] = useState<DomainRun[] | null>(null);
   const parsed = useMemo(() => parseEmails(text), [text]);
   const domains = invitable.filter((domain) => chosen.includes(domain.id));
-  const ways = joinWaysAcross(domains.map((domain) => consoleAuth.forDomain(domain.id).state?.providers ?? []));
+  const ways = joinWaysAcross(domains.map((domain) => ({ name: domain.name, providers: consoleAuth.forDomain(domain.id).state?.providers ?? [] })));
 
   useEffect(() => {
     if (!open) return;
@@ -94,7 +94,7 @@ export function InviteUsersDialog({ open, onClose, onInvited }: { open: boolean;
           </Button>
         }
       >
-        <InvitationLinks runs={runs} emails={parsed.emails} providers={ways.providers} />
+        <InvitationLinks runs={runs} emails={parsed.emails} ways={ways} />
       </Dialog>
     );
   }
@@ -229,7 +229,8 @@ async function inviteIn(domain: ConsoleDomain, emails: string[], groupIds: strin
 }
 
 /** Each person invited, with the one link that joins every domain that invited them: shown this once. */
-function InvitationLinks({ runs, emails, providers }: { runs: DomainRun[]; emails: string[]; providers: string[] }): ReactNode {
+function InvitationLinks({ runs, emails, ways }: { runs: DomainRun[]; emails: string[]; ways: JoinWays }): ReactNode {
+  const { providers } = ways;
   const many = runs.length > 1;
   const people = emails.flatMap((email) => {
     const entries: InvitationEntry[] = [];
@@ -262,12 +263,15 @@ function InvitationLinks({ runs, emails, providers }: { runs: DomainRun[]; email
           {expires ? ` until ${new Date(expires).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}
           {many ? ', in every domain it names' : ''}. The links are not shown again
           {providers.length > 0 ? `, and they can also join by signing in through ${orList(providers)} with the invited email` : ''}.
+          {ways.elsewhere.length > 0 ? ` ${elsewhereSentence(ways)}` : ''}
         </p>
       ) : (
         <p className="text-[13px] text-[var(--color-ink-muted)]">
           {providers.length > 0
             ? `They join by signing in through ${orList(providers)} with the invited email.`
-            : 'They join once password sign-in is on, or a sign-in provider is: ask an administrator.'}
+            : ways.elsewhere.length > 0
+              ? elsewhereSentence(ways)
+              : 'They join once password sign-in is on, or a sign-in provider is: ask an administrator.'}
         </p>
       )}
       <ul className="divide-y divide-[var(--color-line)] overflow-hidden rounded-[var(--radius-control)] border border-[var(--color-line-strong)]">
@@ -346,16 +350,6 @@ function CopyAllButton({ value }: { value: string }): ReactNode {
       {copied ? 'Copied' : 'Copy every email and link'}
     </Button>
   );
-}
-
-/** How the people invited here will join, in the domains chosen. */
-function joinSentence(ways: { providers: string[]; links: boolean }, domains: number): string {
-  const through = ways.providers.length > 0 ? `signing in through ${orList(ways.providers)} with that email` : '';
-  const link = domains > 1 ? 'the one link each gets here, for every domain' : 'the link each one gets here';
-  if (through && ways.links) return `They join by ${through}, or with ${link}.`;
-  if (through) return `They join by ${through}.`;
-  if (ways.links) return `They join with ${link}, choosing their own password.`;
-  return 'Nobody can join yet: no sign-in provider is on, and only administrators may use a password.';
 }
 
 /** What the control plane said was wrong with each email, when it refused them. */
