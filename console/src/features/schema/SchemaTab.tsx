@@ -10,6 +10,7 @@ import { formatSpan, versionDataSpans } from './timeline';
 import { namedTable } from '../tables/selectedTable';
 import { PageBody } from '@/components/AppShell';
 import { RelativeTime } from '@/components/Inline';
+import { useTabShown } from '@/components/TabPanel';
 import {
   Badge,
   Button,
@@ -108,9 +109,13 @@ function TableSchema({
   const reportedVersion = snapshot.detail?.tables.find((record) => record.name === table.name)?.schema_id ?? null;
   const schemaError = snapshot.schemaErrors[table.name] ?? null;
 
+  // Kept while another of the page's tabs is shown, the tab reads nothing: shown again, it reads
+  // the versions at once if they have aged.
+  const shown = useTabShown();
   const versionsQuery = useQuery({
     queryKey: ['schema-versions', materializationId, table.name, currentVersion],
     queryFn: () => api.schemaVersions(materializationId, table.name),
+    enabled: shown,
     refetchInterval: 30_000,
   });
 

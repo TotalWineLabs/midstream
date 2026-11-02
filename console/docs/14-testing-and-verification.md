@@ -476,6 +476,7 @@ them elsewhere (the file's header lists them). They make a bucket and a containe
 | `server/topics/catalog.test.ts` | Topic catalog: one upstream request for 200 concurrent readers, TTL and stale-while-revalidate, refresh spacing, stale and unavailable states, ETag and gzip, and `GET /api/topics` headers and status codes |
 | `src/features/materializations/topicSearch.test.ts` | Topic search ranking, multi-term matching, hidden-topic counts, emphasis ranges, and a 50,000-topic timing bound |
 | `src/features/data/hooks.test.ts` | A rules-of-hooks guard, plus its own detector tests |
+| `src/features/tables/keptTabs.test.ts` | A table page's kept tabs: no key listener on the document or window, in what its tabs render, that never asks `useTabShown()` — it would fire from another tab — plus its own detector tests |
 | `src/design.test.ts` | The design language's mechanical rules over every client source file, against a baseline that only goes down (10 §10.14), plus each rule's own cases |
 | `src/features/data/timeRange.test.ts` | Preset resolution in local time, Sunday weeks, labels, and the URL encoding of every range kind |
 | `src/lib/format.test.ts` | Instants rendered in local time across DST, and only zoned timestamps treated as instants |

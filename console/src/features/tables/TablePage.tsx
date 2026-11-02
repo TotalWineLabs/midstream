@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Lock, Pin } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 
 import { namedTable } from './selectedTable';
@@ -11,6 +11,7 @@ import { TableHistoryTab } from '../detail/TableTab';
 import { SchemaTab } from '../schema/SchemaTab';
 import { PageBody, PageHeader } from '@/components/AppShell';
 import { StatusLabel } from '@/components/Status';
+import { TabPanel, useOpenedTabs } from '@/components/TabPanel';
 import { Button, EmptyState, Panel, Skeleton } from '@/components/ui/primitives';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -135,6 +136,12 @@ function TableView({ dataset, entry, tab }: { dataset: CpDatasetDetail; entry: C
   const tabs = TABS.filter((item) => item.permission === null || can(item.permission, dataset.dataset_id));
   // A tab that is not one, or one the person may not open — from a shared link, say — is the first they may.
   const active = tabs.find((item) => item.key === (tab ?? 'data'))?.key ?? tabs[0]?.key ?? 'history';
+  // Every tab opened stays as it was left until the page is: going back to Data finds its rows,
+  // range, filters and statement, and the run on screen, which it kept following (§11.4a).
+  const opened = useOpenedTabs(active);
+  const ids = useId();
+  const tabId = (key: TableTab): string => `${ids}tab-${key}`;
+  const panelId = (key: TableTab): string => `${ids}panel-${key}`;
   const materializationName = detail ? displayName(detail.materialization) : (entry.materialization_name ?? entry.materialization_id);
 
   return (
@@ -176,8 +183,10 @@ function TableView({ dataset, entry, tab }: { dataset: CpDatasetDetail; entry: C
               return (
                 <button
                   key={item.key}
+                  id={tabId(item.key)}
                   role="tab"
                   aria-selected={selected}
+                  aria-controls={opened.has(item.key) ? panelId(item.key) : undefined}
                   type="button"
                   onClick={() => navigate(domainPath(tablePath(dataset.name, entry.name, item.key)), { replace: true })}
                   className={cn(
@@ -209,14 +218,22 @@ function TableView({ dataset, entry, tab }: { dataset: CpDatasetDetail; entry: C
             />
           </Panel>
         </PageBody>
-      ) : active === 'data' ? (
-        <DataTab materializationId={entry.materialization_id} snapshot={snapshot} table={entry.name} />
-      ) : active === 'schema' ? (
-        <SchemaTab materializationId={entry.materialization_id} snapshot={snapshot} table={entry.name} />
-      ) : active === 'connect' ? (
-        <TableConnect snapshot={snapshot} table={spec} />
       ) : (
-        <TableHistoryTab snapshot={snapshot} table={spec} />
+        tabs
+          .filter((item) => opened.has(item.key))
+          .map((item) => (
+            <TabPanel key={item.key} id={panelId(item.key)} labelledBy={tabId(item.key)} shown={item.key === active}>
+              {item.key === 'data' ? (
+                <DataTab materializationId={entry.materialization_id} snapshot={snapshot} table={entry.name} />
+              ) : item.key === 'schema' ? (
+                <SchemaTab materializationId={entry.materialization_id} snapshot={snapshot} table={entry.name} />
+              ) : item.key === 'connect' ? (
+                <TableConnect snapshot={snapshot} table={spec} />
+              ) : (
+                <TableHistoryTab snapshot={snapshot} table={spec} />
+              )}
+            </TabPanel>
+          ))
       )}
     </>
   );

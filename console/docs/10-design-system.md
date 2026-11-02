@@ -390,6 +390,7 @@ The glossary: terms the console says differently from the system.
 | **Share** | Who can use a dataset | A popover like a document's, opened from **Share** in the header: a row to add someone with a role, the people and groups with their role as a choice, roles in one sentence each, what access doesn't cover (`SharePopover.tsx`) |
 | **Search in place** | A page with many things to find: Settings | A box heading the page's navigation, focused with `/` (a page claims the key through `FOCUS_SEARCH_EVENT`; ⌘K stays the command menu's). What matches replaces the content, grouped by where it lives, each result the thing itself — a setting is changed right there |
 | **Drafts** | Edits saved together: Settings | An edited row has a raised ground and an ink bar in its margin, *Unsaved* beside its name; its section has a dot; a bar at the foot counts the edits and offers Discard and Save |
+| **Tabs keep their place** | The tabs of one page: a table's | Going back to a tab finds it as it was left until the page is left — its rows, what was asked of them, the row open, where it and the page were scrolled. Out of sight, a tab waits rather than works: no streaming, no reads on a timer, no keys; shown again, it catches up. Nothing says so: it is simply still there (`components/TabPanel.tsx`) |
 | **Empty state** | Nothing here yet | What this is, in one sentence, and the one action that fills it |
 
 ## 10.11 Components
@@ -412,6 +413,7 @@ The glossary: terms the console says differently from the system.
 | `PlanCard`, `PlanGroup`, `PlanTable`, `PlanItem`, `PlanChange`, `PlanRow`, `PlanNote`, `PlanBlocked` | `components/Plan.tsx` | A plan first (§10.10): the card, a group of what it does to a kind of thing, a table by its SQL name, a value from → to, what it costs, what stops it |
 | `SharePopover` | `features/datasets/SharePopover.tsx` | Share (§10.10) |
 | `SettingsSearchField`, `SettingsSearchResults` | `features/settings/SettingsSearch.tsx` | Search in place (§10.10), on the Settings pages |
+| `TabPanel`, `useOpenedTabs`, `useTabShown` | `components/TabPanel.tsx` | Tabs keep their place (§10.10): a page's opened tabs, each kept mounted and hidden while another is shown; whether the tab something renders in is on screen |
 | `TimeSeriesChart`, `Sparkline` | `components/` | Charts (§10.8) |
 | `DataGrid` | `components/DataGrid.tsx` | Rows |
 | `Avatar`, `RelativeTime`, `Identifier`, `CopyButton` | `components/` | People, times, ids |

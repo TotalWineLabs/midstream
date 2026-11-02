@@ -389,6 +389,18 @@ dataset locked to them shows the name and a note, never its schema or data; so d
 may not see materializations' details. A table the dataset does not hold (dropped, or never written
 there) says so, with a link to the dataset's tables.
 
+**Tabs keep their place.** Each tab, once opened, stays as it was left until the page is left
+(`components/TabPanel.tsx`, 10 §10.10). Going back to **Data** finds its time range, filters, order,
+statement with its editor's undo history, page, page size, columns, the row open and every scroll
+position, over the same run — followed while out of sight, so a long count goes on and is done on
+return. **Schema** keeps its version, comparison, view and filter; **History** and **Connect** their
+choices; and the page is scrolled where each tab left it. A tab out of sight waits rather than works:
+it streams nothing, reads nothing on a timer, and its keys (⌘↵, a row's ↑ ↓ j k Esc) are the tab on
+screen's. Shown again, it reads at once what has aged, and streaming takes in what arrived meanwhile.
+The address bar holds the tab on screen, so Data's view returns to it with the tab. Leaving the page —
+for another page or another table, or a reload — starts every tab afresh, Data from the address it
+opens with.
+
 ---
 
 ## 11.5 Detail → Overview
@@ -578,7 +590,9 @@ choose between (see [07](./07-data-access-and-duckdb.md)).
 The tab runs the table's preview at once — every committed row of its current snapshot, newest first, with its **exact** row count — `✓ 26,060,201 rows · All time` — and the first page. The
 manifests know every file's row count, so this reads nothing but the page itself and is on screen at
 any table size. When the URL
-names a run (after a refresh, say), the tab re-attaches to it instead, progress and all.
+names a run (after a refresh, say), the tab re-attaches to it instead, progress and all. That is the
+tab's first opening on the page: going back to it from Schema, History or Connect finds it as it was
+left, and runs nothing again (§11.4a).
 
 | Outcome | Rendering |
 |---|---|
@@ -814,7 +828,8 @@ CSV and Parquet are always flat.
 ### Sharing and refreshing
 
 The address bar is the view: time range, filters, order, statement, page, page size, visible and
-pinned columns, Live (`live=0` when off), and the run on screen. **Share**, under More actions, copies it. A link made
+pinned columns, Live (`live=0` when off), and the run on screen. It is while the tab is shown: another
+tab's address holds that tab alone, and the view is written back with the Data tab (§11.4a). **Share**, under More actions, copies it. A link made
 before snapshots left the Data tab (`asof=`) opens on the latest data. A link made before columns dropped the
 `payload.` root still opens: its filters, columns and pin are rewritten to the current names once
 the run's columns are known. Reloading the page re-attaches to the

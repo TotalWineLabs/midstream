@@ -32,6 +32,7 @@ import { namedTable } from '../tables/selectedTable';
 import { PageBody } from '@/components/AppShell';
 import { StatusGlyph } from '@/components/Status';
 import { DataGrid } from '@/components/DataGrid';
+import { useTabShown } from '@/components/TabPanel';
 import { useToast } from '@/components/ui/Toast';
 import { Button, EmptyState, Panel, Select, Skeleton } from '@/components/ui/primitives';
 import { ApiError, api as consoleApi } from '@/lib/api';
@@ -208,6 +209,10 @@ export function DataTab({
   const [liveTick, setLiveTick] = useState(0);
   const [peekOpen, setPeekOpen] = useState(false);
   const pageVisible = useDocumentVisible();
+  // The table's page keeps this tab while another of its tabs is shown (components/TabPanel.tsx):
+  // everything here stays as it was, and what it does on its own waits until it is shown again.
+  const tabShown = useTabShown();
+  const seen = pageVisible && tabShown;
   // The range of the run on screen as chosen, so a run that replaces it slides with "Last 15 minutes".
   const runRange = useRef<TimeRangeSpec>(initial.range);
 
@@ -220,7 +225,8 @@ export function DataTab({
   const summaryQuery = useQuery({
     queryKey: ['data-summary', materializationId, tableName],
     queryFn: () => api.dataSummary(materializationId, tableName),
-    enabled: tableName !== '',
+    // Hidden, the tab reads nothing; shown again, it reads the summary at once if it has aged.
+    enabled: tableName !== '' && tabShown,
     refetchInterval: (query) => (query.state.error ? false : 30_000),
     retry: 0,
   });
@@ -310,8 +316,10 @@ export function DataTab({
     })();
   }, [queryableNow, initial.runId, attach, execute]);
 
-  // ⌘↵ runs from anywhere on the tab; the editor handles its own and marks the event.
+  // ⌘↵ runs from anywhere on the tab, and only while it is shown; the editor handles its own and
+  // marks the event.
   useEffect(() => {
+    if (!tabShown) return;
     const onKeyDown = (event: KeyboardEvent): void => {
       if (!(event.metaKey || event.ctrlKey) || event.key !== 'Enter' || event.defaultPrevented) return;
       event.preventDefault();
@@ -319,7 +327,7 @@ export function DataTab({
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [execute]);
+  }, [execute, tabShown]);
 
   useEffect(() => remember(RAIL_WIDTH_KEY, railWidth), [railWidth]);
   useEffect(() => remember(SQL_HEIGHT_KEY, sqlHeight), [sqlHeight]);
@@ -332,7 +340,9 @@ export function DataTab({
   }, [railOpen]);
 
   // Mirror the view into the address bar. Replaced, not pushed: a page turn is not a navigation.
+  // Only while shown: the address is the tab on screen's, and this view comes back with this tab.
   useEffect(() => {
+    if (!tabShown) return;
     // The table is the page's own address, never the query's.
     const next = writeViewState({
       table: null,
@@ -348,7 +358,7 @@ export function DataTab({
       live,
     });
     if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true });
-  }, [range, filters, order, sqlMode, sqlDraft, page, pageSize, visibleOverride, pinnedColumn, run?.id, initial.runId, live, searchParams, setSearchParams]);
+  }, [tabShown, range, filters, order, sqlMode, sqlDraft, page, pageSize, visibleOverride, pinnedColumn, run?.id, initial.runId, live, searchParams, setSearchParams]);
 
   // Check a statement as it is typed: bound against the view, never run.
   useEffect(() => {
@@ -530,7 +540,8 @@ export function DataTab({
   const liveRefreshMs = domainTail.refreshMs;
   const hold = liveHold({
     enabled: liveTail && live && !sqlMode,
-    visible: pageVisible,
+    // Another of the page's tabs shown is this one hidden: streaming catches up when it is back.
+    visible: seen,
     run,
     authRefused: liveRefused,
     inspecting: detailIndex !== null,
@@ -555,7 +566,7 @@ export function DataTab({
 
   // A statement's Auto re-run: a new run a few seconds after the last one finished.
   useEffect(() => {
-    const delay = autoRerunDelay({ enabled: liveTail && sqlMode && autoRerun, visible: pageVisible, run, dirty });
+    const delay = autoRerunDelay({ enabled: liveTail && sqlMode && autoRerun, visible: seen, run, dirty });
     if (delay === null) return;
     const timer = window.setTimeout(() => {
       void refresh(resolveRange(runRange.current)).catch((error: unknown) => {
@@ -564,7 +575,7 @@ export function DataTab({
     }, delay);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveTail, sqlMode, autoRerun, pageVisible, run?.id, run?.state, dirty]);
+  }, [liveTail, sqlMode, autoRerun, seen, run?.id, run?.state, dirty]);
 
   // What the tab says of Live, on the status line: a muted word, or a warning in amber at its right.
   // The warning describes the table, not one run, so it stays while a run that Live started at a
@@ -850,7 +861,7 @@ export function DataTab({
                     materializationId={materializationId}
                     table={run.table}
                     refreshMs={liveRefreshMs}
-                    visible={pageVisible}
+                    visible={seen}
                     schemaOrder={schemaOrder}
                     onClose={closePeek}
                   />
@@ -905,7 +916,8 @@ export function DataTab({
         </Panel>
       </div>
 
-      {rowProperties && !wide ? rowProperties : null}
+      {/* A sheet covers the page from outside the tab: a hidden tab keeps its row open without it. */}
+      {rowProperties && !wide && tabShown ? rowProperties : null}
     </PageBody>
   );
 }

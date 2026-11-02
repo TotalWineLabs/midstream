@@ -127,6 +127,8 @@ Adding any of these is a control-plane change first, then a console change — s
 | The materializations list shows schema ids as `v0`, `v1`… | The Schema tab says *schema 2*; same id, two spellings |
 | No bulk selection | One materialization at a time |
 | Toasts are the only mutation feedback | No persistent activity log; a table's maintenance history (its History tab) is the one exception |
+| A table's tabs keep their place only while its page is open | Leaving the page, or reloading it, starts every tab afresh. The address bar holds the tab on screen alone, so a reload on Schema, History or Connect loses the Data tab's view; one on Data keeps it |
+| Only a table's page keeps its tabs | A materialization's Overview, Protection and Diagnostics start afresh when shown again — the lag window and throughput metric chosen included; `components/TabPanel.tsx` would keep them too |
 
 ## 16.7 Engineering
 
