@@ -238,7 +238,13 @@ async function writtenBy(
   return table ? { materialization: found.materialization, table } : null;
 }
 
-/** A table found through its domain's live fleet, by `<dataset>.<table>`: refused when none writes it. */
+/**
+ * A table found through its domain's live fleet, by `<dataset>.<table>`: refused when none has it.
+ *
+ * The fleet lists each materialization's written tables; a kept one - its topic removed, the table
+ * still readable in its dataset (handbook 11 §11.7) - is only in the datasets the materialization
+ * names, so it is looked for among the materializations with tables in its dataset.
+ */
 async function inFleet(
   domain: Domain,
   qualified: string,
@@ -246,10 +252,13 @@ async function inFleet(
   field: string,
 ): Promise<{ materialization: CpMaterialization; table: RunTableSource }> {
   const dataset = qualified.slice(0, qualified.indexOf('.'));
-  const item = domain.live
-    .fleetSnapshot()
-    .items.find((candidate) => candidate.desired_phase !== 'deleted' && candidate.tables.some((table) => table.toLowerCase() === qualified));
+  const items = domain.live.fleetSnapshot().items.filter((candidate) => candidate.desired_phase !== 'deleted');
+  const item = items.find((candidate) => candidate.tables.some((table) => table.toLowerCase() === qualified));
   if (!item) {
+    for (const candidate of items.filter((entry) => (entry.datasets ?? []).some((name) => name.toLowerCase() === dataset))) {
+      const kept = await writtenBy(domain, candidate.materialization_id, qualified, key);
+      if (kept) return kept;
+    }
     const inDataset = domain.live
       .fleetSnapshot()
       .items.flatMap((candidate) => candidate.tables)

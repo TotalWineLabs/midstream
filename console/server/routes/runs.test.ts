@@ -320,6 +320,45 @@ describe('a run by table reference', () => {
   });
 });
 
+describe('a kept table', () => {
+  /** Shop's `returns`: its topic removed, the table kept in `sales`. The fleet lists written tables only. */
+  function withKept(): void {
+    a.live.getDetail = async () => {
+      const shop = detail(SHOP, 'sales', SALES, 'orders', FIXTURE_LOCATION);
+      shop.materialization.retired_tables = [{ name: 'returns', source_topic: 'returns', dataset: 'sales', dataset_id: SALES }];
+      shop.tables = [...shop.tables, { ...(shop.tables[0] as (typeof shop.tables)[number]), name: 'returns', source_topic: 'returns', identifier: 'sales.returns', state: 'retired' }];
+      return shop;
+    };
+    a.live.fleetSnapshot = () => {
+      const snapshot = fleet(SHOP, ['sales.orders']);
+      (snapshot.items[0] as MaterializationSummary).datasets = ['sales'];
+      return snapshot;
+    };
+  }
+
+  it('is browsed by reference, though the fleet lists only the tables still written', async () => {
+    withKept();
+    const server = await app();
+    const run = await settled(server, await start(server, { kind: 'browse', source: { domain: 'domain_a', dataset: 'sales', table: 'returns' }, liveTail: false }));
+    assert.equal(run.state, 'succeeded', run.error?.message ?? '');
+    assert.deepEqual([run.materializationId, run.table, run.rows], [SHOP, 'returns', ORDERS]);
+  });
+
+  it('is read by its name in a statement', async () => {
+    withKept();
+    const server = await app();
+    const run = await settled(server, await start(server, { kind: 'sql', sql: 'SELECT count(*) AS n FROM domain_a.sales.returns', liveTail: false }));
+    assert.equal(run.state, 'succeeded', run.error?.message ?? '');
+    assert.deepEqual(await rows(server, run), [{ n: ORDERS }]);
+  });
+
+  it('is still refused once no materialization has it', async () => {
+    withKept();
+    const answer = await start(await app(), { kind: 'browse', source: { domain: 'domain_a', dataset: 'sales', table: 'refunds' } });
+    assert.equal(answer.statusCode, 400);
+  });
+});
+
 describe('a materialization’s own run route', () => {
   it('says the run’s table by reference too, so it is refreshed and shared the same way', async () => {
     const server = await app();
