@@ -106,6 +106,9 @@ SSO_OIDC_ENABLED = False
 SSO_FIRST_SIGN_IN = "open"
 SSO_ALLOWED_EMAIL_DOMAINS = ""
 PASSWORD_SIGN_IN_ENABLED = True
+# How long an invitation's link works (handbook 18 §18.18). The invitation itself stays until it is
+# accepted or revoked: its person can still accept it through a provider, or with a new link.
+INVITATION_LINK_LIFETIME_DAYS = 7
 # The live tail (handbook 19): the newest records of a materialization's tables, served from Kafka
 # by the tail app before they are committed. Every materialization has one; `LIVE_TAIL_ENABLED` is
 # the deployment's switch, for all of them. The rest travel with the tail app's
@@ -239,6 +242,7 @@ class ControlPlaneConfig:
     #: Comma-separated, in the form `normalize_email_domains` gives; empty for every domain.
     sso_allowed_email_domains: str = SSO_ALLOWED_EMAIL_DOMAINS
     password_sign_in_enabled: bool = PASSWORD_SIGN_IN_ENABLED
+    invitation_link_lifetime_days: int = INVITATION_LINK_LIFETIME_DAYS
     live_tail_enabled: bool = LIVE_TAIL_ENABLED
     live_tail_max_rows_per_table: int = LIVE_TAIL_MAX_ROWS_PER_TABLE
     live_tail_max_bytes_per_table: int = LIVE_TAIL_MAX_BYTES_PER_TABLE
@@ -584,6 +588,12 @@ def get_config() -> ControlPlaneConfig:
         password_sign_in_enabled=_parse_bool_env(
             os.getenv("CONTROL_PLANE_PASSWORD_SIGN_IN_ENABLED"),
             default=PASSWORD_SIGN_IN_ENABLED,
+        ),
+        invitation_link_lifetime_days=_parse_int_env(
+            os.getenv("CONTROL_PLANE_INVITATION_LINK_LIFETIME_DAYS"),
+            default=INVITATION_LINK_LIFETIME_DAYS,
+            minimum=1,
+            name="CONTROL_PLANE_INVITATION_LINK_LIFETIME_DAYS",
         ),
         live_tail_enabled=_parse_bool_env(
             os.getenv("CONTROL_PLANE_LIVE_TAIL_ENABLED"),

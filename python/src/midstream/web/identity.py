@@ -18,6 +18,7 @@ from uuid import uuid4
 from midstream.config import ControlPlaneConfig
 from midstream.identity.authorization import request_context, require
 from midstream.identity.directory import DirectoryView
+from midstream.identity.invitations import MAX_INVITATIONS, new_invitation_link
 from midstream.identity.passwords import password_problem
 from midstream.identity.permissions import (
     PERMISSIONS,
@@ -35,6 +36,7 @@ from midstream.identity.validation import (
 from midstream.models.identity import Group, IdentityRequest, Role, User
 from midstream.services.identity import (
     IdentityRejection,
+    email_taken,
     new_group_id,
     new_role_id,
     new_user_id,
@@ -62,7 +64,7 @@ from midstream.web.errors import (
     unauthenticated,
 )
 
-USER_FILTERS = ("all", "active", "deactivated", "locked", "password_change")
+USER_FILTERS = ("all", "active", "invited", "deactivated", "locked", "password_change")
 USER_SORTS = ("name", "last_active", "created")
 AUDIT_PAGE_LIMIT = 200
 #: A password a preview stands in with; the real one is hashed only once the preview passes.
@@ -90,10 +92,10 @@ def list_users_view(
     *,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    """Every person, with their groups, status and last activity.
+    """Every person, with their groups, status and last activity, and every invitation waiting.
 
-    `status` narrows the list (`active`, `deactivated`, `locked`, `password_change`), `q`
-    searches names and emails, and `sort` orders it by `name`, `last_active` or `created`.
+    `status` narrows the list (`active`, `invited`, `deactivated`, `locked`, `password_change`),
+    `q` searches names and emails, and `sort` orders it by `name`, `last_active` or `created`.
     `counts` gives the size of every status filter, whatever the one chosen.
     """
     require(principal, "users.view")
@@ -216,6 +218,128 @@ async def create_user_request(
     return accept_request(directory_request(principal, "create_user", {**payload, "password_hash": password_hash}, request=request, like=event), "user", payload["user_id"])
 
 
+def invite_users_request(
+    directory_table: TableProtocol,
+    principal: Principal,
+    body: Any,
+    *,
+    request: Any = None,
+    settings_table: TableProtocol | None = None,
+    config: ControlPlaneConfig | None = None,
+    now: datetime | None = None,
+) -> IdentityAcceptance:
+    """Invite people by email, before they have an account (handbook 18 §18.18).
+
+    Body: `emails` (1-100 addresses) and `group_ids`, the groups each joins besides All Users. Each
+    email becomes an invited account holding those groups, which its person has from their first
+    sign-in: through a provider with that email, or with the invitation's link. While password
+    sign-in is on, each invitation gets a link, and the answer's `invitations` carry them - the only
+    time a link is shown: only its hash is kept. Every email is checked before any is invited; the
+    refusal lists each problem in `details.problems` (`index`, `email`, `reason`, `message`).
+    """
+    require(principal, "users.invite")
+    cfg = resolve_config(settings_table) if config is None else config
+    fields = _object(body, allowed={"emails", "group_ids"})
+    raw = fields.get("emails")
+    if not isinstance(raw, list) or not raw:
+        raise invalid_request("Name someone to invite: emails is a list of addresses", field_name="emails")
+    if len(raw) > MAX_INVITATIONS:
+        raise invalid_request(f"Invite at most {MAX_INVITATIONS} people at a time", field_name="emails")
+    view = DirectoryView.load(directory_table)
+    emails: list[str] = []
+    problems: list[dict[str, Any]] = []
+    for index, value in enumerate(raw):
+        try:
+            email = clean_email(value, field=f"emails.{index}")
+        except IdentityValidationError as error:
+            problems.append({"index": index, "email": value if isinstance(value, str) else None, "reason": "invalid", "message": str(error)})
+            continue
+        holder = view.user_by_email(email)
+        if email in emails:
+            problems.append({"index": index, "email": email, "reason": "duplicate", "message": f"{email} is named twice."})
+        elif holder is not None:
+            problems.append({"index": index, "email": email, "reason": "already_exists", "message": email_taken(holder)})
+        emails.append(email)
+    if problems:
+        message = problems[0]["message"] if len(problems) == 1 else f"{len(problems)} of these cannot be invited: " + " ".join(problem["message"] for problem in problems[:5])
+        if all(problem["reason"] == "already_exists" for problem in problems):
+            error = already_exists(message, resource="user", identifier="", field_name="emails")
+        else:
+            error = invalid_request(message, field_name="emails")
+        error.details["problems"] = problems
+        raise error
+    current = now or datetime.now(tz=UTC)
+    # An invitation link is a way to choose a password: none while passwords are off for everyone
+    # but administrators, whose people join through a provider instead.
+    expires_at = _format(current + timedelta(days=cfg.invitation_link_lifetime_days)) if cfg.password_sign_in_enabled else None
+    invitations: list[dict[str, Any]] = []
+    for email in emails:
+        user_id = new_user_id()
+        link = new_invitation_link(user_id) if expires_at is not None else None
+        invitations.append(
+            {
+                "user_id": user_id,
+                "email": email,
+                "token": None if link is None else link.token,
+                "link_hash": None if link is None else link.link_hash,
+                "link_expires_at": expires_at,
+            }
+        )
+    event = directory_request(
+        principal,
+        "invite_users",
+        {
+            "invitations": [{key: item[key] for key in ("user_id", "email", "link_hash", "link_expires_at")} for item in invitations],
+            "group_ids": fields.get("group_ids") or [],
+        },
+        request=request,
+    )
+    preview_request(directory_table, event, cfg)
+    accepted = accept_request(event, "user", invitations[0]["user_id"] if len(invitations) == 1 else "")
+    return IdentityAcceptance(
+        response={
+            **accepted.response,
+            "invitations": [
+                {"user_id": item["user_id"], "email": item["email"], "link": item["token"], "link_expires_at": item["link_expires_at"]}
+                for item in invitations
+            ],
+        },
+        request_event=event,
+    )
+
+
+def renew_invitation_request(
+    directory_table: TableProtocol,
+    principal: Principal,
+    user_id: str,
+    *,
+    request: Any = None,
+    settings_table: TableProtocol | None = None,
+    config: ControlPlaneConfig | None = None,
+    now: datetime | None = None,
+) -> IdentityAcceptance:
+    """Give an invitation a new link, shown in this answer only; the one before stops working.
+
+    Refused for an account that is not invited, while password sign-in is off, and for an
+    invitation holding access the caller lacks.
+    """
+    require(principal, "users.invite")
+    cfg = resolve_config(settings_table) if config is None else config
+    if DirectoryView.load(directory_table).users.get(user_id) is None:
+        raise not_found(f"user {user_id} was not found", resource="user", identifier=user_id)
+    link = new_invitation_link(user_id)
+    expires_at = _format((now or datetime.now(tz=UTC)) + timedelta(days=cfg.invitation_link_lifetime_days))
+    event = directory_request(
+        principal,
+        "renew_invitation",
+        {"user_id": user_id, "link_hash": link.link_hash, "link_expires_at": expires_at},
+        request=request,
+    )
+    preview_request(directory_table, event, cfg)
+    accepted = accept_request(event, "user", user_id)
+    return IdentityAcceptance(response={**accepted.response, "link": link.token, "link_expires_at": expires_at}, request_event=event)
+
+
 def update_user_request(
     directory_table: TableProtocol,
     principal: Principal,
@@ -228,9 +352,11 @@ def update_user_request(
     """Change a person's name, email, groups or status (`active` or `deactivated`).
 
     Deactivating someone ends every session they have. Send `base_revision`, the account's
-    `revision` as you read it, to be refused rather than overwrite a change you did not see.
+    `revision` as you read it, to be refused rather than overwrite a change you did not see. An
+    invitation's names, email and groups may be changed with Invite users; anyone else's account
+    needs Manage users.
     """
-    require(principal, "users.manage")
+    _require_for(directory_table, principal, user_id)
     fields = _object(body, allowed={"first_name", "last_name", "email", "group_ids", "status", "base_revision"})
     base_revision = _base_revision(fields.pop("base_revision", None))
     if not fields:
@@ -323,8 +449,9 @@ def delete_user_request(
     request: Any = None,
     config: ControlPlaneConfig | None = None,
 ) -> IdentityAcceptance:
-    """Delete a deactivated person's account. Their email can then be used again."""
-    require(principal, "users.manage")
+    """Delete a deactivated person's account, or revoke an invitation nobody accepted. Their email can
+    then be used again. Revoking needs Invite users; deleting an account, Manage users."""
+    _require_for(directory_table, principal, user_id)
     event = directory_request(principal, "delete_user", {"user_id": user_id}, request=request)
     preview_request(directory_table, event, config)
     return accept_request(event, "user", user_id)
@@ -662,6 +789,13 @@ def accept_request(event: IdentityRequest, entity_type: str, entity_id: str) -> 
     )
 
 
+def _require_for(directory_table: TableProtocol | None, principal: Principal, user_id: str) -> None:
+    """Refuse a change to an account without the permission it needs: Invite users for an invitation
+    nobody accepted, Manage users - which includes inviting - for everyone else's."""
+    target = DirectoryView.load(directory_table).users.get(user_id)
+    require(principal, "users.invite" if target is not None and target.invited else "users.manage")
+
+
 def _object(body: Any, *, allowed: set[str]) -> dict[str, Any]:
     if body is None:
         body = {}
@@ -726,8 +860,16 @@ def _describe_user(
         "deactivated_at": user.deactivated_at,
         "deactivated_by": user.deactivated_by,
         "revision": user.revision,
+        # Never the link itself: only its hash is kept, and the link was shown once, when made.
+        "invitation": None
+        if user.invitation is None
+        else {
+            "invited_at": user.invitation.invited_at,
+            "invited_by": user.invitation.invited_by,
+            "link_expires_at": user.invitation.link_expires_at,
+        },
         "administrator": target_grants.all_permissions,
-        "manageable": principal.can("users.manage") and principal.grants.covers(target_grants),
+        "manageable": principal.can("users.invite" if user.invited else "users.manage") and principal.grants.covers(target_grants),
         "self": user.user_id == principal.user_id,
     }
 
@@ -867,4 +1009,8 @@ def _after(value: str | None, moment: datetime) -> bool:
 
 
 def _utc_now() -> str:
-    return datetime.now(tz=UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return _format(datetime.now(tz=UTC))
+
+
+def _format(moment: datetime) -> str:
+    return moment.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")

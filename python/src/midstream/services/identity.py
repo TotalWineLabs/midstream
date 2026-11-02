@@ -9,10 +9,15 @@ is now — another change may have landed since the API accepted it. These rules
   putting a permission in a role, granting a role on a dataset, or changing an account whose access
   exceeds yours is refused unless you hold everything it would hand out - on each dataset it
   concerns. An administrator holds everything.
-- **There is always an active administrator.** A change that would leave none is refused.
+- **There is always an active administrator.** A change that would leave none is refused, and an
+  invitation nobody has accepted is not one.
 - **One table per name in a dataset.** A materialization claims its tables' names before any table
   exists, all of them or none (`claim_tables`), and a name is released when its table leaves the
   catalog (`release_tables`). The hourly maintenance sweeps up claims whose table is gone.
+
+An invitation is an account like any other, in the `invited` status: it holds groups and dataset
+grants, and an email nobody else may take. Its person accepts it at their first sign-in, which makes
+it `active` (`accept_invitation`); revoking it deletes it.
 
 A directory change leaves an outcome, applied or refused with a reason, that the client waits for;
 sign-in events and the control plane's own housekeeping do not. A claim's outcome is also handed to
@@ -40,6 +45,7 @@ from midstream.identity.access_tokens import (
     sign_revocation,
 )
 from midstream.identity.directory import DirectoryView
+from midstream.identity.invitations import MAX_INVITATIONS, is_link_hash, same_link
 from midstream.identity.passwords import hash_password
 from midstream.identity.permissions import (
     ADMIN_GROUP_ID,
@@ -79,6 +85,7 @@ from midstream.models.identity import (
     Group,
     IdentityRequest,
     IdentityRequestOutcome,
+    Invitation,
     PasswordCredential,
     Role,
     Session,
@@ -550,8 +557,9 @@ def _create_user(work: _Work) -> _Applied:
     view = work.view
     if user_id in view.users:
         raise IdentityRejection("already_exists", "That account already exists.", field="user_id")
-    if view.user_by_email(email) is not None:
-        raise IdentityRejection("already_exists", f"{email} already has an account.", field="email")
+    holder = view.user_by_email(email)
+    if holder is not None:
+        raise IdentityRejection("already_exists", email_taken(holder), field="email")
     _require_assignable_groups(view, group_ids, field="group_ids")
     _require_grantable(grants, view.grants_for_groups(group_ids), doing="add people to groups", view=view)
 
@@ -579,9 +587,11 @@ def _create_user(work: _Work) -> _Applied:
 
 
 def _update_user(work: _Work) -> _Applied:
-    actor, grants = _actor(work, "users.manage")
     view = work.view
     target = _require_user(work)
+    # An invitation nobody accepted yet is changed by whoever may invite; anyone else's account
+    # needs Manage users, which includes inviting.
+    actor, grants = _actor(work, "users.invite" if target.invited else "users.manage")
     _require_revision(work, target.revision, f"{target.display_name}'s account")
     _require_manageable(view, grants, target)
     payload = work.payload
@@ -600,7 +610,7 @@ def _update_user(work: _Work) -> _Applied:
         if email != target.email:
             holder = view.user_by_email(email)
             if holder is not None and holder.user_id != target.user_id:
-                raise IdentityRejection("already_exists", f"{email} already has an account.", field="email")
+                raise IdentityRejection("already_exists", email_taken(holder), field="email")
             changes["email"] = {"from": target.email, "to": email}
             updated = replace(updated, email=email)
 
@@ -620,8 +630,14 @@ def _update_user(work: _Work) -> _Applied:
     status_change: str | None = None
     if "status" in payload:
         status = payload["status"]
-        if status not in USER_STATUSES:
+        if status not in USER_STATUSES or (status == "invited" and not target.invited):
             raise IdentityRejection("invalid", "Status must be active or deactivated.", field="status")
+        if target.invited and status != target.status:
+            raise IdentityRejection(
+                "invalid",
+                f"An invitation becomes an active account when {target.email} accepts it. Revoke it instead.",
+                field="status",
+            )
         if status != target.status:
             if status == "deactivated" and target.user_id == actor.user_id:
                 raise IdentityRejection("self_action", "You cannot deactivate your own account.", field="status")
@@ -666,6 +682,13 @@ def _set_user_password(work: _Work) -> _Applied:
         raise IdentityRejection(
             "self_action",
             "Use Change password on your account page to change your own password.",
+            field="password",
+        )
+    if target.invited:
+        raise IdentityRejection(
+            "invalid",
+            f"{target.email} has not accepted their invitation yet: give them a new invitation link, "
+            "where they choose their own password.",
             field="password",
         )
     _require_manageable(work.view, grants, target)
@@ -746,9 +769,14 @@ def _unlock_user(work: _Work) -> _Applied:
 
 
 def _delete_user(work: _Work) -> _Applied:
-    actor, grants = _actor(work, "users.manage")
+    """Delete a deactivated account, or revoke an invitation nobody accepted: either frees the email.
+
+    An invitation needs no deactivating first - nobody ever used it - and whoever may invite may
+    revoke one, as long as it holds no access they lack.
+    """
     view = work.view
     target = _require_user(work)
+    actor, grants = _actor(work, "users.invite" if target.invited else "users.manage")
     if target.user_id == actor.user_id:
         raise IdentityRejection("self_action", "You cannot delete your own account.")
     if target.active:
@@ -767,8 +795,206 @@ def _delete_user(work: _Work) -> _Applied:
         delete_external_identity(work.table, identity.provider, identity.subject)
     delete_user_activity(work.table, target.user_id)
     delete_sign_in_guard(work.table, target.email)
-    work.audit("user.deleted", target=target, details={"email": target.email, "name": target.display_name})
+    if target.invited:
+        work.audit("user.invitation_revoked", target=target, details={"email": target.email})
+    else:
+        work.audit("user.deleted", target=target, details={"email": target.email, "name": target.display_name})
     return _Applied("user", target.user_id)
+
+
+# ------------------------------------------------------------------------------------ invitations
+
+
+def _invite_users(work: _Work) -> _Applied:
+    """Make an invited account for each email, holding the chosen groups: its person has them from
+    their first sign-in. All of them, or none.
+
+    The view made each account's id and link; this holds only the link's hash. Whoever invites may
+    put people only in groups whose access they hold themselves, as when adding a user.
+    """
+    _, grants = _actor(work, "users.invite")
+    payload = work.payload
+    view = work.view
+    group_ids = clean_ids(payload.get("group_ids"), field="group_ids")
+    items = payload.get("invitations")
+    if not isinstance(items, list) or not items:
+        raise IdentityRejection("invalid", "Name someone to invite.", field="emails")
+    if len(items) > MAX_INVITATIONS:
+        raise IdentityRejection("invalid", f"Invite at most {MAX_INVITATIONS} people at a time.", field="emails")
+    _require_assignable_groups(view, group_ids, field="group_ids")
+    _require_grantable(grants, view.grants_for_groups(group_ids), doing="invite people to groups", view=view)
+    actor = _actor_label(work)
+    invited: list[User] = []
+    emails: set[str] = set()
+    for index, item in enumerate(items):
+        field = f"emails.{index}"
+        if not isinstance(item, dict):
+            raise IdentityRejection("invalid", "Each invitation names its account and email.", field=field)
+        user_id = clean_identifier(item.get("user_id"), field="user_id")
+        email = clean_email(item.get("email"), field=field)
+        details = {"index": index, "email": email}
+        if email in emails:
+            raise IdentityRejection("invalid", f"{email} is named twice.", field=field, details=details)
+        emails.add(email)
+        holder = view.user_by_email(email)
+        if holder is not None:
+            raise IdentityRejection("already_exists", email_taken(holder), field=field, details=details)
+        if user_id in view.users or any(user.user_id == user_id for user in invited):
+            raise IdentityRejection("already_exists", "That account already exists.", field="user_id")
+        link_hash, link_expires_at = _invitation_link(item)
+        invited.append(
+            User(
+                user_id=user_id,
+                email=email,
+                first_name="",
+                last_name="",
+                status="invited",
+                group_ids=group_ids,
+                invitation=Invitation(
+                    invited_at=work.now,
+                    invited_by=actor,
+                    link_hash=link_hash,
+                    link_expires_at=link_expires_at,
+                ),
+                created_at=work.now,
+                created_by=actor,
+                updated_at=work.now,
+                updated_by=actor,
+            )
+        )
+    for user in invited:
+        save_user(work.table, user)
+        save_user_email(work.table, user.email, user.user_id, updated_at=work.now)
+        work.audit(
+            "user.invited",
+            target=user,
+            details={
+                "email": user.email,
+                "groups": _group_names(view, group_ids),
+                "link_expires_at": user.invitation.link_expires_at if user.invitation else None,
+            },
+        )
+    return _Applied("user", invited[0].user_id if len(invited) == 1 else None)
+
+
+def _renew_invitation(work: _Work) -> _Applied:
+    """Give an invitation a new link; the one before it stops working at once."""
+    _, grants = _actor(work, "users.invite")
+    target = _require_user(work)
+    if not target.invited or target.invitation is None:
+        raise IdentityRejection("not_invited", f"{target.display_name} has no invitation waiting: they joined already.")
+    _require_manageable(work.view, grants, target)
+    if not work.config.password_sign_in_enabled:
+        raise IdentityRejection(
+            "password_sign_in_disabled",
+            "Password sign-in is turned off here, so invitations have no link: "
+            f"{target.email} joins by signing in through a provider with that email.",
+        )
+    link_hash, link_expires_at = _invitation_link(work.payload)
+    if link_hash is None:
+        raise IdentityRejection("invalid", "The request carries no invitation link.", field="link")
+    updated = replace(
+        target,
+        invitation=replace(target.invitation, link_hash=link_hash, link_expires_at=link_expires_at),
+        revision=target.revision + 1,
+        updated_at=work.now,
+        updated_by=_actor_label(work),
+    )
+    save_user(work.table, updated)
+    work.audit("user.invitation_renewed", target=updated, details={"link_expires_at": link_expires_at})
+    # The link opens nothing until it is used: what anyone may do is unchanged.
+    return _Applied("user", target.user_id, directory_changed=False)
+
+
+def _accept_invitation(work: _Work) -> _Applied:
+    """An invited person's first sign-in, which makes the account theirs and active, and records the
+    sign-in: with the invitation's link and a password they chose, or through a provider that vouched
+    for the invited email (handbook 18 §18.18).
+
+    Sent only by the sign-in views, which checked the link or the provider's credential. The link is
+    checked again here: a new one may have replaced it, or the invitation been revoked, meanwhile.
+    """
+    payload = work.payload
+    method = str(payload.get("method") or "")
+    user = _require_user(work)
+    if not user.invited or user.invitation is None:
+        if user.active and method.startswith("sso:"):
+            # Accepted a moment ago, by another sign-in: this one only signs in.
+            return _link_identity(work)
+        raise IdentityRejection("invitation_accepted", "This invitation was accepted already. Sign in instead.")
+    invitation = user.invitation
+    if method == "password":
+        if not same_link(invitation.link_hash, payload.get("link_hash")):
+            raise IdentityRejection(
+                "invitation_invalid",
+                "This invitation link no longer works: a newer one replaced it. Ask whoever invited you for a new one.",
+            )
+        expires = _parse_time(invitation.link_expires_at)
+        if expires is None or expires <= work.now_datetime:
+            raise IdentityRejection(
+                "invitation_expired",
+                "This invitation link has expired. Ask whoever invited you for a new one.",
+            )
+        accepted = replace(
+            user,
+            first_name=clean_person_name(payload.get("first_name"), field="first_name", label="First name"),
+            last_name=clean_person_name(payload.get("last_name"), field="last_name", label="Last name"),
+            password=PasswordCredential(hash=_require_password_hash(work), set_at=work.now, set_by=user.email),
+        )
+        accepted_by = user.email
+    elif method.startswith("sso:"):
+        identity = _external_identity(work)
+        holder = find_user_by_external_identity(work.table, identity.provider, identity.subject)
+        if holder is not None and holder.user_id != user.user_id:
+            raise IdentityRejection("conflict", "That provider account already signs in as someone else.")
+        accepted = replace(user, external_identities=[*user.external_identities, identity])
+        if not user.first_name:
+            # Nobody named the invitation: the provider's name for its person.
+            first_name = clean_person_name(payload.get("first_name"), field="first_name", label="First name")
+            raw_last = payload.get("last_name")
+            last_name = clean_person_name(raw_last, field="last_name", label="Last name") if isinstance(raw_last, str) and raw_last.strip() else ""
+            accepted = replace(accepted, first_name=first_name, last_name=last_name)
+        save_external_identity(work.table, identity.provider, identity.subject, user.user_id, updated_at=work.now)
+        accepted_by = method
+    else:
+        raise IdentityRejection("invalid", "An invitation is accepted with a password or a provider's sign-in.")
+    accepted = replace(
+        accepted,
+        status="active",
+        invitation=None,
+        revision=user.revision + 1,
+        updated_at=work.now,
+        updated_by=accepted_by,
+    )
+    save_user(work.table, accepted)
+    work.audit(
+        "user.invitation_accepted",
+        target=accepted,
+        actor_id=user.user_id,
+        actor_email=user.email,
+        details={"method": method, "invited_by": invitation.invited_by, "invited_at": invitation.invited_at},
+    )
+    _record_sign_in(work, accepted)
+    return _Applied("user", user.user_id)
+
+
+def _invitation_link(value: dict[str, Any]) -> tuple[str | None, str | None]:
+    """An invitation link's hash and expiry, as the view made them: both, or neither."""
+    link_hash = value.get("link_hash")
+    expires_at = value.get("link_expires_at")
+    if link_hash is None and expires_at is None:
+        return None, None
+    expires = _parse_time(expires_at) if isinstance(expires_at, str) else None
+    if not is_link_hash(link_hash) or expires is None:
+        raise IdentityRejection("invalid", "The invitation's link is not valid.", field="link")
+    return link_hash, _format_time(expires)
+
+
+def email_taken(holder: User) -> str:
+    """Why an email cannot be given to another account: whose it is."""
+    if holder.invited:
+        return f"{holder.email} is invited already."
+    return f"{holder.email} already has an account."
 
 
 # ----------------------------------------------------------------------------------------- groups
@@ -1951,6 +2177,10 @@ def _bootstrap(work: _Work) -> _Applied:
     if existing is not None:
         user = replace(
             existing,
+            # An invitation for the bootstrap email becomes the administrator's account.
+            first_name=existing.first_name or clean_person_name(admin.first_name, field="first_name", label="First name"),
+            last_name=existing.last_name if existing.first_name else clean_person_name(admin.last_name, field="last_name", label="Last name"),
+            invitation=None,
             status="active",
             deactivated_at=None,
             deactivated_by=None,
@@ -2048,6 +2278,9 @@ _HANDLERS: dict[str, Callable[[_Work], _Applied]] = {
     "set_dataset_grant": _set_dataset_grant,
     "link_identity": _link_identity,
     "provision_user": _provision_user,
+    "invite_users": _invite_users,
+    "renew_invitation": _renew_invitation,
+    "accept_invitation": _accept_invitation,
     "claim_tables": _claim_tables,
     "release_tables": _release_tables,
     "sign_in_succeeded": _sign_in_succeeded,
@@ -2144,7 +2377,8 @@ def _permission_label(key: str) -> str:
 
 
 def _user_label(user: User) -> str:
-    return f"{user.display_name} <{user.email}>"
+    # An invitation nobody named is its email alone.
+    return f"{user.display_name} <{user.email}>" if user.display_name != user.email else user.email
 
 
 def _describe_target(target: User | Group | Role | Dataset) -> tuple[str, str, str]:

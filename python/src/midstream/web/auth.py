@@ -1,11 +1,13 @@
-"""WebView handlers for signing in and out, sessions, and changing your own password.
+"""WebView handlers for signing in and out, sessions, changing your own password, and accepting an
+invitation.
 
 Signing in is answered at once: the password, or what an identity provider vouched for, is checked
 here, and the session token is issued here, so nothing waits on an agent - except the first sign-in
-of someone a domain makes an account for, which waits until the account exists. What happened is
-still published - a sign-in, a failed attempt, a renewal, a sign-out, a provider account linked or
-an account made - and the identity agent records it: the session, the person's activity, the
-failed-attempt count that leads to a lockout, the audit log.
+of someone a domain makes an account for, or of someone it invited, which waits until the account is
+theirs. What happened is still published - a sign-in, a failed attempt, a renewal, a sign-out, a
+provider account linked, an account made or an invitation accepted - and the identity agent records
+it: the session, the person's activity, the failed-attempt count that leads to a lockout, the audit
+log.
 """
 
 from __future__ import annotations
@@ -18,7 +20,14 @@ from typing import Any
 from uuid import uuid4
 
 from midstream.config import ControlPlaneConfig, email_domain_allowed, get_config
-from midstream.identity.authorization import authenticate, authorize, directory_ready, request_context
+from midstream.identity.authorization import (
+    authenticate,
+    authorize,
+    directory_ready,
+    request_context,
+    require_directory_ready,
+)
+from midstream.identity.invitations import read_invitation_link, same_link
 from midstream.identity.passwords import (
     PASSWORD_MAX_LENGTH,
     PasswordHashingBusy,
@@ -37,7 +46,7 @@ from midstream.identity.providers import (
 )
 from midstream.identity.secrets import IdentitySecrets, get_identity_secrets
 from midstream.identity.tokens import SessionClaims, issue_token
-from midstream.identity.validation import EMAIL_MAX_LENGTH
+from midstream.identity.validation import EMAIL_MAX_LENGTH, IdentityValidationError, clean_person_name
 from midstream.models.identity import IdentityRequest, RequestContext, Session, User
 from midstream.settings import resolve_config
 from midstream.storage.identity import (
@@ -50,9 +59,10 @@ from midstream.storage.identity import (
     normalize_email,
 )
 from midstream.storage.table import TableProtocol
-from midstream.web.errors import WebError, invalid_request, too_many_requests, unauthenticated
+from midstream.web.errors import WebError, invalid_request, not_found, too_many_requests, unauthenticated
 
-#: How long the first sign-in of someone a domain makes an account for waits for the account.
+#: How long the first sign-in of someone a domain makes an account for, or invited, waits for the
+#: account to be theirs.
 PROVISION_WAIT_SECONDS = 10.0
 _PROVISION_POLL_SECONDS = 0.1
 
@@ -294,7 +304,8 @@ async def sso_sign_in(
 
     The provider's credential is checked here, against its keys or API. The person is then found:
     by the provider account, linked before; else by the email the provider vouches for, and linked
-    to it from then on; else, under the `open` first-sign-in policy, an account is made for them.
+    to it from then on - an invitation for that email is accepted, under either policy; else, under
+    the `open` first-sign-in policy, an account is made for them.
     Refusals: 403 `provider_disabled`, `email_not_allowed`, `email_unverified`, `no_account`,
     `account_deactivated`; 401 `invalid_credential`; 503 `provider_unreachable`.
     """
@@ -329,8 +340,8 @@ async def sso_sign_in(
     if user is None:
         user = find_user_by_email(directory_table, account.email)
         if user is not None:
-            action = "link_identity"
-    if user is not None and not user.active:
+            action = "accept_invitation" if user.invited else "link_identity"
+    if user is not None and user.status == "deactivated":
         return AuthResult(
             403,
             _error("forbidden", "This account is deactivated. Ask an administrator to reactivate it.", reason="account_deactivated"),
@@ -386,14 +397,15 @@ async def sso_sign_in(
     if action != "sign_in_succeeded":
         payload["provider"] = provider
         payload["subject"] = account.subject
-    if action == "provision_user":
+    if action in ("provision_user", "accept_invitation"):
         payload.update(email=account.email, first_name=account.first_name, last_name=account.last_name)
     event = _event(action, actor_id=user.user_id, actor_email=user.email, payload=payload, context=context, now=now)
     return AuthResult(
         200,
         session_payload(principal, config=config, token=issue_token(claims, secrets), providers=providers),
         event,
-        provisioning={"user_id": user.user_id, "request_id": event.request_id} if action == "provision_user" else None,
+        # The session is the account's once the agent has made it, or made the invitation theirs.
+        provisioning={"user_id": user.user_id, "request_id": event.request_id} if action in ("provision_user", "accept_invitation") else None,
     )
 
 
@@ -446,11 +458,13 @@ async def await_provisioned(
     *,
     timeout: float = PROVISION_WAIT_SECONDS,
 ) -> dict[str, Any]:
-    """Hold the answer to a first provider sign-in until the account it makes exists.
+    """Hold the answer to a first sign-in until the account it makes, or the invitation it accepts,
+    is the person's: there and active.
 
-    The account is made by the identity agent, after the view has published the request; until then
-    the session's token would be refused. Answers as the sign-in did once the account is here; 409
-    when the agent refused it; 503 when it did not apply it in time, and the person signs in again.
+    The identity agent makes the account, or accepts the invitation, after the view has published
+    the request; until then the session's token would be refused. Answers as the sign-in did once
+    the account is theirs; 409 when the agent refused it; 503 when it did not apply it in time, and
+    the person signs in again.
     """
     provisioning = value.get("provisioning")
     if not isinstance(provisioning, dict) or value.get("status") != 200:
@@ -459,7 +473,8 @@ async def await_provisioned(
     request_id = str(provisioning.get("request_id") or "")
     deadline = asyncio.get_running_loop().time() + timeout
     while True:
-        if get_user(directory_table, user_id) is not None:
+        user = get_user(directory_table, user_id)
+        if user is not None and user.active:
             return value
         outcome = get_request_outcome(directory_table, request_id)
         if outcome is not None and outcome.status == "rejected":
@@ -475,6 +490,190 @@ async def await_provisioned(
                 "body": _error("unavailable", "Your account is still being made. Sign in again in a moment.", reason="provisioning"),
             }
         await asyncio.sleep(_PROVISION_POLL_SECONDS)
+
+
+def describe_invitation(
+    directory_table: TableProtocol | None,
+    body: Any,
+    *,
+    settings_table: TableProtocol | None = None,
+    config: ControlPlaneConfig | None = None,
+    providers: ProviderSettings | None = None,
+    now: int | None = None,
+) -> dict[str, Any]:
+    """What an invitation link is for, to the page that opens it (handbook 18 §18.18).
+
+    Body `{"token"}`: the link is the credential, so this needs no session, and says nothing to
+    anyone without a link that works now - 404 for one that never did or no longer does, 410 for
+    one that expired. Answers the invited email and names, who invited them, until when the link
+    works, and how they may accept: with a password, through the providers listed, or both.
+    """
+    cfg = resolve_config(settings_table) if config is None else config
+    require_directory_ready(directory_table)
+    if not isinstance(body, dict):
+        raise invalid_request("request body must be an object")
+    user, _ = invitation_for_link(directory_table, body.get("token"), now=_now() if now is None else now)
+    invitation = user.invitation
+    assert invitation is not None
+    inviter = find_user_by_email(directory_table, invitation.invited_by)
+    return {
+        "email": user.email,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "invited_by": inviter.display_name if inviter is not None else invitation.invited_by,
+        "invited_at": invitation.invited_at,
+        "link_expires_at": invitation.link_expires_at,
+        "password_sign_in": _password_accepted(directory_table, user, cfg),
+        "providers": [item for item in sign_in_providers(cfg, providers) if item["type"] == "sso"],
+        "password_policy": {"min_length": cfg.password_min_length, "max_length": PASSWORD_MAX_LENGTH},
+    }
+
+
+async def accept_invitation(
+    directory_table: TableProtocol | None,
+    body: Any,
+    *,
+    request: Any = None,
+    settings_table: TableProtocol | None = None,
+    config: ControlPlaneConfig | None = None,
+    secrets: IdentitySecrets | None = None,
+    now: int | None = None,
+) -> AuthResult:
+    """Accept an invitation with its link and a password of one's own, and start a session there.
+
+    Body `{"token", "first_name", "last_name", "password"}`. Whoever holds the link may accept the
+    invitation it names, until it expires or a newer link replaces it. Answers 200 with the session
+    once the identity agent has made the account theirs (the view waits for it, as for a provider's
+    first sign-in); 404 for a link that does not work, 410 for one that expired, 403
+    `password_sign_in_disabled` where only administrators may use a password, 400 for a name or a
+    password the rules refuse, 503 while sign-in is unavailable.
+    """
+    cfg = resolve_config(settings_table) if config is None else config
+    identity_secrets = get_identity_secrets() if secrets is None else secrets
+    current = _now() if now is None else now
+    context = request_context(request) if request is not None else RequestContext()
+    if not identity_secrets.can_sign_in:
+        return AuthResult(
+            503,
+            _error(
+                "unavailable",
+                "Sign-in is not configured on this control plane: it has no session signing key.",
+                reason="sign_in_unavailable",
+            ),
+        )
+    if not directory_ready(directory_table):
+        return AuthResult(
+            503,
+            _error(
+                "unavailable",
+                "The control plane is starting and still reading its tables back. Try again in a moment.",
+                reason="starting",
+            ),
+        )
+    if not isinstance(body, dict):
+        return AuthResult(400, invalid_request("request body must be an object").to_response())
+    try:
+        user, link_hash = invitation_for_link(directory_table, body.get("token"), now=current)
+        if not _password_accepted(directory_table, user, cfg):
+            raise WebError(
+                code="forbidden",
+                message=f"Password sign-in is turned off here. Accept the invitation by signing in with your company account as {user.email}.",
+                details={"reason": "password_sign_in_disabled"},
+                status_code=403,
+            )
+        try:
+            first_name = clean_person_name(body.get("first_name"), field="first_name", label="First name")
+            last_name = clean_person_name(body.get("last_name"), field="last_name", label="Last name")
+        except IdentityValidationError as error:
+            raise invalid_request(str(error), field_name=error.field) from error
+        password = body.get("password")
+        problem = password_problem(password, min_length=cfg.password_min_length, email=user.email, first_name=first_name, last_name=last_name)
+        if problem is not None:
+            raise invalid_request(problem, field_name="password")
+        password_hash = await hash_new_password(password)
+    except WebError as error:
+        return AuthResult(error.status_code, error.to_response())
+
+    session_expires_at = current + cfg.session_max_lifetime_hours * 3600
+    claims = SessionClaims(
+        session_id=f"ses-{uuid4().hex[:16]}",
+        user_id=user.user_id,
+        session_epoch=user.session_epoch,
+        issued_at=current,
+        expires_at=min(current + cfg.session_idle_timeout_minutes * 60, session_expires_at),
+        session_expires_at=session_expires_at,
+        signed_in_at=current,
+        method="password",
+    )
+    principal = Principal(
+        kind="user",
+        grants=cached_grants(directory_table, user),
+        user_id=user.user_id,
+        email=user.email,
+        first_name=first_name,
+        last_name=last_name,
+        session_id=claims.session_id,
+        session_expires_at=claims.session_expires_at,
+        expires_at=claims.expires_at,
+        issued_at=claims.issued_at,
+        signed_in_at=claims.signed_in_at,
+        sign_in_method=claims.method,
+    )
+    event = _event(
+        "accept_invitation",
+        actor_id=user.user_id,
+        actor_email=user.email,
+        payload={
+            "user_id": user.user_id,
+            "method": "password",
+            "link_hash": link_hash,
+            "password_hash": password_hash,
+            "first_name": first_name,
+            "last_name": last_name,
+            "session_id": claims.session_id,
+            "created_at": _iso(current),
+            "expires_at": _iso(claims.session_expires_at),
+        },
+        context=context,
+        now=current,
+    )
+    return AuthResult(
+        200,
+        session_payload(principal, config=cfg, token=issue_token(claims, identity_secrets)),
+        event,
+        provisioning={"user_id": user.user_id, "request_id": event.request_id},
+    )
+
+
+def invitation_for_link(directory_table: TableProtocol | None, token: Any, *, now: int) -> tuple[User, str]:
+    """The invited account a link is for now, and the link's hash; 404 or 410 for a link that does
+    not work. Every link that does not work reads the same, whatever is wrong with it."""
+    read = read_invitation_link(token)
+    user = None if read is None else get_user(directory_table, read[0])
+    if read is None or user is None or user.invitation is None or not user.invited or not same_link(user.invitation.link_hash, read[1]):
+        error = not_found(
+            "This invitation link does not work: a newer link replaced it, or the invitation was revoked "
+            "or accepted. Ask whoever invited you for a new link, or sign in.",
+            resource="invitation",
+            identifier="",
+        )
+        error.details["reason"] = "invitation_invalid"
+        raise error
+    expires = _parse_time(user.invitation.link_expires_at)
+    if expires is None or expires <= now:
+        raise WebError(
+            code="gone",
+            message="This invitation link has expired. Ask whoever invited you for a new one.",
+            details={"reason": "invitation_expired"},
+            status_code=410,
+        )
+    return user, read[1]
+
+
+def _password_accepted(directory_table: TableProtocol | None, user: User, config: ControlPlaneConfig) -> bool:
+    """Whether this person may accept their invitation with a password: wherever password sign-in
+    is on, and an invited administrator always, as at sign-in."""
+    return config.password_sign_in_enabled or cached_grants(directory_table, user).all_permissions
 
 
 def refresh_session(

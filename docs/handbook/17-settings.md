@@ -130,7 +130,7 @@ advanced sits behind the section's **Advanced** toggle.
 | `sign_in_lockout_minutes` | `…SIGN_IN_LOCKOUT_MINUTES` | 15 | 1–1,440 | Lockout duration |
 | `audit_log_retention_days` | `…AUDIT_LOG_RETENTION_DAYS` | 90 | 1–3,650 | Audit log retention |
 
-**Sign-in** — single sign-on and password sign-in ([18 — Identity and access](./18-identity-and-access.md) §18.17)
+**Sign-in** — single sign-on, password sign-in and invitation links ([18 — Identity and access](./18-identity-and-access.md) §18.17, §18.18)
 
 | Key | Env var | Default | Bounds | Label |
 |---|---|---|---|---|
@@ -141,6 +141,7 @@ advanced sits behind the section's **Advanced** toggle.
 | `sso_first_sign_in` | `…SSO_FIRST_SIGN_IN` | `open` | `open`, `invited` | First sign-in |
 | `sso_allowed_email_domains` | `…SSO_ALLOWED_EMAIL_DOMAINS` | empty: any | at most 50 email domains | Allowed email domains |
 | `password_sign_in_enabled` | `…PASSWORD_SIGN_IN_ENABLED` | on | — | Password sign-in (danger: off, administrators only) |
+| `invitation_link_lifetime_days` | `…INVITATION_LINK_LIFETIME_DAYS` | 7 | 1–90 | Invitation links last — how long a link made for an invitation works; applies to new links |
 
 **Data protection** — what new materializations mask before they write (22).
 

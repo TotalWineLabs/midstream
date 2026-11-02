@@ -151,7 +151,8 @@ def authenticate(
             reason="session_expired" if error.reason == "expired" else "invalid_session",
         ) from error
     user = get_user(directory_table, claims.user_id)
-    if user is None:
+    if user is None or user.invited:
+        # An invitation is no account until it is accepted, which the sign-in that accepts it waits for.
         raise unauthenticated("Your session is not valid. Sign in again.", reason="invalid_session")
     if not user.active:
         raise unauthenticated("This account is deactivated.", reason="account_deactivated")
@@ -204,7 +205,8 @@ def _token_principal(text: str, directory_table: TableProtocol | None, *, secret
         if owner.provider and owner.subject
         else None
     ) or find_user_by_email(directory_table, owner.email)
-    if user is None:
+    if user is None or user.invited:
+        # Invited here is not joined: the invitation's access waits for its person's first sign-in.
         raise unauthenticated("The owner of this access token has no account here.", reason="token_unknown_owner")
     if not user.active:
         raise unauthenticated("The account this token belongs to can no longer sign in.", reason="account_deactivated")

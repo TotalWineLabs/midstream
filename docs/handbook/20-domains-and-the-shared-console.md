@@ -201,7 +201,9 @@ unknown key but at most once a minute (`identity/providers/keys.py`). Then the p
 1. the account linked to this provider account (`external-identity:<provider>:<subject>` in the
    directory), so a person whose email changes at the provider keeps their account;
 2. else the account with the email the provider vouches for — linked from then on (identity request
-   `link_identity`, audit `user.identity_linked`);
+   `link_identity`, audit `user.identity_linked`); an invitation for that email is accepted, under
+   either policy (`accept_invitation`, audit `user.invitation_accepted`; 18 §18.18), so one sign-in
+   accepts the person's invitations in every domain that invited them;
 3. else, under the first-sign-in policy `open`, a new account in All Users (identity request
    `provision_user`, audit `user.provisioned`); under `invited`, `403 no_account`.
 

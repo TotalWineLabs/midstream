@@ -182,6 +182,11 @@ as a catalog with an access token ([11 §11.8](./11-iceberg-tables-and-storage.m
 new incarnation, with another `table_uuid`. The runtime stamps what it keeps of a table with its
 uuid and ignores another incarnation's ([10 §10.8](./10-runtime-internals.md)).
 
+**Invitation** — An account made by email before its person has signed in, in the `invited` status:
+it holds the groups and dataset roles chosen for them, and becomes theirs at their first sign-in,
+through a provider with that email or with its link, shown once to whoever invited them
+([18 §18.18](./18-identity-and-access.md)).
+
 **Kept table** — A table whose topic was removed and that was kept: state `retired`, read-only,
 still in its dataset and the catalog, its name still claimed, still maintained. Adding its topic back writes it again
 from where it stopped ([11 §11.7](./11-iceberg-tables-and-storage.md)).

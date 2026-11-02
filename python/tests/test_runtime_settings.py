@@ -387,6 +387,7 @@ class RenderedRuntimeTests(unittest.TestCase):
             "sso_first_sign_in": "invited",
             "sso_allowed_email_domains": "example.com",
             "password_sign_in_enabled": False,
+            "invitation_link_lifetime_days": 2,
             "live_tail_enabled": False,
             "live_tail_max_rows_per_table": 5000,
             "live_tail_max_bytes_per_table": 16 * 1024 * 1024,

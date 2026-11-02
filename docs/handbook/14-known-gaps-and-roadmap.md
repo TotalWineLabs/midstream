@@ -941,3 +941,22 @@ The object store layer as built (`lakehouse/store/`, 11 §11.1a; 12 §12.12a). I
   cache does not cover its Azure extension (console 16).
 - **Measured on GCS only**: throughput, commit times and the console's timings (13 §13.8, 20 §20.15)
   are still to be measured on S3 and Azure; the drop's speed, on any backend (§14.2).
+
+## 14.21 Invitations: open items
+
+Invitations as built (18 §18.18): an invited account per email, accepted at its person's first sign-in
+through a provider or with its link.
+
+- **Nothing is delivered.** Whoever invites copies each link and sends it themselves; the console shows
+  it once. *To implement:* a notifier that sends the link by email (or another channel) as the
+  invitation is made or renewed; it needs only the link and the address, both in the answer to the
+  invitation, and the console's URL, which only the console knows.
+- **An invitation never expires on its own.** Its link does, after `invitation_link_lifetime_days`; the
+  invitation stays until it is accepted or revoked, so its person can still accept it through a
+  provider months later. *To consider:* a lifetime for the invitation itself, swept by the hourly
+  maintenance.
+- **Per domain.** An invitation is an account in one domain, as every account is; inviting someone to
+  several domains takes an invitation in each. One provider sign-in accepts all of them at once.
+- **Dataset roles are given on the dataset**, through its Share popover, not in the invitation dialog,
+  which chooses groups only.
+

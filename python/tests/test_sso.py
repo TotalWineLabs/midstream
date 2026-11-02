@@ -41,7 +41,7 @@ from midstream.storage.identity import (
 )
 from midstream.web import auth
 
-from test_identity import CONFIG, PASSWORD, SECRETS, FakeTable, directory, http_request, make_user, store_user
+from test_identity import CONFIG, PASSWORD, SECRETS, FakeTable, directory, http_request, make_invited, make_user, request, store_user
 
 TENANT = "11111111-2222-3333-4444-555555555555"
 ISSUER = "https://dex.example.com"
@@ -469,6 +469,52 @@ class SsoSignInTests(ProviderSetUp):
         # Invited: an administrator adds them, and they sign in to that account.
         store_user(self.table, make_user("alan", "alan@example.com"))
         self.assertEqual(self.sign_in(self.dex(), config=replace(ENABLED, sso_first_sign_in="invited")).status, 200)
+
+    def test_a_provider_sign_in_accepts_an_invitation_for_its_email(self) -> None:
+        store_user(self.table, make_invited("usr-alan", "alan@example.com", groups=["editor"]))
+        result = self.sign_in(self.dex())
+        self.assertEqual(200, result.status)
+        self.assertEqual("accept_invitation", result.request_event.action)
+        self.assertEqual({"user_id": "usr-alan", "request_id": result.request_event.request_id}, result.provisioning)
+        # Its session is not theirs until the agent has made the invitation theirs.
+        self.assertEqual(503, run(auth.await_provisioned(self.table, result.to_value(), timeout=0.05))["status"])
+
+        self.assertEqual("applied", self.apply(result.request_event).status)
+        self.assertEqual(200, run(auth.await_provisioned(self.table, result.to_value()))["status"])
+        user = get_user(self.table, "usr-alan")
+        self.assertEqual(
+            ("active", "Alan", "Turing", None, ["editor"], None),
+            (user.status, user.first_name, user.last_name, user.invitation, user.group_ids, user.password),
+        )
+        self.assertEqual([ExternalIdentity("oidc", "dex-alan")], user.external_identities)
+        self.assertEqual("usr-alan", find_user_by_external_identity(self.table, "oidc", "dex-alan").user_id)
+        self.assertIn("user.invitation_accepted", audited(self.audit))
+        principal = authenticate(http_request(result.body["token"]), self.table, secrets=SECRETS)
+        self.assertTrue(principal.can("materializations.create"))
+        # From then on they sign in by their provider account.
+        self.assertEqual("sign_in_succeeded", self.sign_in(self.dex()).request_event.action)
+
+    def test_invited_admits_whoever_it_invited(self) -> None:
+        store_user(self.table, make_invited("usr-alan", "alan@example.com"))
+        result = self.sign_in(self.dex(), config=replace(ENABLED, sso_first_sign_in="invited"))
+        self.assertEqual((200, "accept_invitation"), (result.status, result.request_event.action))
+
+    def test_a_named_invitation_keeps_its_names_and_two_first_sign_ins_both_sign_in(self) -> None:
+        store_user(self.table, replace(make_invited("usr-alan", "alan@example.com"), first_name="Al", last_name="T."))
+        first, second = self.sign_in(self.dex()), self.sign_in(self.dex())
+        self.assertEqual("applied", self.apply(first.request_event).status)
+        # Accepted a moment ago by the first: the second only signs in.
+        self.assertEqual("applied", self.apply(second.request_event).status)
+        user = get_user(self.table, "usr-alan")
+        self.assertEqual(("Al", "T.", "active"), (user.first_name, user.last_name, user.status))
+        self.assertIsNotNone(get_session(self.table, "usr-alan", second.request_event.payload["session_id"]))
+
+    def test_an_invitation_revoked_meanwhile_refuses_its_sign_in(self) -> None:
+        store_user(self.table, make_invited("usr-alan", "alan@example.com"))
+        result = self.sign_in(self.dex())
+        self.assertEqual("applied", self.apply(request("delete_user", "admin", {"user_id": "usr-alan"})).status)
+        self.assertEqual("rejected", self.apply(result.request_event).status)
+        self.assertEqual(409, run(auth.await_provisioned(self.table, result.to_value()))["status"])
 
     def test_allowed_email_domains_are_checked_first(self) -> None:
         config = replace(ENABLED, sso_allowed_email_domains="corp.example.com")

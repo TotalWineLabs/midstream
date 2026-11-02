@@ -23,6 +23,7 @@ from test_identity import (  # noqa: E402
     apply,
     directory,
     http_request,
+    make_invited,
     make_user,
     request,
     session_token,
@@ -663,7 +664,7 @@ class DatasetViewTests(unittest.TestCase):
         self.assertEqual({"dataset-reader", "dataset-writer", "dataset-owner"}, {role["role_id"] for role in listed["roles"]})
         self.assertTrue(all(role["grantable"] for role in listed["roles"]))
         # Whom an owner can share it with, whether or not they may browse people and groups.
-        self.assertIn({"user_id": "manager", "name": "Manager Person", "email": "manager@example.com"}, listed["candidates"]["users"])
+        self.assertIn({"user_id": "manager", "name": "Manager Person", "email": "manager@example.com", "invited": False}, listed["candidates"]["users"])
         self.assertNotIn("guest", [group["group_id"] for group in listed["candidates"]["groups"]])
         self.assertIn("all-users", [group["group_id"] for group in listed["candidates"]["groups"]])
 
@@ -683,6 +684,21 @@ class DatasetViewTests(unittest.TestCase):
             with self.subTest(principal=principal_id, body=body), self.assertRaises(WebError) as caught:
                 set_dataset_grant_request(self.table, admin, "shop", principal_id, body, request=http_request())
             self.assertEqual(status, caught.exception.status_code)
+
+    def test_a_dataset_is_shared_with_someone_invited_before_they_join(self) -> None:
+        from midstream.web.datasets import list_dataset_grants_view, set_dataset_grant_request
+
+        store_user(self.table, make_invited("usr-invited", "ada@example.com"))
+        store_user(self.table, make_user("leaver", "leaver@example.com", status="deactivated"))
+        admin = self.principal("admin")
+        candidates = list_dataset_grants_view(self.table, admin, "shop")["candidates"]["users"]
+        self.assertIn({"user_id": "usr-invited", "name": "ada@example.com", "email": "ada@example.com", "invited": True}, candidates)
+        self.assertNotIn("leaver", [candidate["user_id"] for candidate in candidates])
+
+        accepted = set_dataset_grant_request(self.table, admin, "shop", "usr-invited", {"role_ids": ["dataset-writer"]}, request=http_request())
+        self.assertEqual("applied", apply_identity_request(self.table, self.audit, accepted.request_event, config=CONFIG, secrets=SECRETS).status)
+        grant = next(grant for grant in list_dataset_grants_view(self.table, admin, "shop")["grants"] if grant["principal_id"] == "usr-invited")
+        self.assertEqual((True, ["dataset-writer"]), (grant["invited"], grant["role_ids"]))
 
     def test_the_views_authorize_on_the_dataset_they_name(self) -> None:
         with self.assertRaises(WebError) as caught:

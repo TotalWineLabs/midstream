@@ -13,8 +13,10 @@ from dataclasses import dataclass, field
 import dataclasses
 from typing import Any
 
-#: A deactivated person cannot sign in, and every session they had ends at its next request.
-USER_STATUSES = ("active", "deactivated")
+#: An invited person's account exists before they first sign in: it holds the groups and dataset roles
+#: chosen for them, and becomes active when they accept the invitation. A deactivated person cannot
+#: sign in, and every session they had ends at its next request.
+USER_STATUSES = ("active", "invited", "deactivated")
 
 #: How a group gets its members: chosen by people, every signed-in person, or everyone not signed in.
 GROUP_MEMBERSHIPS = ("assigned", "authenticated", "guests")
@@ -48,6 +50,12 @@ DIRECTORY_ACTIONS = (
     # records the sign-in, as `sign_in_succeeded` does.
     "link_identity",
     "provision_user",
+    # Invitations (handbook 18 §18.18): accounts made by email before their people sign in, a new
+    # link to accept one with a password, and the first sign-in that accepts it - which records the
+    # sign-in too.
+    "invite_users",
+    "renew_invitation",
+    "accept_invitation",
     # Claiming the names a materialization's new tables take in their datasets: sent by request
     # intake, never by the API, and answered to the workflow as well as to whoever waits on it.
     "claim_tables",
@@ -145,14 +153,56 @@ class ExternalIdentity:
 
 
 @dataclass(frozen=True, slots=True)
+class Invitation:
+    """How someone was invited, until they accept: who invited them, and the link they may accept with.
+
+    The link carries a secret that lets whoever holds it accept the invitation with a password of
+    their own; only its SHA-256 is kept (`identity/invitations.py`). A new link replaces the hash, so
+    the old one stops working. An invitation made while password sign-in is off has no link: its
+    person accepts it by signing in through a provider with the invited email.
+    """
+
+    invited_at: str
+    invited_by: str
+    link_hash: str | None = None
+    link_expires_at: str | None = None
+
+    def __post_init__(self) -> None:
+        _require(self, "invited_at", "invited_by")
+        if (self.link_hash is None) != (self.link_expires_at is None):
+            raise ValueError("an invitation link needs both its hash and its expiry")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "invited_at": self.invited_at,
+            "invited_by": self.invited_by,
+            "link_hash": self.link_hash,
+            "link_expires_at": self.link_expires_at,
+        }
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any] | None) -> "Invitation | None":
+        if not value:
+            return None
+        return cls(
+            invited_at=value["invited_at"],
+            invited_by=value["invited_by"],
+            link_hash=value.get("link_hash"),
+            link_expires_at=value.get("link_expires_at"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class User:
-    """A person who can sign in.
+    """A person who can sign in, or who is invited to.
 
     `email` is how they sign in and is unique, without regard to case; `user_id` never changes, so
     it is what everything else refers to. `last_name` is empty only for someone an identity provider
-    gave a single name. `group_ids` holds the groups they were added to; every
+    gave a single name, and both names only while an invitation nobody named waits to be accepted.
+    `group_ids` holds the groups they were added to; every
     signed-in person is also in All Users. `session_epoch` rises whenever all their sessions must
-    end, and a session issued under an older epoch is refused.
+    end, and a session issued under an older epoch is refused. `invitation` is set while the account
+    is `invited`.
     """
 
     user_id: str
@@ -171,11 +221,17 @@ class User:
     revision: int = 1
     deactivated_at: str | None = None
     deactivated_by: str | None = None
+    invitation: Invitation | None = None
 
     def __post_init__(self) -> None:
-        _require(self, "user_id", "email", "first_name", "created_at", "created_by")
-        _require(self, "updated_at", "updated_by")
+        _require(self, "user_id", "email", "created_at", "created_by", "updated_at", "updated_by")
         _choice("status", self.status, USER_STATUSES)
+        if self.status == "invited":
+            if self.invitation is None:
+                raise ValueError("an invited account needs its invitation")
+        else:
+            # Whoever accepts an invitation gives their name, or their provider does.
+            _require(self, "first_name")
         if self.session_epoch < 0:
             raise ValueError("session_epoch must be >= 0")
         if self.revision < 1:
@@ -183,11 +239,17 @@ class User:
 
     @property
     def display_name(self) -> str:
-        return f"{self.first_name} {self.last_name}".strip()
+        """Their name, or their email while an invitation nobody named waits to be accepted."""
+        return f"{self.first_name} {self.last_name}".strip() or self.email
 
     @property
     def active(self) -> bool:
         return self.status == "active"
+
+    @property
+    def invited(self) -> bool:
+        """Whether this account waits for its person to accept an invitation."""
+        return self.status == "invited"
 
     @property
     def must_change_password(self) -> bool:
@@ -217,6 +279,7 @@ class User:
             "updated_by": self.updated_by,
             "deactivated_at": self.deactivated_at,
             "deactivated_by": self.deactivated_by,
+            "invitation": None if self.invitation is None else self.invitation.to_dict(),
         }
 
     @classmethod
@@ -242,6 +305,7 @@ class User:
             updated_by=value["updated_by"],
             deactivated_at=value.get("deactivated_at"),
             deactivated_by=value.get("deactivated_by"),
+            invitation=Invitation.from_dict(value.get("invitation")),
         )
 
 
