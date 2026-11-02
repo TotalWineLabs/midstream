@@ -90,9 +90,9 @@ export class StatementRun extends Run {
   }
 
   protected async execute(): Promise<void> {
-    // A run as of an older snapshot, or asked for none, reads no tail of any table.
-    const tails = this.tailAccess !== null;
-    await this.fetchTails(this.sources.map((source) => ({ key: sourceKey(source), table: source.name, catalog: source.catalog, access: tails ? source.tail : null })));
+    // Each table's tail through its own domain's tail app: none of any, as of an older snapshot or
+    // asked for none (`store.ts::readsTails`), which leaves every source without one.
+    await this.fetchTails(this.sources.map((source) => ({ key: sourceKey(source), table: source.name, catalog: source.catalog, access: source.tail })));
     this.throwIfCancelled();
     const planned = this.sources.map((source) => ({
       source,
@@ -110,7 +110,7 @@ export class StatementRun extends Run {
     assertWithinCachedBudget(objects);
     this.changed(true);
 
-    const release = await this.admit(this.signal);
+    const release = await this.admitted();
     try {
       await mkdir(this.workDir, { recursive: true });
       const opened = await objectSources(objects);

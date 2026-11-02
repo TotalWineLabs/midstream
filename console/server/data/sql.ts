@@ -1,4 +1,8 @@
 import { badRequest } from '../errors.ts';
+import { stripStringsAndComments } from '../../shared/statementNames.ts';
+
+/** Shared with the browser, which reads the tables a draft names by the same rules. */
+export { stripStringsAndComments };
 
 /** Quote a SQL identifier for DuckDB, escaping embedded double quotes. */
 export function quoteIdentifier(value: string): string {
@@ -193,63 +197,4 @@ export function forbiddenRelation(sql: string): string | null {
     }
   }
   return null;
-}
-
-/**
- * Blank out string literals and comments so keyword scanning cannot be fooled by data.
- *
- * By default quoted identifiers are blanked too and the text shrinks. `keepLength` blanks string
- * literals and comments with spaces instead and keeps quoted identifiers, so a position in the
- * result is the same position in the statement.
- */
-export function stripStringsAndComments(sql: string, options: { keepLength?: boolean } = {}): string {
-  const keep = options.keepLength ?? false;
-  let result = '';
-  let index = 0;
-  const blank = (text: string): string => text.replace(/[^\n]/g, ' ');
-
-  while (index < sql.length) {
-    const char = sql[index] as string;
-    const next = sql[index + 1];
-
-    if (char === '-' && next === '-') {
-      // A `--` comment runs to the first carriage return or line feed, as DuckDB ends it (so a
-      // forbidden token hidden after `--x\r` is still scanned); the terminator itself is kept.
-      const offset = sql.slice(index).search(/[\r\n]/);
-      const end = offset === -1 ? sql.length : index + offset;
-      if (keep) result += blank(sql.slice(index, end));
-      index = end;
-      continue;
-    }
-    if (char === '/' && next === '*') {
-      const found = sql.indexOf('*/', index + 2);
-      const end = found === -1 ? sql.length : found + 2;
-      if (keep) result += blank(sql.slice(index, end));
-      index = end;
-      continue;
-    }
-    if (char === "'" || char === '"' || char === '$') {
-      const quote = char;
-      let cursor = index + 1;
-      while (cursor < sql.length) {
-        if (sql[cursor] === quote) {
-          if (sql[cursor + 1] === quote) {
-            cursor += 2;
-            continue;
-          }
-          break;
-        }
-        cursor += 1;
-      }
-      const end = Math.min(cursor + 1, sql.length);
-      if (keep) result += quote === '"' ? sql.slice(index, end) : blank(sql.slice(index, end));
-      // Preserve identifier boundaries so `"a"."b"` does not collapse into one token.
-      else result += quote === '"' ? ' x ' : ' ';
-      index = cursor + 1;
-      continue;
-    }
-    result += char;
-    index += 1;
-  }
-  return result;
 }

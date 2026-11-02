@@ -82,17 +82,22 @@ export class BrowseRun extends Run {
   /** A refresh in flight: a second one waits for it rather than fetching the same records again. */
   private refreshing: Promise<TailFetchResult> | null = null;
 
+  /** The table it browses, by its name: a browse run always reads one. */
+  private readonly table: string;
+
   constructor(init: RunInit) {
     super(init);
+    if (init.tableName === null) throw new Error('a browse run reads a table');
+    this.table = init.tableName;
     this.filters = init.request.filters ?? [];
     this.order = init.request.order ?? 'newest';
   }
 
   protected async execute(): Promise<void> {
     const range = this.request.range;
-    await this.fetchTails([{ key: this.tableName, table: this.tableName, catalog: this.catalog }]);
+    await this.fetchTails([{ key: this.table, table: this.table, catalog: this.catalog }]);
     this.throwIfCancelled();
-    const selected = [...this.tailObjects(this.tableName), ...this.catalog.objects].filter((object) => overlapsRange(object, range));
+    const selected = [...this.tailObjects(this.table), ...this.catalog.objects].filter((object) => overlapsRange(object, range));
     this.segments = orderObjects(selected, this.order).map((object) => {
       const whole = this.filters.length === 0 && object.rows !== null && insideRange(object, range);
       return { object, whole, count: whole ? object.rows : null };
@@ -127,7 +132,7 @@ export class BrowseRun extends Run {
     this.phase = 'scanning';
     this.changed(true);
 
-    const release = await this.admit(this.signal);
+    const release = await this.admitted();
     try {
       await this.countSegments(pending);
     } finally {
@@ -389,7 +394,7 @@ export class BrowseRun extends Run {
   }
 
   private async appendTail(access: TailAccess): Promise<TailFetchResult> {
-    const tail = this.tails.get(this.tableName);
+    const tail = this.tails.get(this.table);
     // An export is reading the rows as they are: what arrived meanwhile waits for the next refresh.
     if (this.state !== 'succeeded' || !tail || tail.stopped || this.rowsHeld) return { kind: 'unchanged' };
     const result = await tail.fetch(access, this.workDir, this.signal, () => !this.disposed && !this.rowsHeld);
@@ -440,7 +445,7 @@ export class BrowseRun extends Run {
    * are consecutive, so they go together; the tail says so, and stops.
    */
   private async dropMissingTail(): Promise<boolean> {
-    const tail = this.tails.get(this.tableName);
+    const tail = this.tails.get(this.table);
     if (!tail || tail.objects.length === 0) return false;
     const missing = await Promise.all(tail.objects.map((object) => accessFile(object.uri).then(() => false, () => true)));
     if (!missing.some(Boolean)) return false;

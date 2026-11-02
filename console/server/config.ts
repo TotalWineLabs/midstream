@@ -266,6 +266,11 @@ const tunableDeployment = {
    * change; a bigger one shows its size and waits for Run. 0: it never runs by itself.
    */
   autoRunMaxBytes: int('CONSOLE_AUTO_RUN_MAX_BYTES', 256 * 1024 * 1024),
+  /**
+   * How many of one person's runs may scan at once, within `runConcurrency`; the rest wait their
+   * turn, so one person's explorations cannot take every scan. 0: no limit but the console's.
+   */
+  runConcurrencyPerPerson: int('CONSOLE_RUN_CONCURRENCY_PER_PERSON', 2),
 
   /**
    * The live tail: a run of a table, every materialization's, also reads the records newer than its

@@ -106,6 +106,15 @@ export function unreadableTable(location: string, cause: unknown): ConsoleError 
   return unavailable(`the table at ${location} could not be read: ${why}`, { location });
 }
 
+/**
+ * What a statement that reads no table at all - `SELECT 1`, from Explore with no table chosen - is
+ * read against: nothing, as of now. Data access must still be on.
+ */
+export function noTableCatalog(): Catalog {
+  assertQueryable();
+  return emptyCatalog('', null, null, 'the statement reads no table');
+}
+
 function emptyCatalog(materializationId: string, table: string | null, location: string | null, reason: string): Catalog {
   return {
     materializationId,

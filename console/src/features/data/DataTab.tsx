@@ -859,7 +859,7 @@ export function DataTab({
                 {peekOpen && run ? (
                   <HeadPeek
                     materializationId={materializationId}
-                    table={run.table}
+                    table={run.table ?? tableName}
                     refreshMs={liveRefreshMs}
                     visible={seen}
                     schemaOrder={schemaOrder}

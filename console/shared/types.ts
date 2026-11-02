@@ -1124,6 +1124,16 @@ export type RunKind = 'browse' | 'sql';
 export type RunOrder = 'newest' | 'oldest';
 
 /**
+ * A table, wherever it is: its domain, its dataset and its name there. SQL reads it as
+ * `<domain>.<dataset>.<table>` (handbook 20); a run started from Explore names its table this way.
+ */
+export interface TableRef {
+  domain: string;
+  dataset: string;
+  table: string;
+}
+
+/**
  * Everything one press of Run asks for.
  *
  * `browse` is the structured view of one table — a time range and filters over every column; `sql`
@@ -1134,10 +1144,18 @@ export type RunOrder = 'newest' | 'oldest';
 export interface RunRequest {
   kind: RunKind;
   /**
-   * The table the run is about: the one browsed, or the one a statement's `asOf` applies to. The
-   * materialization's first table when absent.
+   * The table the run is about, by its name in its materialization: the one browsed, or the one a
+   * statement's `asOf` applies to. The materialization's first table when absent; the server fills
+   * it from `source`.
    */
   table?: string | null;
+  /**
+   * The table the run is about, wherever it is: required to browse through `POST /api/runs`, and
+   * optional for a statement there, which may read the lake with no table chosen. Every run's
+   * request carries it back, the per-materialization route's too: null only for a statement with
+   * no table of its own.
+   */
+  source?: TableRef | null;
   range: TimeRange;
   /** How the client describes the range, e.g. "Last 7 days". Echoed back for display only. */
   rangeLabel?: string | null;
@@ -1235,12 +1253,13 @@ export type RunState = 'running' | 'succeeded' | 'failed' | 'cancelled';
  * What a running run is doing, in words a status line can use.
  *
  * - `planning`: choosing data files from the snapshot's manifests.
+ * - `queued`: waiting its turn to scan, behind the person's other runs or everyone's (`queued`).
  * - `preparing`: reading object footers before a statement binds; `objectsDone` counts them.
  * - `scanning`: reading objects to count matching rows (browse) or executing a statement (sql).
  * - `counting`: a statement's result outgrew what is kept, and the full total is being counted.
  * - `done`: terminal.
  */
-export type RunPhase = 'planning' | 'preparing' | 'scanning' | 'counting' | 'done';
+export type RunPhase = 'planning' | 'queued' | 'preparing' | 'scanning' | 'counting' | 'done';
 
 export interface RunProgress {
   /** Rows the scan has to read, from the manifest. */
@@ -1273,17 +1292,29 @@ export interface RunError {
  */
 export interface RunSnapshot {
   id: string;
-  /** The domain the run was started in: its materialization's (handbook 20). */
+  /**
+   * The domain the run belongs to: its table's (handbook 20); the settings home's for a statement
+   * that reads no table.
+   */
   domain: string;
-  materializationId: string;
+  /** The materialization writing the run's table; null for a statement that reads no table. */
+  materializationId: string | null;
   request: RunRequest;
   state: RunState;
   phase: RunPhase;
+  /**
+   * While `phase` is `queued`: whose runs it waits behind — the person's own (`own`, at most
+   * `runConcurrencyPerPerson` of them scan at once) or everyone's (`others`, `runConcurrency`).
+   */
+  queued?: 'own' | 'others';
   startedAt: string;
   finishedAt: string | null;
   elapsedMs: number;
-  /** The run's table: the one browsed, or the statement's (`RunRequest.table`) — or the first it reads. */
-  table: string;
+  /**
+   * The run's table: the one browsed, or the statement's (`RunRequest.table`) — or the first it
+   * reads; null for a statement that reads no table.
+   */
+  table: string | null;
   /** Every table the run reads, in the materialization's order. A browse run reads one. */
   tables: RunTableRead[];
   /** When the table was read. */
@@ -1606,6 +1637,7 @@ export type SettingUnit =
   | 'records'
   | 'points'
   | 'requests'
+  | 'queries'
   | 'objects'
   | 'markers'
   | 'replicas'
