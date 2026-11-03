@@ -19,7 +19,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/overview-dark.webp">
-  <img alt="The Overview: five materializations flowing from Kafka through Midstream into the lake, 4,622 rows a second" src="docs/assets/readme/overview-light.webp">
+  <img alt="The Overview: five materializations flowing from Kafka through Midstream into the lake, about 4,700 rows a second" src="docs/assets/readme/overview-light.webp">
 </picture>
 
 ## Every topic, a table
