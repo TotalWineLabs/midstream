@@ -966,18 +966,19 @@ what Explore does, console 14 §14.4 records each flow, console 09 §9.6 how it 
 | 30 flow checks | Choosing a table, a range, the rail, SQL over the lake with the rail's names, a join by full names, History, reload, a share link in another browser, rename, duplicate, delete and Undo, closing, the open limit, Open in Explore: all pass |
 | Connections | Four explorations open hold one detail stream, the shown one's; at rest the page asks for the shown one's Live refresh alone |
 | Speed | The 102,582,940-row table's exact count 130–141 ms after it is chosen; an older question's run picked back up in about 100 ms |
-| The Data tab, before and after | Its 14 flows pass on both, three rounds each: first rows 451–508 ms against 410–520 ms before; the main bundle 4.70 kB larger gzipped, Explore a 13.21 kB chunk of its own |
+| The Data tab, before and after | Its 14 flows pass on both, three rounds each: first rows 451–508 ms against 410–520 ms before; the main bundle 4.83 kB larger gzipped, Explore a 13.32 kB chunk of its own |
+| Across domains | A throwaway materialization in Domain B of a topic Domain A also materializes, deleted after: a statement joining the two answered *9 rows across domain_a, domain_b*, each materialization's count the same in both |
+| Some datasets only | A throwaway account, deleted after, with no grant on one Domain B dataset: the dataset locked in the rail, a link to its table saying why, statements over it refused naming `domain_b.explore_check`, `POST /api/runs` `403` |
 | Phone, themes, motion, keys | No sideways scroll, the strip's controls 44 px, sheets for Tables and History; nothing moves under reduced motion; the strip, the rail and ⌘K by keyboard |
 
-Fixed alongside, found by these checks (console 14 §14.5, defects 38–44): closing the shown exploration
+Fixed alongside, found by these checks (console 14 §14.5, defects 38–47): closing the shown exploration
 reopened it and deleting one called it unknown, both from the router moving the address in a
 transition; fast typing in a statement over the lake hit React's nested-update limit after 51
 keystrokes; an edit's pending save could bring a deleted exploration back; chevrons turned under
 reduced motion across the console; the phone's tab controls were too small; History kept a failed
-statement's whole error.
-
-Not run: a statement joining tables of two domains (Domain B held none) and a person who may query
-some datasets only; the route tests cover both (`server/routes/runs.test.ts`).
+statement's whole error; a table the person may not query was run and refused rather than explained;
+a refused start said *Starting…* (on the Data tab too); a request with an empty JSON body was answered
+`500`.
 
 ## 13.9 Pre-finish checklist
 

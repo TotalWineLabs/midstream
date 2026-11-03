@@ -133,7 +133,7 @@ with `403` (`reason: cross_site_request`).
 
 | Code | Status | Raised by |
 |------|--------|-----------|
-| `invalid_request` | 400 | Zod validation, SQL guard, column validation, cache limits |
+| `invalid_request` | 400 (413, 415) | Zod validation, SQL guard, column validation, cache limits; a body the console cannot read — empty or malformed JSON, too large, a type it does not take — with Fastify's own status (`errors.ts::answerError`) |
 | `unauthenticated` | 401 | No usable session for something a guest may not do: `details.reason` is `sign_in_required`, `session_expired`, `session_ended`, `invalid_session` or `account_deactivated` |
 | `forbidden` | 403 | Signed in, but without `details.permission`; `reason: password_change_required` until the password is changed; `cross_site_request` |
 | `too_many_attempts` | 429 | Sign-in attempts from one address over `CONSOLE_SIGN_IN_ATTEMPTS_PER_MINUTE` (`retry-after` header), or the control plane's lockout |
