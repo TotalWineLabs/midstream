@@ -15,8 +15,8 @@ Writes the console's icons and `src/components/markPaths.ts`. Needs numpy and sh
 
 then render the PNGs with any SVG rasteriser, such as a headless browser: `public/icons/mark.svg`
 at 192 and 512 px (`icon-192.png`, `icon-512.png`), `mark-maskable.svg` at 512 px
-(`maskable-512.png`), and `design/mark/apple-touch-icon.svg` at 180 px (`apple-touch-icon.png`).
-See docs/10-design-system.md §10.2.
+(`maskable-512.png`), and `design/mark/apple-touch-icon.svg` at 180 px (`apple-touch-icon.png`),
+and run `lockup.py` for the README's lockup. See docs/10-design-system.md §10.2.
 """
 from __future__ import annotations
 

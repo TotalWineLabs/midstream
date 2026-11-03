@@ -67,6 +67,10 @@ One stream, drawn with a pen. It rises twice, the second rise lower, and settles
   the PNG renders: `icon-192.png`, `icon-512.png`, `maskable-512.png` and `apple-touch-icon.png`.
 - **Use `Mark` and `Lockup`** (`components/Logo.tsx`), never an `<img>` of the SVG: the component
   picks the cut, takes the text colour, and draws itself in.
+- **Where no component can go**, the repository's README, the lockup is an image generated the same
+  way: `design/mark/lockup.py` writes `design/mark/lockup-dark.svg` and `lockup-light.svg`, the
+  `Lockup` scaled to a 64 px mark, the name outlined from the display face so the image needs no
+  font. The README shows each in its theme (`<picture>`), as it does its screenshots.
 - **Don't** recolour the tile, add effects, rotate or stretch the mark, set it in two colours, or put
   it on a busy background.
 
