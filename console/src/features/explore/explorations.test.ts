@@ -5,6 +5,7 @@ import {
   HISTORY_LIMIT,
   changesWhatIsShown,
   describeQuestion,
+  keptMessage,
   emptyView,
   fromShareLink,
   fromView,
@@ -29,7 +30,7 @@ const PAYMENTS = { domain: 'domain_b', dataset: 'finance', table: 'payments' };
 const T0 = Date.parse('2026-11-02T12:00:00Z');
 
 function run(id: string, state: RunSnapshot['state'] = 'succeeded', rows = 42): RunSnapshot {
-  return { id, state, rows, rowsReady: rows, elapsedMs: 1_250, error: state === 'failed' ? { code: 'query_failed', message: 'nope' } : null } as unknown as RunSnapshot;
+  return { id, state, rows, rowsReady: rows, elapsedMs: 1_250, error: state === 'failed' ? { code: 'query_failed', message: "Conversion Error: Could not convert string 'alice@example.com' to INT32" } : null } as unknown as RunSnapshot;
 }
 
 function asked(exploration: Exploration, request: RunRequest, id: string, runId: string, now = T0): { exploration: Exploration; onScreen: string } {
@@ -73,7 +74,7 @@ describe('an exploration', () => {
     assert.deepEqual([followed.history[0]?.runId, followed.history[0]?.outcome?.rows], ['r9', 9]);
     assert.equal(settleQuestion(followed, run('r9', 'succeeded', 9), started.onScreen), followed, 'nothing new, the same document');
     const failed = settleQuestion(followed, run('r10', 'failed', 0), started.onScreen);
-    assert.deepEqual([failed.history[0]?.outcome?.state, failed.history[0]?.outcome?.message], ['failed', 'nope']);
+    assert.deepEqual([failed.history[0]?.outcome?.state, failed.history[0]?.outcome?.message], ['failed', 'Conversion Error'], 'no value the run read is kept');
     assert.equal(settleQuestion(failed, run('rx'), null), failed, 'a run of no question changes nothing');
   });
 
@@ -93,6 +94,14 @@ describe('an exploration', () => {
     assert.equal(changesWhatIsShown(writing, { ...writing, view: { ...writing.view, sql: null } }), true);
     assert.equal(changesWhatIsShown(writing, { ...writing, source: ORDERS }), true);
     assert.equal(changesWhatIsShown(writing, asked(writing, { kind: 'sql', source: null, range: { from: null, to: null }, rangeLabel: 'All time', sql: 'SELECT 1' }, 'q1', 'r1').exploration), true);
+  });
+
+  it('keeps of a failure only what quotes no data', () => {
+    assert.equal(keptMessage({ code: 'query_failed', message: 'Binder Error: Referenced column "x" not found\nLINE 1: SELECT x' }), 'Binder Error');
+    assert.equal(keptMessage({ code: 'run_failed', message: "IO Error: could not read 'gs://lake/x.parquet'" }), 'IO Error');
+    assert.equal(keptMessage({ code: 'query_failed', message: 'something else' }), null);
+    assert.equal(keptMessage({ code: 'bad_request', message: 'There is no table domain_a.sales.x; domain_a.sales holds domain_a.sales.orders.' }), 'There is no table domain_a.sales.x; domain_a.sales holds domain_a.sales.orders.');
+    assert.equal(keptMessage(null), null);
   });
 
   it('describes a statement in a few words, comments aside', () => {

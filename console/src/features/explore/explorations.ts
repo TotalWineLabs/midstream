@@ -9,7 +9,7 @@
 // With their extensions, so `node --test` loads them without the bundler.
 import { decodeRange, encodeRange, rangeLabel } from '../data/timeRange.ts';
 import { DEFAULT_PAGE_SIZE, readViewState, writeViewState, type WorkbenchView } from '../data/viewState.ts';
-import type { BrowseFilter, RunOrder, RunRequest, RunSnapshot, TableRef } from '@shared/types';
+import type { BrowseFilter, RunError, RunOrder, RunRequest, RunSnapshot, TableRef } from '@shared/types';
 
 /** The document's format: a store keeps it, and a later one migrates it by this. */
 export const EXPLORATION_VERSION = 1;
@@ -232,8 +232,20 @@ export function outcomeOf(run: RunSnapshot): QuestionOutcome | null {
     state: run.state,
     rows: run.state === 'succeeded' || run.rowsReady > 0 ? run.rows : null,
     elapsedMs: run.elapsedMs,
-    message: run.error?.message ?? null,
+    message: keptMessage(run.error),
   };
+}
+
+/**
+ * What the browser keeps of why a question failed. The engine's own words can quote a value the
+ * statement read - *Could not convert string 'alice@example.com' to INT32* - and an exploration
+ * keeps no data, so of the engine's only its kind is kept (*Conversion Error*). The console's own
+ * words name tables and datasets, and are kept whole.
+ */
+export function keptMessage(error: Pick<RunError, 'code' | 'message'> | null): string | null {
+  if (!error) return null;
+  if (error.code !== 'query_failed' && error.code !== 'run_failed') return error.message;
+  return /^([A-Z][A-Za-z]*(?: [A-Z][A-Za-z]*)* Error):/.exec(error.message)?.[1] ?? null;
 }
 
 /**
