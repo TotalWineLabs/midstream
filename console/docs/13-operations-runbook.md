@@ -24,14 +24,14 @@ routes for the files present at startup.
 
 ```dockerfile
 # Illustrative only — pin the digest and use your approved base image.
-FROM node:24-alpine AS build
+FROM node:24-bookworm-slim AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM node:24-alpine
+FROM node:24-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
@@ -48,7 +48,9 @@ Note that `server/` and `shared/` ship as **TypeScript** — the runtime strips 
 server build artefact.
 
 > Repository standards require pinned image versions and a non-root user. Prefer an approved,
-> hardened base image over `node:24-alpine` if one is available in your registry.
+> hardened base image over `node:24-bookworm-slim` if one is available in your registry, but keep it
+> glibc-based: DuckDB's musl build (Alpine) has no jemalloc, and the memory each statement used
+> stays with the process, so the console's grows with every statement until the pod is killed.
 
 ## 13.2 Probes
 
