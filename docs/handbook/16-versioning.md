@@ -440,3 +440,22 @@ console's two new settings take their defaults.
 | New console settings: *Run as you edit, up to* (`CONSOLE_AUTO_RUN_MAX_BYTES`, 256 MiB; `0` waits for Run) and *Throughput history* (`CONSOLE_SERIES_HISTORY_MS`, 24 h, kept in memory, for the charts' 1h, 6h and 24h windows) (console 03) | console deployers |
 | Console API, additive: `GET /api/d/<domain>/materializations/:id/throughput`; a fleet item's `lagState`, `lagEtaMs` and `catchUp`; a browse page's `live` and `waterline`; `autoRunMaxBytes` in `GET /api/config` (console 08) | clients of the console's API |
 | **The design check**: `console/src/design.test.ts`, run with `npm test` and in CI, fails on a literal colour, a palette class, a pre-Current token, motion outside the vocabulary, all caps, a state's colour on a badge, or a live dot on a page; its baseline of older screens only goes down. A change to the interface starts from `.claude/skills/console-design/SKILL.md` (console 10 §10.13) | contributors |
+
+## 16.19 What 1.3.0 changed: Explore and invitations
+
+1.3.0 adds **Explore**, a workspace over any table a person may read, in any dataset and domain, and
+**invitations**, which make an account by email before its person first signs in. The lake, the
+chart's values and the runtimes are as in 1.2.0; the control plane gains invitations' actions, a
+permission and a setting. **A 1.2.0 installation upgrades in place**: `helm upgrade` with the same
+values (02); the new settings take their defaults. Going back to 1.2.0 needs every pending
+invitation accepted or revoked first: 1.2.0 cannot read an account whose status is `invited` (18
+§18.18).
+
+| Change | Who must care |
+|---|---|
+| **Explore** (`/explore`, second in the sidebar, for anyone who may query a dataset somewhere): explorations side by side as tabs, each a table's rows or a statement joining tables across datasets and domains by their full names; the lake's tables in a rail; each exploration's questions in History; share links that ask a question again under the opener's own access; **Open in Explore** on a table's Data tab. Explorations are kept in the browser (console 11 §11.14) | console users |
+| **Invitations**: **Invite people** on Settings › Users invites by email in every domain the inviter may, as one invitation with one link; the account holds its groups and dataset roles until its person signs in, through a provider or with the link (18 §18.18, console 11 §11.8d) | administrators |
+| New permission `users.invite` (Admin; implied by `users.manage`) and control-plane setting `invitation_link_lifetime_days` (7); a user's status may be `invited` (18, 17) | role designers; clients of the users API |
+| New console setting *Scans per person* (`CONSOLE_RUN_CONCURRENCY_PER_PERSON`, 2; `0` for no limit but the console's): one person's runs scanning at once (console 03, 07 §07.5) | console deployers |
+| Console API, additive: `POST /api/runs`, `POST /api/data/validate` and `POST /api/data/estimate`, not tied to a materialization; a run's `materializationId` and `table` may be `null`, and its phase `queued` (console 08 §8.16a) | clients of the console's API |
+| **A table's tabs keep their place**: going back to a tab finds it as it was left (console 10 §10.10); the SQL editor drops its paragraph of instructions; a refused run says *Could not start*; a body the console cannot read is answered `400`, not `500` (console 08 §8.2) | console users; clients of the console's API |
