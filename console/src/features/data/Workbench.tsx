@@ -939,6 +939,7 @@ export function Workbench({
                 onShare={shareView}
                 shareTitle={share.title}
                 onPeek={liveWarning?.peek && run?.request.kind === 'browse' ? () => setPeekOpen(true) : null}
+                peekOffered={source !== null}
                 extra={actions}
               />
             </span>
@@ -948,6 +949,7 @@ export function Workbench({
             run={shownRun}
             starting={starting}
             idle={idle}
+            blank={sqlMode && sqlDraft.trim() === ''}
             refusal={startError?.message ?? null}
             summary={summary}
             dirty={dirty && !autoRun && !deciding}
@@ -1011,6 +1013,7 @@ export function Workbench({
                 <GridArea
                   run={shownRun}
                   idle={idle}
+                  blank={sqlMode && sqlDraft.trim() === ''}
                   startError={startError}
                   loading={pageQuery.isLoading || (shownRun?.state === 'running' && rowsOnPage === 0)}
                   pageError={pageQuery.error}
@@ -1074,6 +1077,7 @@ export function Workbench({
 function GridArea({
   run,
   idle,
+  blank,
   startError,
   loading,
   pageError,
@@ -1098,6 +1102,8 @@ function GridArea({
   run: ReturnType<typeof useRun>['run'];
   /** Nothing asked yet: a question waiting for Run. */
   idle: boolean;
+  /** A statement with nothing written in it yet. */
+  blank: boolean;
   startError: ApiError | null;
   loading: boolean;
   pageError: unknown;
@@ -1122,6 +1128,16 @@ function GridArea({
 }): ReactNode {
   if (startError) {
     return <Failure title="The query could not start" description={startError.message} />;
+  }
+  if (blank && !run) {
+    return (
+      <EmptyState
+        icon={<Code2 className="size-6" />}
+        title="No statement yet"
+        description="Write one above, naming each table you read in full."
+        className="py-20"
+      />
+    );
   }
   if (idle && !run) {
     return (

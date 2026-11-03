@@ -21,6 +21,11 @@ describe('the status line', () => {
     assert.equal(statusLineState({ run: null, starting: false, idle: false, refused: true }), 'refused');
   });
 
+  it('says nothing of Run while a statement has nothing written in it', () => {
+    assert.equal(statusLineState({ run: null, starting: false, idle: true, refused: false, blank: true }), 'blank');
+    assert.equal(statusLineState({ run: RUN, starting: false, idle: true, refused: false, blank: true }), 'run', 'the last answer stays when its statement is cleared');
+  });
+
   it('says a question waits for Run', () => {
     assert.equal(statusLineState({ run: null, starting: false, idle: true, refused: false }), 'idle');
   });

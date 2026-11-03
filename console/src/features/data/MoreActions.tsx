@@ -30,6 +30,7 @@ export function MoreActions({
   exportable,
   onShare,
   onPeek,
+  peekOffered = true,
   shareTitle = 'Copy a link that reopens this view',
   extra = [],
 }: {
@@ -40,6 +41,8 @@ export function MoreActions({
   onShare: () => void;
   /** Open the peek at the newest records; null while the table is not behind them. */
   onPeek: (() => void) | null;
+  /** A table to peek at at all: a statement over the lake has none, and is offered no Peek. */
+  peekOffered?: boolean;
   shareTitle?: string;
   extra?: readonly ExtraAction[];
 }): ReactNode {
@@ -85,16 +88,18 @@ export function MoreActions({
           <ExportOptions run={run} config={config} onBack={() => setView('menu')} onDone={close} />
         ) : (
           <div className="p-1" role="menu" aria-label="More actions">
-            <MenuItem
-              icon={<Eye className="size-3.5" />}
-              label="Peek"
-              title="See the newest incoming records that are not in the table yet"
-              blocked={onPeek ? null : 'Available while this table is catching up'}
-              onSelect={() => {
-                close();
-                onPeek?.();
-              }}
-            />
+            {peekOffered ? (
+              <MenuItem
+                icon={<Eye className="size-3.5" />}
+                label="Peek"
+                title="See the newest incoming records that are not in the table yet"
+                blocked={onPeek ? null : 'Available while this table is catching up'}
+                onSelect={() => {
+                  close();
+                  onPeek?.();
+                }}
+              />
+            ) : null}
             <MenuItem
               icon={<Link2 className="size-3.5" />}
               label="Share"
