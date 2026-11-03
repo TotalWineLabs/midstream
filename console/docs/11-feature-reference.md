@@ -717,7 +717,8 @@ Rows stream in as a run counts: the first page appears as soon as the newest fil
 long before the total is final. While a filter has matched nothing yet the grid says **No matching
 rows yet** rather than showing placeholder rows. The footer offers first, previous, a page box
 (`Page 2 of 31,201`, with `+` while counting), next and last, and rows per page (50–1,000); the
-exact count is the status line's, at the top.
+exact count is the status line's, at the top. Number columns are right-aligned, a measure's digits
+grouped and an identifier's or a year's left as they came (10 §10.8); a click copies the value.
 
 Any page is one direct read of one file's rows, so page 2 and page 40,000 cost the same, and the
 next page is read ahead — on the server and in the browser — so turning pages does not wait. The

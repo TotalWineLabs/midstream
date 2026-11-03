@@ -1,6 +1,8 @@
 import { fieldName, isMetadataColumn } from '@shared/fieldPaths';
 import type { QueryColumn } from '@shared/types';
 
+import { isListType, isNumericType } from './numberColumns';
+
 export type ColumnGroupId = 'payload' | 'kafka';
 
 export interface ColumnGroup {
@@ -137,17 +139,7 @@ export function resolveColumnName(name: string, columns: ReadonlyArray<{ name: s
   return renamed !== name && columns.some((column) => column.name === renamed) ? renamed : null;
 }
 
-const NUMERIC_TYPES = /^(TINY|SMALL|BIG|HUGE)?INT|^DECIMAL|^DOUBLE|^FLOAT|^REAL|^NUMERIC|^UINTEGER|^UBIGINT/i;
 const TEMPORAL_TYPES = /^DATE|^TIME|^TIMESTAMP/i;
-
-/** A list column holds many values per row, so it can be matched but not ordered. */
-export function isListType(type: string): boolean {
-  return /\[\]$/.test(type) || /^LIST/i.test(type);
-}
-
-export function isNumericType(type: string): boolean {
-  return !isListType(type) && NUMERIC_TYPES.test(type);
-}
 
 export function isComparableType(type: string): boolean {
   return !isListType(type) && (isNumericType(type) || TEMPORAL_TYPES.test(type));

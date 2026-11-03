@@ -159,6 +159,23 @@ export function localZone(): { label: string; name: string } {
 }
 
 /** A cell as shown: instants in local time, everything else as `formatCell` renders it. */
+const GROUPED = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+const DECIMAL_SEPARATOR = new Intl.NumberFormat().formatToParts(1.5).find((part) => part.type === 'decimal')?.value ?? '.';
+
+/**
+ * A number in a result's cell, `45291` → `45,291` and `-1234.50` → `-1,234.50` in English: every
+ * digit as it came, grouped in the reader's locale so a column of them reads by magnitude. An integer
+ * too large for a double arrives as text and is grouped the same way; an exponent, NaN or infinity is
+ * left as it came. Copying a cell copies the value, not this.
+ */
+export function formatNumberCell(value: unknown): string {
+  const text = typeof value === 'bigint' ? value.toString() : String(value);
+  const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(text);
+  if (!match) return text;
+  const [, sign, whole, fraction] = match as unknown as [string, string, string, string | undefined];
+  return `${sign}${GROUPED.format(BigInt(whole))}${fraction ? DECIMAL_SEPARATOR + fraction : ''}`;
+}
+
 export function displayCell(value: unknown, type?: string | null): string {
   if (typeof value === 'string' && isInstantType(type)) return formatInstant(value);
   return formatCell(value);
