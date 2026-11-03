@@ -80,7 +80,7 @@ export function SqlPanel({
                 {named.map((table, index) => (
                   <span key={`${table.domain}.${table.dataset}.${table.table}`}>
                     {index > 0 ? ', ' : ''}
-                    <code className="numeric">
+                    <code className="ident">
                       {table.domain}.{table.dataset}.{table.table}
                     </code>
                   </span>
@@ -88,7 +88,7 @@ export function SqlPanel({
                 {named.length > 1 ? 'hold' : 'holds'} the rows in
               </>
             ) : (
-              <>Every table, named in full, holds the rows in</>
+              <>The tables you name hold the rows in</>
             )
           ) : tables.length > 1 ? (
             <>
@@ -98,7 +98,7 @@ export function SqlPanel({
                   title={`The rows of topic ${table.source_topic}; its native columns are ${domain}_iceberg.${table.dataset}.${table.name}`}
                 >
                   {index > 0 ? ', ' : ''}
-                  <code className="numeric">
+                  <code className="ident">
                     {domain}.{table.dataset}.{table.name}
                   </code>
                 </span>
@@ -107,7 +107,7 @@ export function SqlPanel({
             </>
           ) : (
             <>
-              <code className="numeric" title={`Its native columns are ${domain}_iceberg.${dataset}.${tableName}`}>
+              <code className="ident" title={`Its native columns are ${domain}_iceberg.${dataset}.${tableName}`}>
                 {domain}.{dataset}.{tableName}
               </code>{' '}
               holds the rows in
