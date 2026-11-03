@@ -839,15 +839,6 @@ export class RiverEngine {
     const s = this.scale;
     const top = Math.max(4, this.gateTop - 20 * s);
     const bottom = Math.min(this.height - 4, this.gateBottom + 20 * s);
-    if (dark) {
-      const middle = (top + bottom) / 2;
-      const radius = Math.max(36, (bottom - top) * 0.9);
-      const halo = ctx.createRadialGradient(this.gateX, middle, 0, this.gateX, middle, radius);
-      halo.addColorStop(0, rgba(current, 0.1));
-      halo.addColorStop(1, rgba(current, 0));
-      ctx.fillStyle = halo;
-      ctx.fillRect(this.gateX - radius, middle - radius, radius * 2, radius * 2);
-    }
     const glow = ctx.createLinearGradient(0, top, 0, bottom);
     glow.addColorStop(0, rgba(ink, 0));
     glow.addColorStop(0.5, rgba(dark ? current : ink, dark ? 0.6 : 0.35));
