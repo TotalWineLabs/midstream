@@ -459,3 +459,23 @@ invitation accepted or revoked first: 1.2.0 cannot read an account whose status 
 | New console setting *Scans per person* (`CONSOLE_RUN_CONCURRENCY_PER_PERSON`, 2; `0` for no limit but the console's): one person's runs scanning at once (console 03, 07 §07.5) | console deployers |
 | Console API, additive: `POST /api/runs`, `POST /api/data/validate` and `POST /api/data/estimate`, not tied to a materialization; a run's `materializationId` and `table` may be `null`, and its phase `queued` (console 08 §8.16a) | clients of the console's API |
 | **A table's tabs keep their place**: going back to a tab finds it as it was left (console 10 §10.10); the SQL editor drops its paragraph of instructions; a refused run says *Could not start*; a body the console cannot read is answered `400`, not `500` (console 08 §8.2) | console users; clients of the console's API |
+
+## 16.20 What 1.3.1 changed: the console's memory
+
+1.3.1 keeps the console within its pod. In 1.3.0, a single statement over a large table could get the
+console killed for its memory: each DuckDB instance — the console's own and one per statement — had
+a 4 GB limit, a statement's sandbox kept a cache of every byte it read, and on the Alpine image the
+memory each statement used stayed with the process. A run the console lost that way then showed as
+running forever. The lake, the control plane, the runtimes and the chart's values are as in 1.3.0.
+**A 1.3.0 installation upgrades in place**: `helm upgrade` with the same values (02). A
+`CONSOLE_DUCKDB_MEMORY_LIMIT` or `CONSOLE_DUCKDB_THREADS` set in `console.env` still wins over the
+derived values; one set above them can still outgrow the pod when statements run at once.
+
+| Change | Who must care |
+|---|---|
+| **DuckDB sized to the container**: unset, `CONSOLE_DUCKDB_MEMORY_LIMIT` is the container's memory less 512 MiB, shared between the console's instance and `CONSOLE_STATEMENT_CONCURRENCY` statements, half of each share the limit (597 MiB in a 4 GiB pod; was `4GB`), and `CONSOLE_DUCKDB_THREADS` is 4 a CPU (was 32). The chart passes the container's limits as `CONSOLE_CONTAINER_MEMORY_BYTES` and `CONSOLE_CONTAINER_CPUS`; without them the console reads its cgroup's (console 03 §3.6) | console deployers |
+| New console setting `CONSOLE_STATEMENT_CONCURRENCY` (2, at most `CONSOLE_RUN_CONCURRENCY`): statements scanning at once; a third waits, saying so, and browse runs are never held up by them (console 03, 07 §07.5) | console deployers; console users |
+| A statement's sandbox keeps no external file cache and spills work larger than its limit to `<run dir>/spill/`, removed with the run (console 07 §07.6) | console deployers sizing the data volume |
+| **The console image is Debian** (`node:24-bookworm-slim`), not Alpine: DuckDB's musl build has no jemalloc, and the console's memory grew with every statement. An image layered on it, or a hardened base in its place, must stay glibc-based (console 13 §13.1) | anyone building or scanning the console image |
+| **A run the console lost** — it restarted while the run worked — fails as soon as the console answers again, or when **Stop** is pressed: *The console lost this run, most likely because it restarted. Run it again.* (console 11 §11.8) | console users |
+| A toast's title wraps in full instead of running under **Undo**; the river's gate has no glow behind it | console users |
