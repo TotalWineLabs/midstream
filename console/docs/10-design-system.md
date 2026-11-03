@@ -232,8 +232,10 @@ the phone, the sidebar badge.
   in Diagnostics.
 - **The lag floor is normal.** Offsets commit only once their rows are in the table, so a caught-up
   runtime always trails its topics by what arrived in the last batch ceiling and commit interval
-  (630 s). A lag at or under that floor is Flowing (`shared/lagTrend.ts`). Catching up
-  appears only for a backlog clearly falling, with an end time that means something.
+  (630 s). A lag at or under that floor is Flowing (`shared/lagTrend.ts`), so long as the workers
+  have read all of it but what arrived in the last two minutes: a burst that landed within the floor
+  but is still being read is a backlog, not the floor. Catching up appears only for a backlog clearly
+  falling, with an end time that means something.
 - **Groups**, for lists: Needs you (failed, needs attention), In progress (starting, catching up,
   stopping, deleting), Flowing, Stopped (`statusGroup`).
 - **Components:** `StatusGlyph` (the shape, 12 px), `StatusLabel` (shape and word in the state's ink,
