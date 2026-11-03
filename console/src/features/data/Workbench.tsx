@@ -948,6 +948,7 @@ export function Workbench({
             run={shownRun}
             starting={starting}
             idle={idle}
+            refusal={startError?.message ?? null}
             summary={summary}
             dirty={dirty && !autoRun && !deciding}
             waiting={waitsForRun(scope, autoRunMaxBytes)}

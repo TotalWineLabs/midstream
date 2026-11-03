@@ -2,6 +2,7 @@ import { AlertTriangle, Ban, CheckCircle2, Hourglass, RotateCw } from 'lucide-re
 import type { ReactNode } from 'react';
 
 import { newerSnapshot, type TailNotice } from './live';
+import { statusLineState } from './statusLine';
 import { Shimmer } from '@/components/motion/Shimmer';
 import { cn } from '@/lib/cn';
 import { formatDuration, formatExact } from '@/lib/format';
@@ -25,6 +26,7 @@ export function StatusBar({
   run,
   starting,
   idle = false,
+  refusal = null,
   summary,
   dirty,
   waiting = null,
@@ -36,6 +38,8 @@ export function StatusBar({
   starting: boolean;
   /** Nothing asked yet: a question waiting for Run (Explore, reopened from History). */
   idle?: boolean;
+  /** Why the last start was refused; the panel below says it in full. */
+  refusal?: string | null;
   summary: DataSummary | null;
   /** The controls describe a different query than the one on screen. */
   dirty: boolean;
@@ -48,14 +52,22 @@ export function StatusBar({
   warning?: TailNotice | null;
 }): ReactNode {
   const running = starting || run?.state === 'running';
+  const line = statusLineState({ run, starting, idle, refused: refusal !== null });
 
   return (
     <div className="relative border-b border-[var(--color-line)] bg-[var(--color-surface)]" data-role="status-line">
       <div className="flex min-h-[40px] flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5">
         <div className="flex min-w-0 flex-1 items-center gap-2" aria-live="polite" data-role="run-status">
-          {idle && !starting && !run ? (
+          {line === 'idle' ? (
             <span className="text-[12px] text-[var(--color-ink-muted)]">Changes not run yet</span>
-          ) : starting || !run ? (
+          ) : line === 'refused' ? (
+            <>
+              <AlertTriangle className="size-4 shrink-0 text-[var(--color-flare-ink)]" />
+              <span className="min-w-0 truncate text-[12px] text-[var(--color-flare-ink)]" title={refusal ?? undefined}>
+                Could not start
+              </span>
+            </>
+          ) : line === 'starting' || !run ? (
             <Shimmer className="text-[12px] text-[var(--color-ink-muted)]">Starting…</Shimmer>
           ) : (
             <RunSummary run={run} />
