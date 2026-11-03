@@ -418,6 +418,7 @@ The glossary: terms the console says differently from the system.
 | `TablesRail` | `features/explore/TablesRail.tsx` | The lake: domains, datasets and tables with their writers' glyphs, found with `/`; a table browsed, or its name put in the statement being written; a sheet on a phone |
 | `TableChooser` | `features/explore/TableChooser.tsx` | **From**: the table a workbench in Explore is about, chosen by name |
 | `HistoryColumn` | `features/explore/HistoryColumn.tsx` | History (§10.10) |
+| `FoundName`, `CutName` | `features/explore/Names.tsx` | A table found by a search, its own name first and its place after in faint; a name too long for its row cut in the middle — its start and its last characters, where names that share a start differ — and read whole to a screen reader |
 | `TimeSeriesChart`, `Sparkline` | `components/` | Charts (§10.8) |
 | `DataGrid` | `components/DataGrid.tsx` | Rows |
 | `Avatar`, `RelativeTime`, `Identifier`, `CopyButton` | `components/` | People, times, ids |

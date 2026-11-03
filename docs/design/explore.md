@@ -753,7 +753,9 @@ Where the build differs from §4–§10, and why. Console 09 and 11 describe wha
 | `RunSnapshot.phase: 'queued'` (§7.4) | And `queued: 'own' \| 'others'` | The status line says whose runs it waits behind: *Waiting for your other queries to finish* |
 | Tables found through the fleet's written tables (§6.2) | A kept table found through the materializations whose datasets hold it; a run's other tables (`siblingsOf`) found with its own | The fleet lists the tables a materialization still writes; a kept table is read by name in its dataset |
 | History keeps each question's outcome (§5.1) | Of an engine error, only its kind (`keptMessage`) | The engine's message can quote a value read; the browser keeps no data (§8) |
-| The phone: sheets for the rails (§4.8) | And under `md` the strip's controls are 44 px, and only the shown tab has a × | A finger cannot hover to reveal a tab's ×, so an unseen one was tappable |
+| The phone: sheets for the rails (§4.8) | And under `md` the strip's controls are 44 px, and only the shown tab has a ×; in the Tables sheet a tap browses, and a table's other actions (a new exploration, its name, its page) wait for a desktop | A finger cannot hover to reveal a control, so an unseen one was tappable; the phone is for checking and acting |
+| A kept table marked **Kept** in the rail (§4.3) | No state for a table no materialization writes | A dataset's list holds its tables' names only; their states are in each dataset's detail, which the rail does not read for every dataset |
+| History's entries as *table · range · filters* (§4.6) | What was asked first — the range and filters, or the statement — then the table, cut in the middle | The questions of one exploration mostly share a table: what differs leads |
 
 Found while validating it (console 14 §14.5, defects 38–44), and kept as rules:
 

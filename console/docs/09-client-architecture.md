@@ -352,6 +352,8 @@ features/
     store.ts                                ExplorationStore and the browser's; the tab strip
     TablesRail.tsx, TableChooser.tsx         The lake's domains, datasets and tables to browse or name; From's chooser
     HistoryColumn.tsx                       The questions an exploration asked, to go back to
+    Names.tsx                               Found tables by their own name first; long names cut in the middle, heard whole
+    useSheet.ts                             A phone's sheet as a dialog: focus in, Esc out, focus back
     lake.ts, useLake.ts                     The lake as the person may see it: the fleet and each domain's datasets
     useRun.ts                               One run at a time: start, follow over SSE, cancel, re-attach; pages
     timeRange.ts                            Time range presets, resolution to instants, labels, URL form
@@ -489,6 +491,7 @@ tells the user to watch the phase converge; the actual state change arrives over
 | `lazy()` + `Suspense` | `QueryEditor` | Keeps ~145 kB gzip of CodeMirror out of first load |
 | `lazy()` + `Suspense` | `ExplorePage` | Explore is a chunk of its own (13 kB gzip), read when it is first opened |
 | A stream only while shown | `Exploration` | One detail stream however many explorations are open: hidden ones poll a working run instead |
+| The frame kept between questions | `Exploration::SourceBench` | Mounted once per table, holding its live detail; another question about the table mounts only the workbench inside, so nothing drops to a skeleton |
 | A keystroke renders the workbench alone | `Exploration::commit` (`changesWhatIsShown`) | A view's edits are kept without rendering the exploration around it; an update per keystroke from the effect that reports it would also outrun React's nested-update limit after ~50 fast keystrokes |
 | `memo` with stable props | `Exploration` | A save, which changes the list of explorations, renders the page and leaves the explorations as they are |
 | Hand-rolled SVG charts | `Sparkline`, `TimeSeriesChart` | No charting library; a chart re-render is a few path strings |

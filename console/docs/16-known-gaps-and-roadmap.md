@@ -70,6 +70,7 @@ Until a day is compacted, a query over it reads its small files — correct, slo
 | Explorations are kept by the browser | Explore's explorations and their History live in the browser that made them (09 §9.6): another browser, or another device, does not have them, and a share link carries a question, not an exploration. Nothing is kept server-side. An account store is planned behind `ExplorationStore` (§16.8) |
 | Two browser tabs editing one exploration | Each tab's strip is its own, but both write the same document: the later save wins, and the other tab shows its own until it is reloaded |
 | History keeps an engine error's kind alone | *Failed · Conversion Error*: the engine's message can quote a value read, which the browser does not keep (12 §12.9). The run, while the console keeps it, shows the whole message |
+| The rail does not mark a kept table | A table no materialization writes shows no state: the dataset list the rail reads holds names only, and each dataset's detail, which says *Kept*, is read when the table is opened |
 | Composing waits for a desktop | On a phone Explore reads and refines — sheets for the rails, rows, filters — but is not on the bottom bar, and writing statements is a desktop's work |
 | No result charting or timeline | Results render as a grid; the manifests already know where rows sit in time |
 
