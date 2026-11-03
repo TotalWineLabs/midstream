@@ -356,6 +356,7 @@ features/
     useSheet.ts                             A phone's sheet as a dialog: focus in, Esc out, focus back
     lake.ts, useLake.ts                     The lake as the person may see it: the fleet and each domain's datasets
     useRun.ts                               One run at a time: start, follow over SSE, cancel, re-attach; pages
+    lostRun.ts                              A run the console no longer has (404): ended as failed, saying why
     timeRange.ts                            Time range presets, resolution to instants, labels, URL form
     TimeRangePicker.tsx                     Splunk-style picker with per-preset row estimates
     StatusBar.tsx                           At the top of the table: progress while a run works, the exact row count after, Live's warning at its right

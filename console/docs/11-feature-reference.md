@@ -662,6 +662,7 @@ run reads the table as it is now; the Data tab offers no older snapshot (the run
 | Running, statement | `Preparing · 26%`, then `Running · 45%` (or indeterminate), then `Counting rows` when it outgrew what is kept |
 | Succeeded | `✓ 1,234,567 rows` (how long it took in its tooltip) |
 | Failed | The error; a statement's is also marked in the editor |
+| Lost | A run the console no longer has — it restarted while the run worked — fails as soon as the console answers again, or when **Stop** is pressed: *The console lost this run, most likely because it restarted. Run it again.* |
 | Refused before it started | *Could not start*, its reason in the tooltip and in full below — a statement over a table the person may not query, say |
 | Cancelled | How long it ran and how many rows it had found |
 
