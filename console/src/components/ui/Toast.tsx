@@ -81,7 +81,8 @@ export function ToastProvider({ children }: { children: ReactNode }): ReactNode 
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--color-flare-ink)]" />
             )}
             <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-medium">{toast.title}</p>
+              {/* A title can name a table, one long word: it wraps anywhere rather than run under Undo, and whole, so what happened to it ("… deleted") is always read. */}
+              <p className="text-[13px] font-medium wrap-anywhere">{toast.title}</p>
               {toast.description ? (
                 <p className="mt-0.5 text-[12px] break-words text-[var(--color-ink-muted)]">
                   {toast.description}

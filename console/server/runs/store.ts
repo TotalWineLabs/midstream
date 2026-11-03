@@ -31,12 +31,17 @@ const runs = new Map<string, Run>();
  * footer warming waits while any run is admitted.
  *
  * At most `runConcurrency` runs scan at once, and at most `runConcurrencyPerPerson` of one person's:
- * someone with several explorations open cannot take every scan. A run waiting only for the
- * person's own is passed over, not waited behind, so it never holds up anyone else's.
+ * someone with several explorations open cannot take every scan. Of them, at most
+ * `statementConcurrency` statements: each is a DuckDB instance of its own, and DuckDB's memory is
+ * sized for that many at once (`resources.ts`), so a third waits rather than outgrow the pod. A run
+ * waiting only for the person's own is passed over, not waited behind, so it never holds up anyone
+ * else's; a browse run is never held up by statements.
  */
 let scanning = 0;
 const scanningBy = new Map<string, number>();
-const waiting: Array<{ person: string; grant: () => void; signal: AbortSignal; reject: (cause: unknown) => void }> = [];
+let statementsScanning = 0;
+const statementsBy = new Map<string, number>();
+const waiting: Array<{ person: string; statement: boolean; grant: () => void; signal: AbortSignal; reject: (cause: unknown) => void }> = [];
 
 /** Why a run waits its turn: behind the person's own runs, or behind everyone's. */
 export type QueueReason = 'own' | 'others';
@@ -46,35 +51,64 @@ function ownLimitReached(person: string): boolean {
   return limit > 0 && (scanningBy.get(person) ?? 0) >= limit;
 }
 
-function canScan(person: string): boolean {
-  return scanning < config.runConcurrency && !ownLimitReached(person);
+function statementLimitReached(): boolean {
+  return statementsScanning >= config.statementConcurrency;
+}
+
+function canScan(person: string, statement: boolean): boolean {
+  return scanning < config.runConcurrency && !ownLimitReached(person) && !(statement && statementLimitReached());
+}
+
+/** Behind whose runs `person`'s waits: their own, when every run it waits for is theirs. */
+function queueReason(person: string, statement: boolean): QueueReason {
+  if (ownLimitReached(person)) return 'own';
+  if (statement && statementLimitReached() && scanning < config.runConcurrency && (statementsBy.get(person) ?? 0) >= statementsScanning) return 'own';
+  return 'others';
+}
+
+function count(counts: Map<string, number>, person: string, by: 1 | -1): void {
+  const next = (counts.get(person) ?? 0) + by;
+  if (next > 0) counts.set(person, next);
+  else counts.delete(person);
 }
 
 /**
- * Wait for a turn to scan, as `person`; `onQueued` hears, once, that the run has to wait and behind
- * whose runs. Resolves to the release, which must be called when the scan is done. Exported for
- * tests; runs reach it through `RunInit.admit`.
+ * Wait for a turn to scan, as `person`, for a statement or a browse run; `onQueued` hears, once,
+ * that the run has to wait and behind whose runs. Resolves to the release, which must be called when
+ * the scan is done. Exported for tests; runs reach it through `RunInit.admit`.
  */
-export function admit(signal: AbortSignal, person: string, onQueued?: (reason: QueueReason) => void): Promise<() => void> {
+export function admit(
+  signal: AbortSignal,
+  person: string,
+  onQueued?: (reason: QueueReason) => void,
+  { statement = false }: { statement?: boolean } = {},
+): Promise<() => void> {
   if (signal.aborted) return Promise.reject(cancelledError());
   const grant = (): (() => void) => {
     scanning += 1;
-    scanningBy.set(person, (scanningBy.get(person) ?? 0) + 1);
+    count(scanningBy, person, 1);
+    if (statement) {
+      statementsScanning += 1;
+      count(statementsBy, person, 1);
+    }
     const resumeWarming = pauseWarming();
     return once(() => {
       scanning -= 1;
-      const left = (scanningBy.get(person) ?? 1) - 1;
-      if (left > 0) scanningBy.set(person, left);
-      else scanningBy.delete(person);
+      count(scanningBy, person, -1);
+      if (statement) {
+        statementsScanning -= 1;
+        count(statementsBy, person, -1);
+      }
       resumeWarming();
       pump();
     });
   };
-  if (canScan(person)) return Promise.resolve(grant());
-  onQueued?.(ownLimitReached(person) ? 'own' : 'others');
+  if (canScan(person, statement)) return Promise.resolve(grant());
+  onQueued?.(queueReason(person, statement));
   return new Promise((resolve, reject) => {
     const entry = {
       person,
+      statement,
       signal,
       reject,
       grant: () => resolve(grant()),
@@ -92,7 +126,7 @@ export function admit(signal: AbortSignal, person: string, onQueued?: (reason: Q
   });
 }
 
-/** Grant waiting runs their turn, oldest first, passing over anyone at their own limit. */
+/** Grant waiting runs their turn, oldest first, passing over anyone at their own limit and statements at theirs. */
 function pump(): void {
   let index = 0;
   while (scanning < config.runConcurrency && index < waiting.length) {
@@ -101,7 +135,7 @@ function pump(): void {
       waiting.splice(index, 1);
       continue;
     }
-    if (ownLimitReached(next.person)) {
+    if (ownLimitReached(next.person) || (next.statement && statementLimitReached())) {
       index += 1;
       continue;
     }
@@ -310,7 +344,7 @@ export async function startRun(input: StartRunInput): Promise<Run> {
       request: { ...input.request, table: selected?.name ?? null, source },
       catalog: primary?.catalog ?? noTableCatalog(),
       columns: primary?.columns ?? [],
-      admit: admitAs,
+      admit: (signal, onQueued) => admit(signal, person, onQueued, { statement: true }),
       tail,
       statement,
       sources,
@@ -518,4 +552,6 @@ export async function resetRuns(): Promise<void> {
   waiting.length = 0;
   scanning = 0;
   scanningBy.clear();
+  statementsScanning = 0;
+  statementsBy.clear();
 }

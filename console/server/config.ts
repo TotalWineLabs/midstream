@@ -3,6 +3,8 @@ import { hostname, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { detectCpus, detectMemoryBytes, duckdbMemoryLimitFor, duckdbThreadsFor } from './resources.ts';
+
 /** Every environment variable the deployment set to a non-empty value, for settings provenance. */
 const environmentSet = new Set<string>();
 
@@ -72,6 +74,11 @@ function packageVersion(): string {
   }
 }
 
+const containerMemoryBytes = int('CONSOLE_CONTAINER_MEMORY_BYTES', detectMemoryBytes());
+const containerCpus = int('CONSOLE_CONTAINER_CPUS', detectCpus());
+const runConcurrency = int('CONSOLE_RUN_CONCURRENCY', 4);
+const statementConcurrency = Math.max(1, Math.min(runConcurrency, int('CONSOLE_STATEMENT_CONCURRENCY', 2)));
+
 /**
  * Settings fixed by the deployment: where the console runs, what it connects to, what it may
  * store, and how big a pod it is sized for. They change only with the deployment.
@@ -107,16 +114,21 @@ const deployment = {
   parquetCacheDir: str('CONSOLE_PARQUET_CACHE_DIR', join(dataDir, 'parquet-cache')),
   parquetCacheMaxBytes: int('CONSOLE_PARQUET_CACHE_MAX_BYTES', 8 * 1024 * 1024 * 1024),
 
-  duckdbMemoryLimit: str('CONSOLE_DUCKDB_MEMORY_LIMIT', '4GB'),
+  /** The container's memory and CPUs, which the chart passes; unset, what the process can see. */
+  containerMemoryBytes,
+  containerCpus,
   /**
-   * DuckDB worker threads.
+   * DuckDB's `memory_limit` and threads, for the console's own instance and each statement's alike.
+   * Unset, they are sized from the container (`resources.ts`), so that the console's instance and
+   * the `statementConcurrency` statements that may scan at once fit in it together.
    *
-   * Reading object storage is bound by round-trip latency, not CPU: a remote Parquet read blocks
-   * its thread for the length of each range request, so threads are also how many requests are in
-   * flight. Measured from a laptop against GCS, a cold filtered scan of 459 objects took 41 s on
-   * 8 threads and 10.5 s on 64. The default leans towards I/O; a CPU-starved pod can lower it.
+   * Reading object storage is bound by round-trip latency as much as CPU: a remote Parquet read
+   * blocks its thread for the length of each range request, so threads are also how many requests
+   * are in flight. Measured from a laptop against GCS, a cold filtered scan of 459 objects took 41 s
+   * on 8 threads and 10.5 s on 64; in a 2-CPU pod, 32 threads were slower than 4 by far.
    */
-  duckdbThreads: int('CONSOLE_DUCKDB_THREADS', 32),
+  duckdbMemoryLimit: str('CONSOLE_DUCKDB_MEMORY_LIMIT', duckdbMemoryLimitFor(containerMemoryBytes, statementConcurrency)),
+  duckdbThreads: int('CONSOLE_DUCKDB_THREADS', duckdbThreadsFor(containerCpus)),
 
   /**
    * Runs: the console's single unit of query work.
@@ -124,10 +136,12 @@ const deployment = {
    * `runConcurrency` bounds runs scanning at once; more wait their turn. `runScanConcurrency` is
    * how many objects one run reads in parallel, which is what makes a cold scan over object
    * storage fast — each object is four round trips, and they overlap. Together they size Node's
-   * worker pool (`workerPool.ts`) when the process starts, which is why they are deployment
-   * settings rather than ones the Settings page can change.
+   * worker pool (`workerPool.ts`) when the process starts, which is why they are deployment settings
+   * rather than ones the Settings page can change. `statementConcurrency` bounds the statements among
+   * them, each a DuckDB instance of its own: DuckDB's memory is shared between that many at once.
    */
-  runConcurrency: int('CONSOLE_RUN_CONCURRENCY', 4),
+  runConcurrency,
+  statementConcurrency,
   runScanConcurrency: int('CONSOLE_RUN_SCAN_CONCURRENCY', 48),
   runDir: str('CONSOLE_RUN_DIR', join(dataDir, 'runs')),
 

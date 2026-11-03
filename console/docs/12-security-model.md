@@ -257,8 +257,9 @@ after one (`update`) makes the table `update_topic` (`shared/tableNames.ts`, the
 | Runs scanning at once | 4 (`CONSOLE_RUN_CONCURRENCY`); more queue |
 | One person's runs scanning at once | 2 (`CONSOLE_RUN_CONCURRENCY_PER_PERSON`), within those 4; their others queue, so one person's explorations cannot hold every scan |
 | Wall clock | None while someone is watching — **Stop** interrupts every query a run has open. A run nobody has read for 30 min (`CONSOLE_RUN_RETENTION_MS`) is cancelled and its stored result deleted |
-| DuckDB memory | 4 GB per instance (`CONSOLE_DUCKDB_MEMORY_LIMIT`) |
-| DuckDB threads | 32 (`CONSOLE_DUCKDB_THREADS`) |
+| Statements scanning at once | 2 (`CONSOLE_STATEMENT_CONCURRENCY`), within those 4; a third queues |
+| DuckDB memory | Per instance, the container's memory shared between the console's own and each statement's: 597 MiB in a 4 GiB pod (`CONSOLE_DUCKDB_MEMORY_LIMIT`); a statement spills past it to its run's directory |
+| DuckDB threads | 4 a CPU (`CONSOLE_DUCKDB_THREADS`) |
 | Cached profiles' downloads | 400 files / 2 GiB per scan (`CONSOLE_CACHED_MODE_MAX_FILES`, `_BYTES`) |
 
 ### Honest limitations
@@ -269,7 +270,7 @@ after one (`update`) makes the table `update_topic` (`shared/tableNames.ts`, the
 - **Expensive queries are possible** within the limits: a cross join can hold CPU and up to
   `CONSOLE_DUCKDB_MEMORY_LIMIT` of memory until someone cancels it, or nobody has watched it for 30
   minutes. Each concurrent statement is an instance of its own, so the memory limit applies per
-  statement, up to `CONSOLE_RUN_CONCURRENCY` of them.
+  statement, up to `CONSOLE_STATEMENT_CONCURRENCY` of them.
 - **The sandbox's own directory was once shared.** As first built, every statement's sandbox was
   allowed the whole run directory, where every run's result is stored, so a statement could read
   another person's result by naming it. Each run now has a directory of its own (E10).

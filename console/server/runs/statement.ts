@@ -141,7 +141,12 @@ export class StatementRun extends Run {
     this.progress.fraction = null;
     this.changed(true);
 
-    const access = { directories: [`${this.workDir}/`], paths: tables.flatMap((table) => table.sources) };
+    const access = {
+      directories: [`${this.workDir}/`],
+      paths: tables.flatMap((table) => table.sources),
+      // Removed with the run's directory, like its result.
+      spillDirectory: join(this.workDir, 'spill'),
+    };
     await withSandbox(
       access,
       async (connection) => {

@@ -357,7 +357,9 @@ console:
       memory: 4Gi
   # CONSOLE_* variables (console/docs/03-configuration-reference.md). The chart sets PORT, HOST,
   # CONSOLE_URL, CONSOLE_DOMAINS_FILE, CONSOLE_STORAGE_FILE, the domains' service tokens, the storage
-  # profiles' credentials, the sign-in clients and CONSOLE_DATA_DIR itself.
+  # profiles' credentials, the sign-in clients and CONSOLE_DATA_DIR itself, and passes the limits above
+  # as CONSOLE_CONTAINER_MEMORY_BYTES and CONSOLE_CONTAINER_CPUS: DuckDB's memory and threads are sized
+  # from them unless CONSOLE_DUCKDB_MEMORY_LIMIT or CONSOLE_DUCKDB_THREADS is set here.
   env: {}
   # Where the console reads tables from (console/docs/07): one profile per destination prefix, with
   # credentials of its own. Every object a table names is read through the profile whose scope is its

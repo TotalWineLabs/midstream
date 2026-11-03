@@ -130,6 +130,18 @@ spec:
             {{- end }}
             - name: CONSOLE_DATA_DIR
               value: /var/lib/midstream-console
+            # The container's own limits: DuckDB's memory and threads are sized from them, so that the
+            # console's instance and every statement scanning at once fit in the pod together.
+            - name: CONSOLE_CONTAINER_MEMORY_BYTES
+              valueFrom:
+                resourceFieldRef:
+                  containerName: console
+                  resource: limits.memory
+            - name: CONSOLE_CONTAINER_CPUS
+              valueFrom:
+                resourceFieldRef:
+                  containerName: console
+                  resource: limits.cpu
             {{- range $name, $value := .Values.console.env }}
             - name: {{ $name }}
               value: {{ $value | quote }}

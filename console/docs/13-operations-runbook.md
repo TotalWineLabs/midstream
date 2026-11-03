@@ -24,14 +24,14 @@ routes for the files present at startup.
 
 ```dockerfile
 # Illustrative only — pin the digest and use your approved base image.
-FROM node:24-alpine AS build
+FROM node:24-bookworm-slim AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM node:24-alpine
+FROM node:24-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
@@ -48,7 +48,9 @@ Note that `server/` and `shared/` ship as **TypeScript** — the runtime strips 
 server build artefact.
 
 > Repository standards require pinned image versions and a non-root user. Prefer an approved,
-> hardened base image over `node:24-alpine` if one is available in your registry.
+> hardened base image over `node:24-bookworm-slim` if one is available in your registry, but keep it
+> glibc-based: DuckDB's musl build (Alpine) has no jemalloc, and the memory each statement used
+> stays with the process, so the console's grows with every statement until the pod is killed.
 
 ## 13.2 Probes
 
@@ -67,9 +69,13 @@ resources:
   limits:   { cpu: "2",    memory: "4Gi" }
 ```
 
-Memory is dominated by DuckDB: budget at least `CONSOLE_DUCKDB_MEMORY_LIMIT` plus ~256 MiB for
-Node and the live store. Setting a DuckDB limit above the container limit will get the pod OOM
-killed rather than producing a clean DuckDB error.
+Memory is dominated by DuckDB. The chart passes the container's limits to the console
+(`CONSOLE_CONTAINER_MEMORY_BYTES`, `CONSOLE_CONTAINER_CPUS`), and DuckDB's memory limit and threads
+are derived from them, so the console's instance and every statement scanning at once fit in the pod
+(03 §3.6). Setting `CONSOLE_DUCKDB_MEMORY_LIMIT` by hand overrides that for every instance; above the
+derived value, several statements at once can get the pod OOM killed rather than produce a clean
+DuckDB error. Before the derivation, the default of 4 GB for each instance did exactly that: one
+statement over a large table filled its sandbox's file cache, and the pod was killed at its 4 GiB limit.
 
 ## 13.3 Persistence
 
@@ -399,7 +405,8 @@ console is running.
 
 ### High memory
 
-Check `CONSOLE_DUCKDB_MEMORY_LIMIT` against the container limit, and
+Check that `CONSOLE_DUCKDB_MEMORY_LIMIT` is not set above its derived value (the Settings page's
+Deployment section shows both the container's memory and the limit), and
 `CONSOLE_SERIES_POINTS × fleet size` for the live store. DuckDB is almost always the dominant
 term.
 

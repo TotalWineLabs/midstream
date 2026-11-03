@@ -2,6 +2,7 @@ import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-quer
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { pageQueryKey } from './live.ts';
+import { lostRun, runGone } from './lostRun.ts';
 import { ApiError, api } from '@/lib/api';
 import { useApi } from '@/lib/domains';
 import type { RunPage, RunRefresh, RunRequest, RunSnapshot, TimeRange } from '@shared/types';
@@ -44,7 +45,8 @@ export interface RunController {
  * Starting a run cancels the one before it if it is still working: a new question supersedes the
  * old one, and leaving it to finish would spend the server on an answer nobody will look at.
  * Progress arrives over server-sent events; if the stream drops, the hook polls instead, because a
- * status frozen by a dead transport is indistinguishable from a hung query.
+ * status frozen by a dead transport is indistinguishable from a hung query. A run the console no
+ * longer has - it restarted - answers 404, and ends on screen as failed (`lostRun.ts`).
  *
  * Runs start through the console's own route (`POST /api/runs`), whatever their table's domain.
  * `belongs` says whether a run, picked back up by its id, is about what the caller shows. With
@@ -80,6 +82,17 @@ export function useRun({ belongs, stream = true }: { belongs: (run: RunSnapshot)
     }
   }, []);
 
+  /** The run on screen, if it is still `runId` and still running, ended: the console no longer has it. */
+  const lose = useCallback(
+    (runId: string) => {
+      const active = current.current;
+      if (!active || active.id !== runId || active.state !== 'running') return;
+      stopFollowing();
+      show(lostRun(active));
+    },
+    [show, stopFollowing],
+  );
+
   const follow = useCallback(
     (snapshot: RunSnapshot) => {
       stopFollowing();
@@ -96,7 +109,9 @@ export function useRun({ belongs, stream = true }: { belongs: (run: RunSnapshot)
               show(next);
               if (next.state !== 'running') stopFollowing();
             })
-            .catch(() => undefined);
+            .catch((error: unknown) => {
+              if (runGone(error)) lose(id);
+            });
         }, every);
       };
       if (!streaming.current) {
@@ -121,7 +136,7 @@ export function useRun({ belongs, stream = true }: { belongs: (run: RunSnapshot)
         ask(POLL_MS);
       };
     },
-    [show, stopFollowing],
+    [show, stopFollowing, lose],
   );
 
   // Out of sight or back: a run still working is followed the other way, from where it is.
@@ -162,8 +177,10 @@ export function useRun({ belongs, stream = true }: { belongs: (run: RunSnapshot)
         show(snapshot);
         stopFollowing();
       })
-      .catch(() => undefined);
-  }, [show, stopFollowing]);
+      .catch((error: unknown) => {
+        if (runGone(error)) lose(active.id);
+      });
+  }, [show, stopFollowing, lose]);
 
   const attach = useCallback(
     async (runId: string): Promise<boolean> => {

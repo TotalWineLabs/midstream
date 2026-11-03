@@ -1206,6 +1206,19 @@ class SchedulingTests(unittest.TestCase):
         self.assertEqual("web", pod["tolerations"][0]["value"])
         self.assertNotIn("affinity", pod, "console.affinity is empty in the test values")
 
+    def test_the_console_is_told_its_own_limits(self) -> None:
+        # DuckDB's memory and threads are sized from them (console/server/resources.ts).
+        for values in VALUES_FILES:
+            for deployment in documents("Deployment", values):
+                container = next(item for item in deployment["spec"]["template"]["spec"]["containers"] if item["name"] == "console")
+                env = {item["name"]: item for item in container["env"]}
+                for name, resource in (("CONSOLE_CONTAINER_MEMORY_BYTES", "limits.memory"), ("CONSOLE_CONTAINER_CPUS", "limits.cpu")):
+                    self.assertEqual(
+                        {"containerName": "console", "resource": resource},
+                        env[name]["valueFrom"]["resourceFieldRef"],
+                        f"{name} in {values.name}",
+                    )
+
     def test_nothing_is_rendered_when_no_placement_is_set(self) -> None:
         import yaml
 
