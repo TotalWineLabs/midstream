@@ -242,8 +242,11 @@ At most `CONSOLE_RUN_CONCURRENCY` (4) runs scan at once; more wait. Only the sca
 admitted — a run the manifest answers on its own never waits behind someone else's scan. Within that,
 at most `CONSOLE_RUN_CONCURRENCY_PER_PERSON` (2; 0 for no limit) of one person's runs scan at once —
 the person by their email, the same in every domain — so one person's explorations cannot take every
-scan (`runs/store.ts::admit`). A waiting run's phase is `queued`, with `queued: 'own'` while the
-person's own runs hold their share and `'others'` while everyone's do, and the status line says which:
+scan (`runs/store.ts::admit`). Of them, at most `CONSOLE_STATEMENT_CONCURRENCY` (2) are statements:
+each is a DuckDB instance of its own, and DuckDB's memory is shared between that many and the
+console's instance (03 §3.6), so a third waits; browse runs are never held up by statements. A
+waiting run's phase is `queued`, with `queued: 'own'` while the person's own runs hold their share —
+or every statement scanning is theirs — and `'others'` while everyone's do, and the status line says which:
 *Waiting for your other queries to finish* or *Waiting for other queries to finish*. Waiting runs are
 admitted in the order they came, skipping a person at their limit. A run nobody has read for
 `CONSOLE_RUN_RETENTION_MS` (30 min) is discarded with its stored result; a live event stream keeps it

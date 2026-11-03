@@ -15,15 +15,17 @@ function mib(limit: string): number {
 
 describe('DuckDB sized to the container', () => {
   it('fits the console’s instance and every concurrent statement, each with as much again to spare, beside Node', () => {
-    // The chart's default pod: 4 GiB, four runs scanning at once.
-    const limit = duckdbMemoryLimitFor(4 * GIB, 4);
-    assert.equal(limit, '358MiB');
-    assert.ok(5 * 2 * mib(limit) * MIB + NODE_RESERVE_BYTES <= 4 * GIB);
+    // The chart's default pod: 4 GiB, two statements scanning at once. A distinct count over a
+    // hundred million rows failed at 358 MiB and ran at 480.
+    const limit = duckdbMemoryLimitFor(4 * GIB, 2);
+    assert.equal(limit, '597MiB');
+    assert.ok(3 * 2 * mib(limit) * MIB + NODE_RESERVE_BYTES <= 4 * GIB);
   });
 
   it('gives each statement more when fewer scan at once, or the pod is bigger', () => {
-    assert.ok(mib(duckdbMemoryLimitFor(4 * GIB, 1)) > mib(duckdbMemoryLimitFor(4 * GIB, 4)));
-    assert.equal(duckdbMemoryLimitFor(16 * GIB, 4), '1587MiB');
+    assert.equal(duckdbMemoryLimitFor(4 * GIB, 4), '358MiB');
+    assert.ok(mib(duckdbMemoryLimitFor(4 * GIB, 1)) > mib(duckdbMemoryLimitFor(4 * GIB, 2)));
+    assert.equal(duckdbMemoryLimitFor(16 * GIB, 2), '2645MiB');
   });
 
   it('never goes below its floor, however small the container', () => {

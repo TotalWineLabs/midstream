@@ -2,8 +2,8 @@
  * DuckDB sized to the container the console runs in.
  *
  * The console holds one DuckDB instance of its own and one more for every statement scanning
- * (`data/duckdb.ts::withSandbox`), at most `CONSOLE_RUN_CONCURRENCY` of them. `memory_limit` bounds
- * what DuckDB's buffer manager holds, not the process: measured in a 2-CPU pod scanning 1,178
+ * (`data/duckdb.ts::withSandbox`), at most `CONSOLE_STATEMENT_CONCURRENCY` of them (`runs/store.ts`
+ * admits no more). `memory_limit` bounds what DuckDB's buffer manager holds, not the process: measured in a 2-CPU pod scanning 1,178
  * objects, a sandbox capped at 1.5 GB reached 1.27 GiB resident with its file cache off and 2.5 GiB
  * with it on, against 490 MiB DuckDB said it held. So every instance gets an equal share of what Node
  * leaves, and half of that share is its limit: the other half is room for what DuckDB does not count.
@@ -45,8 +45,8 @@ export function detectCpus(): number {
 }
 
 /** `memory_limit` for each DuckDB instance: the console's own and every concurrent statement's. */
-export function duckdbMemoryLimitFor(memoryBytes: number, runConcurrency: number): string {
-  const instances = Math.max(1, runConcurrency) + 1;
+export function duckdbMemoryLimitFor(memoryBytes: number, statementConcurrency: number): string {
+  const instances = Math.max(1, statementConcurrency) + 1;
   const share = Math.max(0, memoryBytes - NODE_RESERVE_BYTES) / instances;
   return `${Math.floor(Math.max(MIN_INSTANCE_BYTES, share / 2) / MIB)}MiB`;
 }

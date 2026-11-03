@@ -77,6 +77,7 @@ function packageVersion(): string {
 const containerMemoryBytes = int('CONSOLE_CONTAINER_MEMORY_BYTES', detectMemoryBytes());
 const containerCpus = int('CONSOLE_CONTAINER_CPUS', detectCpus());
 const runConcurrency = int('CONSOLE_RUN_CONCURRENCY', 4);
+const statementConcurrency = Math.max(1, Math.min(runConcurrency, int('CONSOLE_STATEMENT_CONCURRENCY', 2)));
 
 /**
  * Settings fixed by the deployment: where the console runs, what it connects to, what it may
@@ -119,14 +120,14 @@ const deployment = {
   /**
    * DuckDB's `memory_limit` and threads, for the console's own instance and each statement's alike.
    * Unset, they are sized from the container (`resources.ts`), so that the console's instance and
-   * every statement scanning at once fit in it together.
+   * the `statementConcurrency` statements that may scan at once fit in it together.
    *
    * Reading object storage is bound by round-trip latency as much as CPU: a remote Parquet read
    * blocks its thread for the length of each range request, so threads are also how many requests
    * are in flight. Measured from a laptop against GCS, a cold filtered scan of 459 objects took 41 s
    * on 8 threads and 10.5 s on 64; in a 2-CPU pod, 32 threads were slower than 4 by far.
    */
-  duckdbMemoryLimit: str('CONSOLE_DUCKDB_MEMORY_LIMIT', duckdbMemoryLimitFor(containerMemoryBytes, runConcurrency)),
+  duckdbMemoryLimit: str('CONSOLE_DUCKDB_MEMORY_LIMIT', duckdbMemoryLimitFor(containerMemoryBytes, statementConcurrency)),
   duckdbThreads: int('CONSOLE_DUCKDB_THREADS', duckdbThreadsFor(containerCpus)),
 
   /**
@@ -135,10 +136,12 @@ const deployment = {
    * `runConcurrency` bounds runs scanning at once; more wait their turn. `runScanConcurrency` is
    * how many objects one run reads in parallel, which is what makes a cold scan over object
    * storage fast — each object is four round trips, and they overlap. Together they size Node's
-   * worker pool (`workerPool.ts`) when the process starts, and `runConcurrency` DuckDB's memory,
-   * which is why they are deployment settings rather than ones the Settings page can change.
+   * worker pool (`workerPool.ts`) when the process starts, which is why they are deployment settings
+   * rather than ones the Settings page can change. `statementConcurrency` bounds the statements among
+   * them, each a DuckDB instance of its own: DuckDB's memory is shared between that many at once.
    */
   runConcurrency,
+  statementConcurrency,
   runScanConcurrency: int('CONSOLE_RUN_SCAN_CONCURRENCY', 48),
   runDir: str('CONSOLE_RUN_DIR', join(dataDir, 'runs')),
 

@@ -1,7 +1,8 @@
 /**
- * Admission to scan: at most `runConcurrency` runs scan at once, and at most
- * `runConcurrencyPerPerson` of one person's, so someone with several explorations open cannot take
- * every scan; a run that has to wait says so, and behind whose runs.
+ * Admission to scan: at most `runConcurrency` runs scan at once, at most `runConcurrencyPerPerson`
+ * of one person's, so someone with several explorations open cannot take every scan, and at most
+ * `statementConcurrency` statements, which DuckDB's memory is sized for; a run that has to wait says
+ * so, and behind whose runs.
  */
 
 import assert from 'node:assert/strict';
@@ -105,6 +106,57 @@ describe('admission to scan', () => {
     assert.deepEqual(reasons, ['own'], 'still one of hers scanning: still her turn to wait');
     (held[1] as () => void)();
     (await waiting)();
+  });
+
+  const STATEMENT = { statement: true };
+
+  it('lets two statements scan at once, while browse runs still take the rest', async () => {
+    applySettingOverrides({ runConcurrencyPerPerson: 2 });
+    const statements = await Promise.all(['ana', 'bob'].map((person) => admit(OPEN, person, undefined, STATEMENT)));
+    const reasons: string[] = [];
+    let admitted = false;
+    const third = admit(OPEN, 'cy', (reason) => reasons.push(reason), STATEMENT).then((release) => {
+      admitted = true;
+      return release;
+    });
+    await settle();
+    assert.deepEqual(reasons, ['others']);
+    assert.equal(admitted, false);
+    // Cy's browse run is not held up by the statements, nor by Cy's own statement waiting.
+    const browse = await admit(OPEN, 'cy');
+    browse();
+    (statements[0] as () => void)();
+    const release = await third;
+    assert.equal(admitted, true);
+    for (const done of [statements[1] as () => void, release]) done();
+  });
+
+  it('says a statement waits behind the person’s own when both statements scanning are theirs', async () => {
+    applySettingOverrides({ runConcurrencyPerPerson: 3 });
+    const held = await Promise.all([1, 2].map(() => admit(OPEN, 'ana', undefined, STATEMENT)));
+    const reasons: string[] = [];
+    const waiting = admit(OPEN, 'ana', (reason) => reasons.push(reason), STATEMENT);
+    await settle();
+    assert.deepEqual(reasons, ['own']);
+    (held[0] as () => void)();
+    for (const done of [held[1] as () => void, await waiting]) done();
+  });
+
+  it('passes over a statement waiting for its turn, so a browse run behind it goes first', async () => {
+    applySettingOverrides({ runConcurrencyPerPerson: 0 });
+    // Four runs scanning: two statements and two browse runs.
+    const statements = await Promise.all(['ana', 'bob'].map((person) => admit(OPEN, person, undefined, STATEMENT)));
+    const browsing = await Promise.all(['cy', 'di'].map((person) => admit(OPEN, person)));
+    const order: string[] = [];
+    const statement = admit(OPEN, 'ed', undefined, STATEMENT).then((release) => (order.push('statement'), release));
+    const browse = admit(OPEN, 'fe').then((release) => (order.push('browse'), release));
+    (browsing[0] as () => void)();
+    await settle();
+    assert.deepEqual(order, ['browse'], 'the freed slot goes to the browse run: statements are at their limit');
+    (statements[0] as () => void)();
+    await settle();
+    assert.deepEqual(order, ['browse', 'statement']);
+    for (const done of [statements[1], browsing[1], await browse, await statement]) (done as () => void)();
   });
 });
 

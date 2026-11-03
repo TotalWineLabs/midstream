@@ -157,7 +157,7 @@ old `schema-history/` directory can be deleted. See
 | `CONSOLE_STORAGE_<NAME>_…` | string | unset | Each profile's credentials, never in the JSON (§3.6a) |
 | `CONSOLE_CONTAINER_MEMORY_BYTES` | int | the cgroup's limit, else the machine's memory | The container's memory limit, which the chart passes (`limits.memory`). DuckDB's memory limit is derived from it |
 | `CONSOLE_CONTAINER_CPUS` | int | the CPUs Node sees, a cgroup's quota counted | The container's CPU limit, which the chart passes (`limits.cpu`, rounded up). DuckDB's threads are derived from it |
-| `CONSOLE_DUCKDB_MEMORY_LIMIT` | string | derived: 358MiB in a 4 GiB pod | Passed to DuckDB as `memory_limit`, for the shared instance and each statement's sandbox. Also bounds the shared instance's in-memory cache of file bytes already read. Unset, the container's memory less 512 MiB for Node is shared between the shared instance and `CONSOLE_RUN_CONCURRENCY` statements, and half of each share is its limit; see below |
+| `CONSOLE_DUCKDB_MEMORY_LIMIT` | string | derived: 597MiB in a 4 GiB pod | Passed to DuckDB as `memory_limit`, for the shared instance and each statement's sandbox. Also bounds the shared instance's in-memory cache of file bytes already read. Unset, the container's memory less 512 MiB for Node is shared between the shared instance and `CONSOLE_STATEMENT_CONCURRENCY` statements, and half of each share is its limit; see below |
 | `CONSOLE_DUCKDB_THREADS` | int | derived: 4 a CPU, 4–64 | DuckDB worker threads, for each instance. Remote reads block a thread per range request, so this bounds the requests one query has in flight; see below |
 | `CONSOLE_QUERY_STATS_TIMEOUT_MS` | int | `8000` | Budget for column profiles; an overrun returns a `partial` profile |
 | `CONSOLE_CACHED_MODE_MAX_FILES` | int | `400` | Files of cached profiles one scan may mirror; a wider time range is refused with a request to narrow it or give the profile direct access. Pages are never refused |
@@ -166,6 +166,7 @@ old `schema-history/` directory can be deleted. See
 | `CONSOLE_TABLE_METADATA_FRESH_MS` | int | `5000` | How old a pointer the Data tab's summary and estimates accept as current |
 | `CONSOLE_CATALOG_MAX_STALE_MS` | int | `300000` (5 min) | How old a pointer may be served at once while a fresh one is read in the background. Runs always ask for a fresh one |
 | `CONSOLE_RUN_CONCURRENCY` | int | `4` | Runs scanning at once; more wait their turn. Runs the manifests answer alone never wait |
+| `CONSOLE_STATEMENT_CONCURRENCY` | int | `2` | Of those, statements scanning at once (at most `CONSOLE_RUN_CONCURRENCY`); a third waits, and browse runs are never held up by them. Each statement is a DuckDB instance of its own, and DuckDB's memory is shared between this many and the console's own instance, so fewer gives each more |
 | `CONSOLE_RUN_CONCURRENCY_PER_PERSON` | int | `2` | Of those, one person's runs scanning at once, so one person's explorations cannot take every scan; their others wait, and say so. `0`: no limit but `CONSOLE_RUN_CONCURRENCY` (07 §07.5) |
 | `CONSOLE_RUN_SCAN_CONCURRENCY` | int | `48` | Files one run reads in parallel: a browse run counting, a statement reading footers |
 | `UV_THREADPOOL_SIZE` | int | derived | Node's worker pool. Unset, the console sets it at startup to `RUN_CONCURRENCY × RUN_SCAN_CONCURRENCY + 32` (224 by default), because every DuckDB query in flight holds one of its threads; see below |
@@ -215,26 +216,34 @@ it.
 ### DuckDB's memory
 
 The console holds one DuckDB instance of its own and one more for each statement scanning, at most
-`CONSOLE_RUN_CONCURRENCY` of them, and `memory_limit` applies to each. It bounds what DuckDB's buffer
+`CONSOLE_STATEMENT_CONCURRENCY` of them, and `memory_limit` applies to each. It bounds what DuckDB's buffer
 manager holds, not the process: in a 2-CPU pod, a statement capped at 1.5 GB reached 1.27 GiB
 resident against the 490 MiB DuckDB said it held, and 2.5 GiB while its sandbox still kept an external
 file cache. Unset, the limit is derived so that all of them fit in the container together:
 
 ```
-limit = (container memory − 512 MiB) ÷ (CONSOLE_RUN_CONCURRENCY + 1) ÷ 2,  at least 128 MiB
+limit = (container memory − 512 MiB) ÷ (CONSOLE_STATEMENT_CONCURRENCY + 1) ÷ 2,  at least 128 MiB
 ```
 
-| Pod | Runs scanning at once | Each instance's limit |
-|-----|-----------------------|-----------------------|
-| 4 GiB (the chart's default) | 4 | 358 MiB |
+| Pod | Statements scanning at once | Each instance's limit |
+|-----|-----------------------------|-----------------------|
+| 4 GiB (the chart's default) | 2 (the default) | 597 MiB |
 | 4 GiB | 1 | 896 MiB |
-| 16 GiB | 4 | 1,587 MiB |
+| 4 GiB | 4 | 358 MiB |
+| 16 GiB | 2 | 2,645 MiB |
 
-Half of each share is the limit; the other half is room for what DuckDB does not count. A sort,
+Half of each share is the limit; the other half is room for what DuckDB does not count — while
+aggregating, as much again as its limit. Over the load-test table, a `count(DISTINCT order_id)`
+grouped by two columns failed at 358 MiB and ran at 480 MiB. A sort,
 aggregate or join larger than the limit spills to `<CONSOLE_RUN_DIR>/<run id>/spill/`, removed with
 the run. A statement that needs more memory than its share is given more by a bigger pod or fewer
-runs scanning at once; setting `CONSOLE_DUCKDB_MEMORY_LIMIT` raises every instance's limit at once,
-and above the share that risks the pod being killed for its memory when several statements run.
+statements scanning at once; setting `CONSOLE_DUCKDB_MEMORY_LIMIT` raises every instance's limit at
+once, and above the share that risks the pod being killed for its memory when several statements run.
+
+The image is Debian, not Alpine, for the same reason: DuckDB's musl build has no jemalloc, and on it
+the memory each statement used stayed with the process after its sandbox closed — 1.3 GiB resident
+after one statement over the load-test table, 1.9 GiB after eight. On the glibc build it held at
+1.0 GiB.
 
 ## 3.6a Storage profiles
 
@@ -419,7 +428,7 @@ at startup stays with the deployment. The Settings page lists these read-only un
 **Deployment**: `PORT`/`HOST`, `CONSOLE_URL`, the registry (its domains and the settings home), `CONSOLE_VERSION`, the storage
 profiles (**Object storage access**, then a row per profile: its scope, mode and what it reads with),
 `CONSOLE_CONTAINER_MEMORY_BYTES`, `CONSOLE_CONTAINER_CPUS`, `CONSOLE_DUCKDB_MEMORY_LIMIT`,
-`CONSOLE_DUCKDB_THREADS`, `CONSOLE_RUN_CONCURRENCY`,
+`CONSOLE_DUCKDB_THREADS`, `CONSOLE_RUN_CONCURRENCY`, `CONSOLE_STATEMENT_CONCURRENCY`,
 `CONSOLE_RUN_SCAN_CONCURRENCY` (they size `UV_THREADPOOL_SIZE` at start), `CONSOLE_DATA_DIR`,
 `CONSOLE_PARQUET_CACHE_MAX_BYTES`, `CONSOLE_CORS_ORIGIN`, `CONSOLE_SERVE_CLIENT`, and the
 sign-in wiring — `CONSOLE_SESSION_COOKIE`, `CONSOLE_COOKIE_SECURE` and each single sign-on provider
