@@ -21,7 +21,7 @@ interface LiveResult<T> {
  * `EventSource` already retries, but it surfaces no state; tracking it here lets the UI show an
  * honest freshness indicator instead of silently rendering stale data.
  */
-function useEventStream<T>(url: string, eventName: string): LiveResult<T> {
+function useEventStream<T>(url: string | null, eventName: string): LiveResult<T> {
   const [data, setData] = useState<T | null>(null);
   const [status, setStatus] = useState<LiveStatus>('connecting');
   const everConnected = useRef(false);
@@ -30,6 +30,8 @@ function useEventStream<T>(url: string, eventName: string): LiveResult<T> {
   const { generation } = useAuth();
 
   useEffect(() => {
+    // Paused: the last frame stays, and the stream opens again, from where things are, when asked.
+    if (url === null) return;
     setStatus(everConnected.current ? 'reconnecting' : 'connecting');
     const source = new EventSource(url);
 
@@ -90,11 +92,14 @@ export function useFleetStream(): LiveResult<ConsoleFleet> {
   return shared;
 }
 
-/** One materialization of the page's domain, live. */
-export function useDetailStream(materializationId: string): LiveResult<DetailSnapshot> {
+/**
+ * One materialization of the page's domain, live. Not `enabled`, the stream closes, keeping its last
+ * frame: an exploration out of sight holds no connection open.
+ */
+export function useDetailStream(materializationId: string, { enabled = true }: { enabled?: boolean } = {}): LiveResult<DetailSnapshot> {
   const { id } = useDomain();
   return useEventStream<DetailSnapshot>(
-    `/api/d/${encodeURIComponent(id)}/stream/materializations/${encodeURIComponent(materializationId)}`,
+    enabled ? `/api/d/${encodeURIComponent(id)}/stream/materializations/${encodeURIComponent(materializationId)}` : null,
     'detail',
   );
 }

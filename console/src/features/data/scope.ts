@@ -4,7 +4,8 @@
  * as plain functions.
  */
 
-import { canonicalName, namedTables } from '@shared/statementNames';
+// Relative, so `node --test` loads it without the bundler's path aliases.
+import { canonicalName, namedTables } from '../../../shared/statementNames.ts';
 import type { RunSnapshot, TableRef } from '@shared/types';
 
 /** The table a workbench is about: where it is, as SQL names it, and what writes it. */

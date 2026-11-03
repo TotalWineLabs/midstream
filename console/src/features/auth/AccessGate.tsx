@@ -110,6 +110,19 @@ export function RequirePermission({
   return <AccessDenied what={what} />;
 }
 
+/**
+ * A console page that needs a dataset permission somewhere - on some dataset, in some domain:
+ * Explore, whose explorations read any table the person may query. A guest without it is sent to
+ * sign in, and brought back after; a signed-in person without it is told so.
+ */
+export function RequireDatasetPermission({ permission, what, children }: { permission: string; what: string; children: ReactNode }): ReactNode {
+  const { overall } = useConsoleAuth();
+  const location = useLocation();
+  if (overall.canAnywhere(permission)) return children;
+  if (!overall.signedIn) return <Navigate to="/sign-in" replace state={{ from: location }} />;
+  return <AccessDenied what={what} />;
+}
+
 export function AccessDenied({ what }: { what: string }): ReactNode {
   const domain = useOptionalDomain();
   const many = useManyDomains();

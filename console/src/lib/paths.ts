@@ -15,22 +15,33 @@ export function tablePath(dataset: string, table: string, tab: TableTab = 'data'
   return tab === 'data' ? page : `${page}/${tab}`;
 }
 
-/** The part of the console an address is in: an overview, the lists, search or settings. */
-export type ShellSection = 'overview' | 'materializations' | 'datasets' | 'search' | 'settings';
+/** The part of the console an address is in: an overview, the lists, Explore, search or settings. */
+export type ShellSection = 'overview' | 'materializations' | 'datasets' | 'explore' | 'search' | 'settings';
 
 /** Which part of the console an address is in, whatever its scope. */
 export function sectionOf(pathname: string): ShellSection {
   const rest = pathname.replace(/^\/d\/[^/]+/, '') || '/';
   if (rest.startsWith('/materializations')) return 'materializations';
   if (rest.startsWith('/datasets')) return 'datasets';
+  if (rest.startsWith('/explore')) return 'explore';
   if (rest.startsWith('/search')) return 'search';
   if (rest.startsWith('/settings')) return 'settings';
   return 'overview';
 }
 
-/** Where a section is: in a domain, or across every domain. Search is always the console's. */
+/**
+ * Where a section is: in a domain, or across every domain. Search is always the console's, and so
+ * is Explore, whose explorations read any domain: from inside one it carries the domain along
+ * (`?domain=`), so the shell stays in it and the Tables rail opens on it.
+ */
 export function sectionPath(section: ShellSection, domain: string | null): string {
+  if (section === 'explore') return domain === null ? '/explore' : `/explore?domain=${encodeURIComponent(domain)}`;
   const path = section === 'overview' ? '' : `/${section}`;
   if (domain === null || section === 'search') return path || '/';
   return domainPath(domain, path);
+}
+
+/** An exploration's address, or Explore's own. */
+export function explorePath(id: string | null = null): string {
+  return id === null ? '/explore' : `/explore/${encodeURIComponent(id)}`;
 }

@@ -1,5 +1,6 @@
-import { ALL_TIME, decodeRange, encodeRange, type TimeRangeSpec } from './timeRange';
-import { TABLE_PARAM } from '../tables/selectedTable';
+// With their extensions, so `node --test` loads it without the bundler.
+import { ALL_TIME, decodeRange, encodeRange, type TimeRangeSpec } from './timeRange.ts';
+import { TABLE_PARAM } from '../tables/selectedTable.ts';
 import type { BrowseFilter, RunOrder } from '@shared/types';
 
 /**

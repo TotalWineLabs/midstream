@@ -1,6 +1,8 @@
+import { Compass } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
+import { fromView, shareLink } from '../explore/explorations';
 import { readViewState, writeViewState, type WorkbenchView } from './viewState';
 import { Workbench } from './Workbench';
 import type { WorkbenchSource } from './scope';
@@ -82,6 +84,25 @@ export function DataTab({
     () => ({ link: () => window.location.href, title: 'Copy a link that reopens this view', note: 'It reopens this exact view.' }),
     [],
   );
+  // The question on screen, carried into a new exploration - its run too, picked back up there.
+  const navigate = useNavigate();
+  const actions = useMemo(
+    () =>
+      source
+        ? [
+            {
+              key: 'explore',
+              icon: <Compass className="size-3.5" />,
+              label: 'Open in Explore',
+              title: 'Carry this question into a new exploration',
+              onSelect: () => {
+                if (latest.current) void navigate(shareLink(source, fromView(latest.current)));
+              },
+            },
+          ]
+        : [],
+    [source, navigate],
+  );
 
   return (
     <PageBody>
@@ -92,6 +113,7 @@ export function DataTab({
           initialView={initial}
           onViewChange={onViewChange}
           share={share}
+          actions={actions}
           frameClassName="h-[calc(100dvh-196px)] min-h-[560px]"
         />
       ) : (

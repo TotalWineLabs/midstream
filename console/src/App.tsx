@@ -1,8 +1,9 @@
-import type { ReactNode } from 'react';
+import { Suspense, lazy, type ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { AppShell } from './components/AppShell';
-import { RequirePermission, SessionGate } from './features/auth/AccessGate';
+import { Mark } from './components/Logo';
+import { RequireDatasetPermission, RequirePermission, SessionGate } from './features/auth/AccessGate';
 import { InvitationPage } from './features/auth/InvitationPage';
 import { SignInPage } from './features/auth/SignInPage';
 import { SsoOutcomeToast } from './features/auth/SsoOutcome';
@@ -18,10 +19,13 @@ import { SettingsPage } from './features/settings/SettingsPage';
 import { TablePage } from './features/tables/TablePage';
 import { DomainScope, domainPath, useDomain } from './lib/domains';
 
+// Explore is a workspace of its own: its code loads when it is first opened, never with another page.
+const ExplorePage = lazy(() => import('./features/explore/ExplorePage').then((module) => ({ default: module.ExplorePage })));
+
 /**
- * The console's pages (handbook 20): every domain at `/`, `/materializations`, `/datasets` and
- * `/search`; the console's own settings at `/settings`; everything about one domain under
- * `/d/<domain>/`; and, outside the shell, signing in and accepting an invitation.
+ * The console's pages (handbook 20): every domain at `/`, `/materializations`, `/datasets`,
+ * `/explore` and `/search`; the console's own settings at `/settings`; everything about one domain
+ * under `/d/<domain>/`; and, outside the shell, signing in and accepting an invitation.
  */
 export function App(): ReactNode {
   return (
@@ -44,6 +48,8 @@ function ShellRoutes(): ReactNode {
         <Route path="/" element={<Overview />} />
         <Route path="/materializations" element={<Materializations />} />
         <Route path="/datasets" element={<Datasets />} />
+        <Route path="/explore" element={<Explore />} />
+        <Route path="/explore/:explorationId" element={<Explore />} />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/:section" element={<SettingsPage />} />
@@ -162,6 +168,24 @@ function Datasets(): ReactNode {
     <RequirePermission permission="datasets.view" what="datasets">
       <DatasetsPage />
     </RequirePermission>
+  );
+}
+
+/** Explore: for anyone who may query a dataset, in any domain (docs/design/explore.md §8). */
+function Explore(): ReactNode {
+  return (
+    <RequireDatasetPermission permission="data.query" what="exploring data">
+      <Suspense
+        fallback={
+          <div className="flex min-h-[40vh] items-center justify-center">
+            {/* The console itself is waiting, for the page's code: its mark flows (§10.7). */}
+            <Mark size={32} working label="Loading" className="text-[var(--color-ink-faint)]" />
+          </div>
+        }
+      >
+        <ExplorePage />
+      </Suspense>
+    </RequireDatasetPermission>
   );
 }
 
