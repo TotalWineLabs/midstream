@@ -285,10 +285,10 @@ table is created and not updated after: the maintenance app's expiry follows the
 ### The console (`console`)
 
 See the console handbook, [03 — Configuration](../../console/docs/03-configuration-reference.md).
-Thirty-one of its settings are overridable — refresh cadence, chart and rate windows, query and
-export limits, the Data explorer switch, log level, request timeout, how often it re-checks a
-session and how many sign-in attempts one address may make — and everything that is sized with
-the pod or wires it to its environment is not. The attribution setting (`defaultSubmittedBy`) was
+Thirty-four of its settings are overridable — refresh cadence, chart and rate windows, query and
+export limits, how many of one person's queries scan at once, the Data explorer switch, log level,
+request timeout, how often it re-checks a session and how many sign-in attempts one address may
+make — and everything that is sized with the pod or wires it to its environment is not. The attribution setting (`defaultSubmittedBy`) was
 retired when accounts arrived; a stored override for it is ignored. Its storage profiles are the
 deployment's too (console 03 §3.6a): the console's page shows them read-only under
 **Deployment › This console**, as **Object storage access** — each profile's name, kind and mode —

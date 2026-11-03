@@ -31,6 +31,7 @@ repository without changes beyond its domain registry (`CONSOLE_DOMAINS`).
 | Runtime | KasprApp observation, readiness conditions, managed agent states, runtime binding |
 | Schema | Every schema each table has had — for the tables whose datasets the person may read — fork-aware field browser and tree with field ids, schema-to-schema diff by field id |
 | Data | Any of the materialization's tables the person may query, chosen with a picker, or in SQL any table of any domain they may query there (`<domain>.<dataset>.<table>`): the newest rows with an exact total at once — with live tail on, records seconds after they are produced, before the runtime commits them, followed by **Live** and each shown once; Splunk-style time ranges on the Kafka record time; searchable filters or SQL — over flat logical columns or the native tables, joining the materialization's tables — behind one **Run** button, with exact progress, instant paging and export of the finished result as CSV, nested or flat JSON, or Parquet, under **More actions** with **Share** and **Peek** |
+| Explore | A workspace over the whole lake: explorations side by side, each the Data tab's workbench over any table the person may read in any domain, or a statement joining tables across datasets and domains; the lake's tables in a rail, each exploration's questions in History, kept in the browser, and share links that ask a question again under the opener's own access |
 | Search | Materializations, tables and datasets of every domain, by name, id, topic or description (⌘K) |
 | Settings | Two pages: the console's own (stored in the settings home; the domains and how each is reached; your account in every domain; every domain's history) and each domain's (its control plane and runtimes, its directory, its sign-in settings). Change behaviour without a redeploy: each setting shows where its value comes from and can be reset; runtime changes show their delivery to running runtimes; a change history and the deployment's fixed settings |
 | Accounts and access | Sign in through a provider, in every domain at once, or with an email and password, one domain at a time; your account, password, sessions and federated access tokens for external engines, honoured in every domain, optionally limited to some datasets; for administrators, users (add with a generated initial password, groups, reset, sign out, unlock, deactivate), groups, roles built from the permission catalog (each permission says whether it holds per dataset), every person's and group's dataset grants, and an audit log. Pages and actions follow each person's permissions, on each dataset; guests see the list and status |
@@ -150,7 +151,7 @@ The SQL console is deliberately powerful but sandboxed:
   time range. A statement naming a table in a dataset the person may not query in its domain is
   refused, naming the dataset.
 - A statement's stored result keeps at most `CONSOLE_RESULT_ROW_LIMIT` rows, at most
-  `CONSOLE_RUN_CONCURRENCY` runs scan at once, **Cancel** interrupts a run's queries at once, and a
+  `CONSOLE_RUN_CONCURRENCY` runs scan at once — `CONSOLE_RUN_CONCURRENCY_PER_PERSON` of one person's — **Cancel** interrupts a run's queries at once, and a
   run nobody has read for `CONSOLE_RUN_RETENTION_MS` is cancelled and deleted.
 
 Filters never interpolate raw user input: identifiers are quoted and values are emitted as escaped
@@ -193,7 +194,7 @@ server/
   routes/                HTTP surface, the domain-scoped routes under /api/d/<domain>, the catalogs
 src/
   components/            Design system primitives and shared display components
-  features/              Overview, materializations, detail, schema, data, settings, auth, access
+  features/              Overview, materializations, detail, schema, data, explore, settings, auth, access
   lib/                   API client, SSE hooks, the sessions (auth.tsx), domain paths, the merged
                          fleet, formatting
 ```

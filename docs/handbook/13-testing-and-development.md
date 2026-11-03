@@ -953,6 +953,32 @@ Not run: a commit landing while a tab is away (streaming then takes in the new s
 after any pause), and a browser without `content-visibility`, which hides a kept tab with
 `display: none` instead.
 
+## 13.8o Verified on a test cluster: Explore
+
+On 2026-11-02 the console at `feature/explore` ran locally against both domains of a test cluster —
+their control planes, tail apps and the S3-compatible store through port-forwards — with Playwright
+(Chromium), signed in as an administrator: light and dark, at 1440 px and on a phone (390 px), with
+reduced motion and by keyboard; tables of 22 thousand to 102.6 million rows. Console 11 §11.14 says
+what Explore does, console 14 §14.4 records each flow, console 09 §9.6 how it keeps explorations.
+
+| Check | Observed |
+|---|---|
+| 30 flow checks | Choosing a table, a range, the rail, SQL over the lake with the rail's names, a join by full names, History, reload, a share link in another browser, rename, duplicate, delete and Undo, closing, the open limit, Open in Explore: all pass |
+| Connections | Four explorations open hold one detail stream, the shown one's; at rest the page asks for the shown one's Live refresh alone |
+| Speed | The 102,582,940-row table's exact count 130–141 ms after it is chosen; an older question's run picked back up in about 100 ms |
+| The Data tab, before and after | Its 14 flows pass on both, three rounds each: first rows 451–508 ms against 410–520 ms before; the main bundle 4.70 kB larger gzipped, Explore a 13.21 kB chunk of its own |
+| Phone, themes, motion, keys | No sideways scroll, the strip's controls 44 px, sheets for Tables and History; nothing moves under reduced motion; the strip, the rail and ⌘K by keyboard |
+
+Fixed alongside, found by these checks (console 14 §14.5, defects 38–44): closing the shown exploration
+reopened it and deleting one called it unknown, both from the router moving the address in a
+transition; fast typing in a statement over the lake hit React's nested-update limit after 51
+keystrokes; an edit's pending save could bring a deleted exploration back; chevrons turned under
+reduced motion across the console; the phone's tab controls were too small; History kept a failed
+statement's whole error.
+
+Not run: a statement joining tables of two domains (Domain B held none) and a person who may query
+some datasets only; the route tests cover both (`server/routes/runs.test.ts`).
+
 ## 13.9 Pre-finish checklist
 
 Before considering any change complete:

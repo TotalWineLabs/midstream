@@ -53,7 +53,7 @@ through a provider that vouches for the invited email, or with its link.
 | **Every route declares a permission** | `permit('<permission>')` or `signedIn()` on each `/api` route; a route with neither answers anyone (`/api/health`, `/api/config`, `/api/auth/session`, `/api/auth/login`, `/api/auth/logout`, `/api/auth/sso/*`, and `/api/d/<domain>/auth/invitation[/accept]`, whose link is the credential). A guest gets `401`, a person without the permission `403` |
 | **A domain's routes are checked in that domain only** | Every route under `/api/d/<domain>/` resolves the caller in that domain — its session cookie, else a guest there — and checks the permission there: holding `materializations.manage` in Domain A grants nothing in Domain B. The console's own routes (the merged fleet, search, runs across domains) resolve the caller in every domain and show what comes from each only as that domain allows |
 | **The catalogs are the domains' to decide** | `/catalog` and `/d/<domain>/catalog` check nothing themselves: they hand the caller's bearer token to the domain a namespace names, unchanged, and the domain checks it as it checks an engine calling it directly (§12.7) |
-| **Data permissions are checked per dataset** | A dataset permission (`dataset.view_schema`, `data.query`, `data.export`, `catalog.read`, …) is checked on the datasets a request is about, each in its own domain: every table a statement names — a statement joining two domains needs `data.query` on each dataset, each where it lives — the table a schema is of, the datasets a run read (for its rows, stream and export, again on every request). The route's guard, `permitAnywhere(permission)`, turns away anyone holding it on no dataset; `requireOnDatasets` then refuses with `403`, `details.permission` and `details.dataset` (`auth/guard.ts`, the rule in `shared/access.ts`). A token limited to datasets holds no dataset permission on any other |
+| **Data permissions are checked per dataset** | A dataset permission (`dataset.view_schema`, `data.query`, `data.export`, `catalog.read`, …) is checked on the datasets a request is about, each in its own domain: every table a statement names — a statement joining two domains needs `data.query` on each dataset, each where it lives — the table a schema is of, the datasets a run read (for its rows, stream and export, again on every request). The route's guard, `permitAnywhere(permission)`, turns away anyone holding it on no dataset; `requireOnDatasets` then refuses with `403`, `details.permission` and `details.dataset` (`auth/guard.ts`, the rule in `shared/access.ts`). A token limited to datasets holds no dataset permission on any other. Explore's routes, the console's own (`POST /api/runs`, `/api/data/validate`, `/api/data/estimate`), turn away anyone holding `data.query` in no domain (`permitInSomeDomain`), then find each table in its own domain and check `data.query` on its dataset there, with the person's session there — before anything is planned or read |
 | **The control plane checks again** | Changes are sent with the person's own session, never the console's credential, so a bug in a console route cannot grant what the control plane refuses. The datasets routes are the control plane's to decide: the console only passes them through |
 | **The session never reaches page scripts** | Each domain's session token is kept in a cookie of its own, `<CONSOLE_SESSION_COOKIE>_<domain>`, `HttpOnly`, `SameSite=Lax`, `Secure` behind TLS. XSS cannot read them, and a session is only ever sent to the domain that issued it |
 | **Cross-site changes are refused** | `POST`/`PUT`/`PATCH`/`DELETE` need `Sec-Fetch-Site: same-origin` (or `none`), or else an `Origin` naming this host. With `SameSite=Lax`, this is the CSRF defence; no token is needed |
@@ -255,6 +255,7 @@ after one (`update`) makes the table `update_topic` (`shared/tableNames.ts`, the
 | Rows a statement's result keeps | 1,000,000 (`CONSOLE_RESULT_ROW_LIMIT`); its total is still counted in full |
 | Rows one export contains | 1,000,000 (`CONSOLE_EXPORT_ROW_LIMIT`) |
 | Runs scanning at once | 4 (`CONSOLE_RUN_CONCURRENCY`); more queue |
+| One person's runs scanning at once | 2 (`CONSOLE_RUN_CONCURRENCY_PER_PERSON`), within those 4; their others queue, so one person's explorations cannot hold every scan |
 | Wall clock | None while someone is watching — **Stop** interrupts every query a run has open. A run nobody has read for 30 min (`CONSOLE_RUN_RETENTION_MS`) is cancelled and its stored result deleted |
 | DuckDB memory | 4 GB per instance (`CONSOLE_DUCKDB_MEMORY_LIMIT`) |
 | DuckDB threads | 32 (`CONSOLE_DUCKDB_THREADS`) |
@@ -385,7 +386,13 @@ container are the first segments, keeping destinations and buckets apart.
   `Sec-Fetch-Site`/`Origin` (§12.2). `CONSOLE_CORS_ORIGIN` is unset by default, so browsers block
   cross-origin reads; set it only to a specific trusted origin, never `*` — that origin may then
   make changes with the cookie.
-- `localStorage` holds only the theme and pane sizes. No tokens.
+- `localStorage` holds the theme, pane sizes, pins and Explore's explorations — no tokens, and no
+  data: an exploration keeps table names, time ranges, filters, statements and each question's row
+  count and time, and of a failure only the console's own words or the engine error's kind, never its
+  message, which can quote a value read (`explorations.ts::keptMessage`). Explorations stay after
+  sign-out, as pins do (docs/design/explore.md, decision 5); on a shared computer they are the
+  person's to delete. A share link carries the question, never the document, and is run under the
+  access of whoever opens it.
 - Hiding a button is a courtesy, never a control: every route checks the permission itself.
 - CSP is **not** currently set. Adding one is a good hardening step; note that CodeMirror requires
   `style-src 'unsafe-inline'` unless you extract its styles.

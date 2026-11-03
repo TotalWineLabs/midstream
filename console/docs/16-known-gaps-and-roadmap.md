@@ -67,7 +67,10 @@ Until a day is compacted, a query over it reads its small files — correct, slo
 | One S3 bucket, one endpoint | Two `s3` profiles serving one bucket through different endpoints are refused at start: an `s3://` path names no endpoint, so DuckDB could not tell their objects apart (03 §3.6a) |
 | Warm Azure reads cost HEAD requests | 2–12 per file per query: DuckDB's `enable_http_metadata_cache` does not cover the Azure extension. S3 and GCS cost none. `validate_external_file_cache` is left alone, being instance-wide |
 | The sandbox does not tell reads from writes | `COPY … TO` an allowed object path succeeds in a locked sandbox; the SQL guard is what refuses it. Storage profiles must hold read-only credentials, which the console cannot check |
-| No query history or saved queries | A view lives in the address bar and can be shared, but nothing is kept server-side |
+| Explorations are kept by the browser | Explore's explorations and their History live in the browser that made them (09 §9.6): another browser, or another device, does not have them, and a share link carries a question, not an exploration. Nothing is kept server-side. An account store is planned behind `ExplorationStore` (§16.8) |
+| Two browser tabs editing one exploration | Each tab's strip is its own, but both write the same document: the later save wins, and the other tab shows its own until it is reloaded |
+| History keeps an engine error's kind alone | *Failed · Conversion Error*: the engine's message can quote a value read, which the browser does not keep (12 §12.9). The run, while the console keeps it, shows the whole message |
+| Composing waits for a desktop | On a phone Explore reads and refines — sheets for the rails, rows, filters — but is not on the bottom bar, and writing statements is a desktop's work |
 | No result charting or timeline | Results render as a grid; the manifests already know where rows sit in time |
 
 ### The live tail
@@ -157,7 +160,7 @@ Ordered by value per unit of effort.
 
 5. **Sorting the structured view** by spooling a sorted statement behind a header click.
 6. **Persist column visibility and page size** per materialization in `localStorage`.
-7. **Query history** per materialization, reopenable while their results last.
+7. **Explorations with the account**: an `ExplorationStore` kept by the control plane, so explorations follow the person across browsers, then shared with others with the same access checks a share link has today (docs/design/explore.md §5.2, §6.6).
 8. **Incremental SSE payloads** — send changed items rather than the whole snapshot.
 9. **Time travel by timestamp** — the runs API's `asOf` at a moment rather than a snapshot (the Data
    tab no longer offers older snapshots).

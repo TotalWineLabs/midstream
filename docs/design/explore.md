@@ -1,8 +1,8 @@
 # Midstream Explore specification
 
-**Status:** design specification, for review; not yet built. §1 records the decisions it follows,
-§15 the decisions left for review. Once built, console handbook 11 (§11.14 Explore) and 09
-supersede this document where they differ.
+**Status:** built on `feature/explore`, its decisions (§15) approved as proposed. §1 records the
+decisions it follows, §16 where the build departs from this design. Console handbook 11 (§11.14
+Explore) and 09 describe what was built, and supersede this document where they differ.
 
 Written 2026-11-02 against `feature/table-tab-continuity` at b2c2d2e (1.2.0 plus PR #28, which
 Explore depends on for kept tabs). Every claim about current behaviour was checked against the code
@@ -739,3 +739,30 @@ small questions may auto-run; the phone for checking and acting).
 | 8 | **The phone opens an exploration's answer** with sheets for the rest, not in the bottom bar | Explore hidden on phones; or a fifth place in the bar |
 | 9 | **The table page's Data tab starts runs through `POST /api/runs`** too, one path for both hosts | The Data tab keeps the per-materialization route, two paths |
 | 10 | **The spec lives at `docs/design/explore.md`** beside the other design specifications, listed in the handbook's README | Not kept in the repository once built |
+
+## 16. Departures from the design
+
+Where the build differs from §4–§10, and why. Console 09 and 11 describe what was built.
+
+| Designed | Built | Why |
+| --- | --- | --- |
+| A controlled workbench: `view` and `onView`, the host holding the view (§6.1) | Uncontrolled: `initialView`, `onViewChange` for every change, and a host loads another question by mounting it afresh (a new `key`); `opening` says whether a reopened question runs or waits for Run | The view changes on every keystroke; a host holding it would render itself and the workbench for each one. The Data tab keeps its address-bar mirror unchanged |
+| **History** in the toolbar's ⋮; ⌄ at the strip's end; ⋮ › **Delete** (§4.2, §4.5) | **History** and **All explorations** in the page header; **Tables** there while the rail is closed; delete under All explorations, beside open and **Duplicate** | One History switch for every exploration, as a properties column is the page's; the workbench's ⋮ stays the Data tab's (Peek, Share, Export) |
+| A row opened in the grid takes History's place (§4.2) | Both show: the row's properties inside the workbench, History beside it | Neither hides the other's answer; History closes with its × |
+| The rail a `tree`, History a `listbox` (§10) | Nested lists of disclosure buttons (`aria-expanded`); History an ordered list of buttons moved through with ↑ ↓ | Each row of the rail holds several actions (browse, columns, a new exploration, the table's page), which a `treeitem` cannot; History's entries are buttons that act |
+| `RunSnapshot.phase: 'queued'` (§7.4) | And `queued: 'own' \| 'others'` | The status line says whose runs it waits behind: *Waiting for your other queries to finish* |
+| Tables found through the fleet's written tables (§6.2) | A kept table found through the materializations whose datasets hold it; a run's other tables (`siblingsOf`) found with its own | The fleet lists the tables a materialization still writes; a kept table is read by name in its dataset |
+| History keeps each question's outcome (§5.1) | Of an engine error, only its kind (`keptMessage`) | The engine's message can quote a value read; the browser keeps no data (§8) |
+| The phone: sheets for the rails (§4.8) | And under `md` the strip's controls are 44 px, and only the shown tab has a × | A finger cannot hover to reveal a tab's ×, so an unseen one was tappable |
+
+Found while validating it (console 14 §14.5, defects 38–44), and kept as rules:
+
+- **The address is moved in a transition.** React Router updates the location inside
+  `startTransition`, so a handler that changes the strip and navigates renders once with the new strip
+  and the old address. The page's effect skips the renders whose address it is leaving; acting on them
+  reopened a tab just closed.
+- **A keystroke renders the workbench alone.** An update for each keystroke, made in the effect the
+  keystroke's own commit runs, waits for the next keystroke and makes every commit nested: after ~50
+  fast keystrokes React stops with *Maximum update depth exceeded*. A view's edits are kept without
+  rendering the exploration (`changesWhatIsShown`), and the exploration is `memo`'d with stable props.
+
