@@ -61,7 +61,12 @@ export function ExplorationTabs({
       move(tabs.length - 1);
     } else if (event.key === 'Delete' || event.key === 'Backspace') {
       event.preventDefault();
+      // Focus stays in the strip, on the tab shown next, rather than falling to the page.
+      const neighbour = tabs[at + 1] ?? tabs[at - 1];
       onClose(id);
+      if (neighbour) {
+        window.requestAnimationFrame(() => strip.current?.querySelector<HTMLElement>(`[data-tab="${CSS.escape(neighbour.id)}"]`)?.focus());
+      }
     } else if (event.key === 'F2') {
       event.preventDefault();
       setRenaming(id);
@@ -104,7 +109,8 @@ export function ExplorationTabs({
                   title={`${tab.label} · double-click or F2 to rename`}
                   className={cn(
                     // A phone's finger needs 44 px; a pointer, the strip's own height.
-                    'max-w-[240px] truncate px-2.5 py-3 text-[13px] leading-5 font-medium whitespace-nowrap transition-colors md:pt-0 md:pb-2.5',
+                    // The ring inside the tab: the strip scrolls sideways, and would clip one drawn outside it.
+                    'max-w-[240px] truncate px-2.5 py-3 text-[13px] leading-5 font-medium whitespace-nowrap transition-colors focus-visible:outline-offset-[-2px] md:pt-0 md:pb-2.5',
                     selected ? 'text-[var(--color-ink)]' : 'text-[var(--color-ink-muted)] hover:text-[var(--color-ink)]',
                   )}
                 >
@@ -200,7 +206,7 @@ export function ExplorationsMenu({
           aria-controls={id}
           data-role="explorations-menu"
           className={cn(
-            'inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-control)] px-2.5 text-[12px] font-medium transition-colors',
+            'inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-control)] px-2.5 text-[12px] font-medium transition-colors max-md:h-11',
             shown ? 'bg-[var(--color-raised)] text-[var(--color-ink)]' : 'text-[var(--color-ink-muted)] hover:bg-[var(--color-raised)] hover:text-[var(--color-ink)]',
           )}
         >
@@ -229,8 +235,10 @@ export function ExplorationsMenu({
                       <span className="min-w-0 truncate font-medium">{entry.label}</span>
                       {open.has(entry.id) ? <span className="shrink-0 text-[11px] font-normal text-[var(--color-ink-faint)]">open</span> : null}
                     </span>
-                    <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-[var(--color-ink-muted)]">
-                      <RelativeTime value={entry.updatedAt} />
+                    <span className="flex w-full min-w-0 items-center gap-1.5 text-[11px] text-[var(--color-ink-muted)]">
+                      <span className="shrink-0 whitespace-nowrap">
+                        <RelativeTime value={entry.updatedAt} />
+                      </span>
                       {entry.source ? (
                         <>
                           <span aria-hidden>·</span>
@@ -239,7 +247,8 @@ export function ExplorationsMenu({
                       ) : null}
                     </span>
                   </button>
-                  <span className="flex shrink-0 items-center opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+                  {/* Shown by a pointer coming near; a finger cannot hover, so on a phone they are always there. */}
+                  <span className="flex shrink-0 items-center opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 max-md:opacity-100">
                     <MenuIcon
                       label={`Duplicate ${entry.label}`}
                       onClick={() => {
@@ -283,7 +292,7 @@ function MenuIcon({ label, onClick, children }: { label: string; onClick: () => 
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="grid size-7 place-items-center rounded text-[var(--color-ink-faint)] hover:bg-[var(--color-ridge)] hover:text-[var(--color-ink)]"
+      className="grid size-7 place-items-center rounded text-[var(--color-ink-faint)] hover:bg-[var(--color-ridge)] hover:text-[var(--color-ink)] max-md:size-11"
     >
       {children}
     </button>

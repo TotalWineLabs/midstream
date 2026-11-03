@@ -9,6 +9,7 @@ import { OPEN_LIMIT, fromShareLink, newExploration, titleOf } from './exploratio
 import { closeTab, openTab } from './store';
 import { TablesRail } from './TablesRail';
 import { explorationStore, useExplorationList, useStoredFlag, useStoredNumber, useTabStrip } from './useExplorations';
+import { useSheet } from './useSheet';
 import { useLake } from './useLake';
 import type { LakeTable } from './lake';
 import { ResizeHandle } from '../data/ResizeHandle';
@@ -56,6 +57,9 @@ export function ExplorePage(): ReactNode {
   const [historyOpen, setHistoryOpen] = useStoredFlag('console.explore.historyOpen', false);
   // On a phone the rail is a sheet over the page, opened when asked.
   const [railSheet, setRailSheet] = useState(false);
+  const railSheetRef = useRef<HTMLDivElement>(null);
+  const closeRailSheet = useCallback(() => setRailSheet(false), []);
+  useSheet(railSheetRef, !wide && railSheet, closeRailSheet);
   const scope = params.get('domain');
   const suffix = scope ? `?domain=${encodeURIComponent(scope)}` : '';
   const ids = useId();
@@ -285,7 +289,7 @@ export function ExplorePage(): ReactNode {
         actions={
           <>
             {wide && railOpen ? null : (
-              <Button variant="ghost" size="sm" onClick={() => (wide ? setRailOpen(true) : setRailSheet(true))} aria-label="Show the tables">
+              <Button variant="ghost" size="sm" onClick={() => (wide ? setRailOpen(true) : setRailSheet(true))} aria-label="Show the tables" className="max-md:h-11">
                 <PanelLeftOpen className="size-4" />
                 Tables
               </Button>
@@ -295,7 +299,7 @@ export function ExplorePage(): ReactNode {
               size="sm"
               onClick={() => setHistoryOpen((value) => !value)}
               aria-pressed={historyOpen}
-              className={cn(historyOpen && 'bg-[var(--color-raised)] text-[var(--color-ink)]')}
+              className={cn('max-md:h-11', historyOpen && 'bg-[var(--color-raised)] text-[var(--color-ink)]')}
             >
               <History className="size-4" />
               History
@@ -364,7 +368,7 @@ export function ExplorePage(): ReactNode {
                 <EmptyState
                   icon={<Compass className="size-6" />}
                   title="No exploration open"
-                  description="Each one is a table’s rows, or a statement over any tables, with the questions it asked. Closed ones stay under All explorations."
+                  description="An exploration is a table’s rows, or a statement over any tables, with the questions it asked."
                   action={
                     <Button
                       size="sm"
@@ -402,7 +406,7 @@ export function ExplorePage(): ReactNode {
 
       {!wide && railSheet
         ? createPortal(
-            <div role="dialog" aria-modal="true" aria-label="Tables" className="slide-in-right fixed inset-0 z-50 flex bg-[var(--color-surface)]">
+            <div ref={railSheetRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Tables" className="slide-in-right fixed inset-0 z-50 flex bg-[var(--color-surface)] outline-none">
               {rail}
             </div>,
             document.body,

@@ -1,17 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, Copy, ExternalLink, Lock, Plus, Search, X } from 'lucide-react';
-import { useDeferredValue, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
+import { CutName, FoundName } from './Names';
 import { searchLake, type LakeDataset, type LakeDomain, type LakeTable } from './lake';
 import { DomainDot } from '@/components/DomainChip';
 import { StatusGlyph } from '@/components/Status';
+import { useToast } from '@/components/ui/Toast';
 import { Button, Skeleton } from '@/components/ui/primitives';
 import { domainApi } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { domainPath, tablePath } from '@/lib/paths';
 import { rootQueryClient } from '@/lib/queryClient';
-import { segmentName } from '@/lib/nameSearch';
 import { FOCUS_SEARCH_EVENT, type FocusSearchKey } from '@/lib/shortcuts';
 import type { CpSchemaField } from '@shared/types';
 
@@ -88,6 +89,9 @@ export function TablesRail({
     list.current?.querySelector<HTMLElement>(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' });
   }, [active]);
 
+  const toast = useToast();
+  const onExplain = useCallback((why: { title: string; description: string }) => toast.error(why.title, why.description), [toast]);
+
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -104,13 +108,16 @@ export function TablesRail({
     } else if (event.key === 'Enter') {
       event.preventDefault();
       const chosen = matches[active];
-      if (chosen && chosen.table.queryable) onTable(chosen.table);
+      if (!chosen) return;
+      const why = whyNot(chosen.table);
+      if (why) onExplain(why);
+      else onTable(chosen.table);
     }
   };
 
   const loading = lake.length === 0 || lake.every((domain) => domain.loading);
   const empty = !loading && lake.every((domain) => domain.datasets.length === 0);
-  const rowProps = { many, writingSql, current, onTable, onNewExploration, onColumn, onCopy };
+  const rowProps = { many, writingSql, current, onTable, onNewExploration, onColumn, onCopy, onExplain };
 
   return (
     <aside
@@ -138,7 +145,7 @@ export function TablesRail({
             aria-expanded={query.length > 0}
             aria-controls="tables-rail-list"
             aria-activedescendant={query && matches[active] ? `rail-match-${active}` : undefined}
-            className="h-8 w-full rounded-[var(--radius-control)] border border-[var(--color-line-strong)] bg-[var(--color-shelf)] pr-7 pl-8 text-[12.5px] text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)] focus:border-[var(--color-ink-muted)]"
+            className="h-8 w-full rounded-[var(--radius-control)] border border-[var(--color-line-strong)] bg-[var(--color-shelf)] pr-7 pl-8 text-[12.5px] max-md:h-11 text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)] focus:border-[var(--color-ink-muted)]"
           />
           {text ? null : <kbd className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 rounded border border-[var(--color-line)] px-1 text-[10px] text-[var(--color-ink-faint)]">/</kbd>}
         </div>
@@ -157,7 +164,7 @@ export function TablesRail({
           ) : (
             <ul role="listbox" aria-label="Tables found">
               {matches.map((match, index) => (
-                <li key={match.table.key}>
+                <li key={match.table.key} role="presentation">
                   <TableRow
                     {...rowProps}
                     table={match.table}
@@ -207,6 +214,8 @@ type RowProps = {
   onNewExploration: (table: LakeTable) => void;
   onColumn: (table: LakeTable, column: string) => void;
   onCopy: (text: string) => void;
+  /** Why a table cannot be browsed, said when it is chosen anyway. */
+  onExplain: (why: { title: string; description: string }) => void;
 };
 
 /** A row's indent, by how deep it sits. */
@@ -221,7 +230,7 @@ function DomainNode({ domain, open, onToggle, rowProps }: { domain: LakeDomain; 
         type="button"
         onClick={() => onToggle(domain.id)}
         aria-expanded={expanded}
-        className="flex h-8 w-full items-center gap-1.5 rounded-[var(--radius-control)] pr-2 pl-1 text-left text-[12.5px] font-semibold text-[var(--color-ink)] transition-colors hover:bg-[var(--color-raised)]"
+        className="flex h-8 w-full items-center gap-1.5 rounded-[var(--radius-control)] pr-2 pl-1 text-left text-[12.5px] font-semibold text-[var(--color-ink)] transition-colors hover:bg-[var(--color-raised)] max-md:h-11"
       >
         <ChevronRight className={cn('size-3.5 shrink-0 text-[var(--color-ink-faint)] transition-transform', expanded && 'rotate-90')} aria-hidden />
         <span className="min-w-0 flex-1 truncate">{domain.name}</span>
@@ -241,7 +250,7 @@ function DomainNode({ domain, open, onToggle, rowProps }: { domain: LakeDomain; 
             ) : domain.access === 'forbidden' ? (
               `Your groups in ${domain.name} show none of its tables.`
             ) : (
-              `${domain.name} cannot be asked right now.`
+              `${domain.name} cannot be reached right now.`
             )}
           </p>
         ) : domain.loading ? (
@@ -286,7 +295,7 @@ function DatasetNode({
         aria-expanded={expanded}
         title={dataset.locked ? `Locked: you see its tables’ names, not their schemas or data. Ask one of its owners for a role on ${dataset.name}.` : dataset.description || undefined}
         className={cn(
-          'flex h-8 w-full items-center gap-1.5 rounded-[var(--radius-control)] pr-2 text-left text-[12.5px] transition-colors hover:bg-[var(--color-raised)]',
+          'flex h-8 w-full items-center gap-1.5 rounded-[var(--radius-control)] pr-2 text-left text-[12.5px] transition-colors hover:bg-[var(--color-raised)] max-md:h-11',
           depth === 0 ? 'pl-1' : 'pl-5',
           dataset.locked ? 'text-[var(--color-ink-muted)]' : 'text-[var(--color-ink)]',
         )}
@@ -294,7 +303,7 @@ function DatasetNode({
         <ChevronRight className={cn('size-3.5 shrink-0 text-[var(--color-ink-faint)] transition-transform', expanded && 'rotate-90')} aria-hidden />
         <span className="ident min-w-0 flex-1 truncate">{dataset.name}</span>
         {dataset.locked ? <Lock className="size-3 shrink-0 text-[var(--color-ink-faint)]" aria-label="Locked" /> : null}
-        <span className="numeric shrink-0 text-[11px] text-[var(--color-ink-faint)]">{dataset.tables.length}</span>
+        {dataset.tables.length > 0 ? <span className="numeric shrink-0 text-[11px] text-[var(--color-ink-faint)]">{dataset.tables.length}</span> : null}
       </button>
       {expanded ? (
         dataset.tables.length === 0 ? (
@@ -314,9 +323,16 @@ function DatasetNode({
 }
 
 /** What choosing a table does, said where it can be done. */
+/** Why a table cannot be chosen: what it is, then what to do. Null for one that can. */
+function whyNot(table: LakeTable): { title: string; description: string } | null {
+  if (table.locked) return { title: `${table.ref.dataset} is locked to you`, description: 'Ask one of its owners for a role on it.' };
+  if (!table.queryable) return { title: `You may not query ${table.ref.dataset}`, description: 'Ask one of its owners for a role on it.' };
+  return null;
+}
+
 function tableTitle(table: LakeTable, writingSql: boolean): string {
-  if (table.locked) return `Locked: ask one of the owners of ${table.ref.dataset} for a role on it.`;
-  if (!table.queryable) return `You may not query ${table.ref.dataset}.`;
+  const why = whyNot(table);
+  if (why) return `${why.title}. ${why.description}`;
   const name = `${table.ref.domain}.${table.ref.dataset}.${table.ref.table}`;
   if (writingSql) return `Put ${name} in the statement`;
   return table.browsable ? `Browse ${name}` : `Query ${name} in SQL`;
@@ -333,6 +349,7 @@ function TableRow({
   onNewExploration,
   onColumn,
   onCopy,
+  onExplain,
   expandable = false,
   open,
   onToggle,
@@ -358,7 +375,7 @@ function TableRow({
     <>
       <div
         className={cn(
-          'group flex h-8 items-center gap-1 rounded-[var(--radius-control)] pr-1 transition-colors hover:bg-[var(--color-raised)]',
+          'group relative flex h-8 items-center gap-1 rounded-[var(--radius-control)] pr-1 transition-colors hover:bg-[var(--color-raised)] max-md:h-11',
           option?.active && 'bg-[var(--color-raised)]',
           isCurrent && 'bg-[var(--color-raised)] shadow-[inset_2px_0_0_var(--color-ink)]',
           expandable ? (depth <= 1 ? 'pl-5' : 'pl-9') : 'pl-2',
@@ -372,7 +389,7 @@ function TableRow({
             aria-expanded={expanded}
             aria-label={expanded ? `Hide the columns of ${shown}` : `Show the columns of ${shown}`}
             disabled={!usable}
-            className="grid size-5 shrink-0 place-items-center rounded text-[var(--color-ink-faint)] hover:text-[var(--color-ink)] disabled:opacity-40"
+            className="grid size-5 shrink-0 place-items-center rounded text-[var(--color-ink-faint)] hover:text-[var(--color-ink)] disabled:opacity-40 max-md:size-11"
           >
             <ChevronRight className={cn('size-3 transition-transform', expanded && 'rotate-90')} aria-hidden />
           </button>
@@ -383,36 +400,47 @@ function TableRow({
           data-index={option?.index}
           role={option ? 'option' : undefined}
           aria-selected={option ? option.active : undefined}
+          aria-label={option ? `${name}${table.status && !table.locked ? `, ${table.status.label}` : ''}` : undefined}
           aria-disabled={!usable}
-          onClick={usable ? () => onTable(table) : undefined}
+          onClick={() => {
+            const why = whyNot(table);
+            if (why) onExplain(why);
+            else onTable(table);
+          }}
           title={tableTitle(table, writingSql)}
-          className={cn('flex h-8 min-w-0 flex-1 items-center gap-2 text-left text-[12.5px]', usable ? 'text-[var(--color-ink)]' : 'cursor-default text-[var(--color-ink-faint)]')}
+          className={cn('flex h-8 min-w-0 flex-1 items-center gap-2 text-left text-[12.5px] max-md:h-11', usable ? 'text-[var(--color-ink)]' : 'cursor-default text-[var(--color-ink-faint)]')}
         >
           <span className="grid size-3.5 shrink-0 place-items-center" aria-hidden>
             {table.locked ? <Lock className="size-3" /> : table.status ? <StatusGlyph status={table.status} /> : null}
           </span>
-          <span className="ident min-w-0 truncate">
-            {ranges.length > 0
-              ? segmentName(shown, ranges).map((segment, at) =>
-                  segment.match ? (
-                    <mark key={at} className="bg-transparent font-semibold text-[var(--color-ink)]">
-                      {segment.text}
-                    </mark>
-                  ) : (
-                    <span key={at}>{segment.text}</span>
-                  ),
-                )
-              : shown}
-          </span>
+
+          {option ? (
+            // Found by a search: its own name leads, its place after it.
+            <FoundName shown={shown} ranges={ranges} />
+          ) : (
+            <span className="ident flex min-w-0">
+              <CutName text={shown} />
+            </span>
+          )}
+          {/* The state in words too, after the name: never its glyph alone. */}
+          {!option && table.status && !table.locked ? <span className="sr-only">, {table.status.label}</span> : null}
         </button>
         {usable ? (
-          <span className="flex shrink-0 items-center opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+          // Over the name's end, on the row's ground, only while it is pointed at or has focus: the name
+          // keeps the row's whole width the rest of the time. A phone has no pointer to bring them, and
+          // is for checking and acting: a tap browses the table, and these wait for a desktop.
+          <span
+            // In search results the row is an option of a list box, which holds no other controls: the
+            // actions are a pointer's there, and the tree's for the keyboard.
+            aria-hidden={option ? true : undefined}
+            className="pointer-events-none absolute top-1/2 right-1 flex -translate-y-1/2 items-center rounded-[var(--radius-control)] bg-[var(--color-raised)] pl-1 opacity-0 transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 max-md:hidden"
+          >
             {table.browsable ? (
-              <RowAction label={`Browse ${name} in a new exploration`} onClick={() => onNewExploration(table)}>
+              <RowAction label={`Browse ${name} in a new exploration`} onClick={() => onNewExploration(table)} hidden={Boolean(option)}>
                 <Plus className="size-3.5" />
               </RowAction>
             ) : null}
-            <RowAction label={`Copy ${name}`} onClick={() => onCopy(name)}>
+            <RowAction label={`Copy ${name}`} onClick={() => onCopy(name)} hidden={Boolean(option)}>
               <Copy className="size-3.5" />
             </RowAction>
             {table.browsable ? (
@@ -420,6 +448,7 @@ function TableRow({
                 to={domainPath(table.ref.domain, tablePath(table.ref.dataset, table.ref.table))}
                 aria-label={`Open the page of ${name}`}
                 title="Open its page"
+                tabIndex={option ? -1 : undefined}
                 className="grid size-6 place-items-center rounded text-[var(--color-ink-faint)] hover:bg-[var(--color-ridge)] hover:text-[var(--color-ink)]"
               >
                 <ExternalLink className="size-3.5" />
@@ -433,13 +462,14 @@ function TableRow({
   );
 }
 
-function RowAction({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }): ReactNode {
+function RowAction({ label, onClick, hidden = false, children }: { label: string; onClick: () => void; hidden?: boolean; children: ReactNode }): ReactNode {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={label}
       title={label}
+      tabIndex={hidden ? -1 : undefined}
       className="grid size-6 place-items-center rounded text-[var(--color-ink-faint)] hover:bg-[var(--color-ridge)] hover:text-[var(--color-ink)]"
     >
       {children}
@@ -493,7 +523,7 @@ function TableColumns({
             type="button"
             onClick={() => onColumn(table, field.name)}
             title={writingSql ? `Put "${field.name}" in the statement` : `Copy ${field.name}`}
-            className={cn('flex h-7 w-full items-center gap-2 rounded-[var(--radius-control)] pr-2 text-left text-[12px] transition-colors hover:bg-[var(--color-raised)]', pad)}
+            className={cn('flex h-7 w-full items-center gap-2 rounded-[var(--radius-control)] pr-2 text-left text-[12px] transition-colors hover:bg-[var(--color-raised)] max-md:h-11', pad)}
           >
             <span className="ident min-w-0 flex-1 truncate text-[var(--color-ink)]">{field.name}</span>
             <span className="ident shrink-0 text-[11px] text-[var(--color-ink-faint)]">{field.type}</span>

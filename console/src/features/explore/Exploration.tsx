@@ -211,8 +211,10 @@ export const Exploration = memo(function Exploration({
       const view = viewOfQuestion(question, latest.current.view, sameTable(question.source, latest.current.source));
       setOnScreen(question.id);
       load(question.source, view, 'wait');
+      // On a phone History is a sheet over the answer: the answer is what was asked for.
+      if (!wide) onCloseHistory();
     },
-    [load],
+    [load, wide, onCloseHistory],
   );
 
   useImperativeHandle(
@@ -230,6 +232,13 @@ export const Exploration = memo(function Exploration({
     }),
     [browse, commit, persist],
   );
+
+  // Opened since the last render: History slides in then, and not when this exploration opens beside it.
+  const historyWasOpen = useRef(historyOpen);
+  const historyOpened = historyOpen && !historyWasOpen.current;
+  useEffect(() => {
+    historyWasOpen.current = historyOpen;
+  });
 
   const config = useConsoleConfig();
   const domains = config.data?.domains ?? [];
@@ -280,10 +289,10 @@ export const Exploration = memo(function Exploration({
             table?.locked
               ? `Its dataset is locked to you. Ask one of the owners of ${doc.source.dataset} for a role on it.`
               : asSql
-                ? 'You may query it, but not see the materialization writing it, which browsing reads. Ask it with SQL.'
+                ? 'You may query this table, but not browse it.'
                 : table
                   ? `You may not query its dataset. Ask one of the owners of ${doc.source.dataset} for a role on it.`
-                  : 'It may have been dropped, or its domain cannot be asked right now.'
+                  : 'It may have been dropped, or its domain cannot be reached right now.'
           }
           action={
             asSql && table ? (
@@ -292,7 +301,8 @@ export const Exploration = memo(function Exploration({
                 Query it with SQL
               </Button>
             ) : (
-              chooser
+              // Another table: the one named is the one that cannot be opened.
+              <TableChooser lake={lake} source={null} many={many} onChoose={browse} />
             )
           }
         />
@@ -305,7 +315,8 @@ export const Exploration = memo(function Exploration({
       <DomainProvider domain={sourceDomain}>
         {source ? (
           <SourceBench
-            key={`${source.domain}.${source.dataset}.${source.table}:${mount.key}`}
+            key={`${source.domain}.${source.dataset}.${source.table}`}
+            benchKey={mount.key}
             source={source}
             shown={shown}
             benchRef={bench}
@@ -339,15 +350,28 @@ export const Exploration = memo(function Exploration({
     <div className="flex h-full min-h-0">
       <div className="flex min-w-0 flex-1 flex-col p-3 sm:p-4">{content}</div>
       {historyOpen ? (
-        <HistoryColumn history={doc.history} onScreen={onScreen} running={running} onOpen={openQuestion} onClose={onCloseHistory} sheet={!wide} />
+        <HistoryColumn
+          history={doc.history}
+          onScreen={onScreen}
+          running={running}
+          onOpen={openQuestion}
+          onClose={onCloseHistory}
+          sheet={!wide}
+          slide={historyOpened}
+        />
       ) : null}
     </div>
   );
 });
 
-/** The workbench over a table, fed by the live detail of the materialization writing it - while shown. */
+/**
+ * The workbench over a table, fed by the live detail of the materialization writing it - while shown.
+ * Mounted once per table: another question about it mounts a new workbench (`benchKey`) inside, and
+ * the table's detail stays, so the frame never drops to a skeleton between two questions.
+ */
 function SourceBench({
   source,
+  benchKey,
   shown,
   benchRef,
   initialView,
@@ -358,6 +382,8 @@ function SourceBench({
   leading,
 }: {
   source: WorkbenchSource;
+  /** The question on screen: a new one mounts the workbench afresh. */
+  benchKey: number;
   shown: boolean;
   benchRef: Ref<WorkbenchHandle>;
   initialView: WorkbenchView;
@@ -372,6 +398,7 @@ function SourceBench({
   if (!detail.data) return <Loading />;
   return (
     <Workbench
+      key={benchKey}
       ref={benchRef}
       source={source}
       snapshot={detail.data}

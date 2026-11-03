@@ -6,6 +6,7 @@ import {
   changesWhatIsShown,
   describeQuestion,
   keptMessage,
+  questionParts,
   emptyView,
   fromShareLink,
   fromView,
@@ -102,6 +103,13 @@ describe('an exploration', () => {
     assert.equal(keptMessage({ code: 'query_failed', message: 'something else' }), null);
     assert.equal(keptMessage({ code: 'bad_request', message: 'There is no table domain_a.sales.x; domain_a.sales holds domain_a.sales.orders.' }), 'There is no table domain_a.sales.x; domain_a.sales holds domain_a.sales.orders.');
     assert.equal(keptMessage(null), null);
+  });
+
+  it('leads History with what was asked, the table after it', () => {
+    const browse = { kind: 'browse' as const, source: ORDERS, range: 'last-7d', filters: [{ column: 'status', operator: 'eq' as const, value: 'x' }], sql: null };
+    assert.deepEqual(questionParts(browse), { asked: 'Last 7 days · 1 filter', statement: false, about: 'sales.orders' });
+    assert.equal(describeQuestion(browse), 'sales.orders · Last 7 days · 1 filter', 'a title still names its table first');
+    assert.deepEqual(questionParts({ kind: 'sql', source: null, range: 'all', filters: [], sql: 'SELECT 1' }), { asked: 'SELECT 1', statement: true, about: null });
   });
 
   it('describes a statement in a few words, comments aside', () => {

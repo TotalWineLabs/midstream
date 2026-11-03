@@ -2,10 +2,11 @@ import { ChevronDown, Search } from 'lucide-react';
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 
 import { searchLake, type LakeDomain, type LakeTable, type TableMatch } from './lake';
+import { FoundName } from './Names';
 import { StatusGlyph } from '@/components/Status';
 import { Popover } from '@/components/ui/Popover';
+import { Skeleton } from '@/components/ui/primitives';
 import { cn } from '@/lib/cn';
-import { segmentName } from '@/lib/nameSearch';
 import type { TableRef } from '@shared/types';
 
 /** Tables the chooser lists at once: a name narrows them. */
@@ -84,6 +85,7 @@ function ChooserBody({
   const [active, setActive] = useState(0);
   const list = useRef<HTMLDivElement>(null);
   // Only what the person may browse: a locked table is named in the rail, never offered here.
+  const loading = lake.length === 0 || lake.some((domain) => domain.loading);
   const matches = useMemo<TableMatch[]>(
     () => searchLake(lake, query, { qualified: many }).filter((match) => match.table.browsable).slice(0, SHOWN),
     [lake, query, many],
@@ -126,7 +128,14 @@ function ChooserBody({
         />
       </div>
       <div ref={list} id="table-chooser-results" role="listbox" aria-label="Tables" className="min-h-0 flex-1 overflow-y-auto p-1.5">
-        {matches.length === 0 ? (
+        {matches.length === 0 && loading ? (
+          // Still being read: rows to come, not a claim that there are none.
+          <div className="space-y-2 p-2" aria-label="Loading tables">
+            {Array.from({ length: 4 }, (_, index) => (
+              <Skeleton key={index} className="h-5" />
+            ))}
+          </div>
+        ) : matches.length === 0 ? (
           <p className="px-3 py-6 text-center text-[12px] text-[var(--color-ink-muted)]">
             {query.trim() ? 'No table you may browse has that name.' : 'There is no table you may browse yet.'}
           </p>
@@ -143,26 +152,17 @@ function ChooserBody({
                 aria-selected={index === active}
                 onMouseMove={() => setActive(index)}
                 onClick={() => onChoose(match.table)}
+                aria-label={match.shown}
                 title={match.table.topic ? `From topic ${match.table.topic}` : undefined}
                 className={cn(
-                  'flex h-9 w-full items-center gap-2.5 rounded-[var(--radius-control)] px-2.5 text-left text-[12.5px] transition-colors',
+                  'flex h-9 w-full items-center gap-2.5 rounded-[var(--radius-control)] px-2.5 text-left text-[12.5px] transition-colors max-md:h-11',
                   index === active ? 'bg-[var(--color-raised)] text-[var(--color-ink)]' : 'text-[var(--color-ink-muted)]',
                 )}
               >
                 <span className="grid size-4 shrink-0 place-items-center" aria-hidden>
                   {match.table.status ? <StatusGlyph status={match.table.status} /> : null}
                 </span>
-                <span className={cn('ident min-w-0 flex-1 truncate', chosen ? 'font-semibold text-[var(--color-ink)]' : 'text-[var(--color-ink)]')}>
-                  {segmentName(match.shown, match.ranges).map((segment, at) =>
-                    segment.match ? (
-                      <mark key={at} className="bg-transparent font-semibold text-[var(--color-ink)]">
-                        {segment.text}
-                      </mark>
-                    ) : (
-                      <span key={at}>{segment.text}</span>
-                    ),
-                  )}
-                </span>
+                <FoundName shown={match.shown} ranges={match.ranges} strong={chosen} />
               </button>
             );
           })

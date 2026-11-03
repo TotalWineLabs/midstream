@@ -164,10 +164,19 @@ export function statementSummary(sql: string, length = 48): string {
 
 /** What a question asked, in a few words: `sales.orders · Last 7 days · 2 filters`, or its statement. */
 export function describeQuestion(question: Pick<Question, 'kind' | 'source' | 'range' | 'filters' | 'sql'>): string {
-  if (question.kind === 'sql') return statementSummary(question.sql ?? '');
-  const parts = [question.source ? shortName(question.source) : 'A table', rangeLabel(decodeRange(question.range))];
+  const { asked, statement, about } = questionParts(question);
+  return statement ? asked : `${about ?? 'A table'} · ${asked}`;
+}
+
+/**
+ * A question as History shows it: what was asked - a range and its filters, or a statement - and
+ * the table it was asked of. What differs between one exploration's questions leads.
+ */
+export function questionParts(question: Pick<Question, 'kind' | 'source' | 'range' | 'filters' | 'sql'>): { asked: string; statement: boolean; about: string | null } {
+  if (question.kind === 'sql') return { asked: statementSummary(question.sql ?? ''), statement: true, about: null };
+  const parts = [rangeLabel(decodeRange(question.range))];
   if (question.filters.length > 0) parts.push(question.filters.length === 1 ? '1 filter' : `${question.filters.length} filters`);
-  return parts.join(' · ');
+  return { asked: parts.join(' · '), statement: false, about: question.source ? shortName(question.source) : null };
 }
 
 /** An exploration's name: the person's, else its last question's, else its table's. */

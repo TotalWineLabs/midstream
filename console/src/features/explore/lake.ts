@@ -185,6 +185,25 @@ export function searchLake(lake: readonly LakeDomain[], query: string, options: 
   return scored.slice(0, options.limit ?? scored.length).map(({ table, shown, ranges }) => ({ table, shown, ranges }));
 }
 
+/**
+ * A found table's name, split for showing: its own name, then where it is - `domain.dataset`, or the
+ * dataset alone - each with the matched ranges that fall in it. A row leads with what tells tables
+ * apart; the place, shared by its neighbours, gives way first.
+ */
+export function splitFoundName(
+  shown: string,
+  ranges: ReadonlyArray<[number, number]>,
+): { name: string; nameRanges: Array<[number, number]>; place: string; placeRanges: Array<[number, number]> } {
+  const at = shown.lastIndexOf('.');
+  if (at < 0) return { name: shown, nameRanges: clipRanges(ranges, 0, shown.length), place: '', placeRanges: [] };
+  return { name: shown.slice(at + 1), nameRanges: clipRanges(ranges, at + 1, shown.length), place: shown.slice(0, at), placeRanges: clipRanges(ranges, 0, at) };
+}
+
+/** The matched ranges that fall in `[from, to)` of a name, counted from `from`. */
+export function clipRanges(ranges: ReadonlyArray<[number, number]>, from: number, to: number): Array<[number, number]> {
+  return ranges.filter(([start, end]) => end > from && start < to).map(([start, end]) => [Math.max(start, from) - from, Math.min(end, to) - from]);
+}
+
 /** A table of the lake by reference, as SQL compares names. */
 export function findTable(lake: readonly LakeDomain[], ref: TableRef | null): LakeTable | null {
   if (!ref) return null;

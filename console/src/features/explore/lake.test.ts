@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { buildLake, findTable, lakeTables, searchLake, type LakeInput } from './lake.ts';
+import { buildLake, findTable, lakeTables, searchLake, splitFoundName, type LakeInput } from './lake.ts';
 import type { Fleet } from '../../lib/fleetMerge.ts';
 import type { ConsoleDomain, CpDataset, DomainFleet } from '@shared/types';
 
@@ -112,6 +112,20 @@ describe('the lake', () => {
 });
 
 describe('searching the lake', () => {
+  it('shows a found table by its own name first, then where it is, each with what matched', () => {
+    // `maint` matched in the table's name, `mid` in the dataset's.
+    assert.deepEqual(splitFoundName('domain_a.midstream.midstream_maintenance_requests', [[9, 12], [29, 34]]), {
+      name: 'midstream_maintenance_requests',
+      nameRanges: [[10, 15]],
+      place: 'domain_a.midstream',
+      placeRanges: [[9, 12]],
+    });
+    // A match across the dot is split between the two.
+    assert.deepEqual(splitFoundName('sales.orders', [[3, 8]]), { name: 'orders', nameRanges: [[0, 2]], place: 'sales', placeRanges: [[3, 5]] });
+    assert.deepEqual(splitFoundName('orders', [[0, 3]]), { name: 'orders', nameRanges: [[0, 3]], place: '', placeRanges: [] });
+  });
+
+
   it('finds tables by their name as shown, best first, with what matched', () => {
     const found = searchLake(lake(), 'ord', { qualified: false });
     assert.deepEqual(found.map((match) => [match.shown, match.ranges]), [['sales.orders', [[6, 9]]]]);

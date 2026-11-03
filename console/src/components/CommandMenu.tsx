@@ -114,7 +114,7 @@ function CommandPanel({ onClose }: { onClose: () => void }): ReactNode {
     const explores = consoleAuth.overall.canAnywhere('data.query');
     if (explores) {
       places.push({ label: 'Explore', icon: Compass, to: sectionPath('explore', scope), permission: null });
-      places.push({ label: 'New exploration', icon: Plus, to: `${explorePath('new')}?sql=`, permission: null });
+      places.push({ label: 'New exploration', icon: Plus, to: explorePath('new'), permission: null });
     }
     for (const place of places) {
       if (place.permission && !auth.can(place.permission)) continue;
