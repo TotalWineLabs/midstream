@@ -368,7 +368,7 @@ export function ExplorePage(): ReactNode {
                 <EmptyState
                   icon={<Compass className="size-6" />}
                   title="No exploration open"
-                  description="An exploration is a table’s rows, or a statement over any tables, with the questions it asked."
+                  description="Start one to browse a table or query your data with SQL."
                   action={
                     <Button
                       size="sm"
