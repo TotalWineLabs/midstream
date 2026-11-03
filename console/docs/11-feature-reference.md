@@ -1093,8 +1093,8 @@ working*). A group's **Add people** offers invitations too, marked *Invited*, an
 
 ## 11.8e Groups (`/settings/groups[/:groupId]`)
 
-The list (`groups.view`): name, members, roles, created on; built-in groups first, marked with a
-lock. **New group** (`groups.manage`): name, description, roles.
+The list (`groups.view`): name, members (nothing for a group nobody has been added to; the group's
+page then says *No members yet*), roles, created on; built-in groups first, marked with a lock. **New group** (`groups.manage`): name, description, roles.
 
 A group's page: **Settings** (name, description — fixed for built-in groups), **Roles** (which
 roles it grants; the Admin group always keeps Administrator), **Access** (the permissions those
@@ -1105,7 +1105,8 @@ and, for anything that grants access, holding that access yourself.
 
 ## 11.8f Roles (`/settings/roles[/:roleId]`)
 
-The list (`roles.view`): role, type (*Built in* / *Custom*), description, the groups holding it.
+The list (`roles.view`): role, type (*Built in* / *Custom*), description, the groups holding it
+(nothing when none does).
 **Create role** (`roles.manage`).
 
 The editor: **Role details** (name, description), **Permissions** by category with a filter by
