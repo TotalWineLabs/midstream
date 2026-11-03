@@ -133,7 +133,7 @@ export async function registerTableRoutes(app: FastifyInstance): Promise<void> {
     else if (!config.dataAccessEnabled) metadataError = 'data access is turned off for this console (Settings › Data explorer)';
     else {
       try {
-        const table = await loadTable(location);
+        const table = await loadTable(location, { knownSnapshotId: record?.current_snapshot_id ?? null });
         if (!table) metadataError = 'the table has not been created yet';
         else metadata = describeTable(table.metadataLocation, table.metadata, await snapshotCatalog(table.metadata), settings, schemaVisible);
       } catch (cause) {
