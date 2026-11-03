@@ -31,9 +31,9 @@ import type { ConsoleDomain } from '@shared/types';
  */
 const NAV_ITEMS: Array<{ section: ShellSection; label: string; icon: typeof Waves; permission: string; anywhere?: boolean; phone?: boolean }> = [
   { section: 'overview', label: 'Overview', icon: LayoutGrid, permission: 'materializations.view' },
-  { section: 'materializations', label: 'Materializations', icon: Waves, permission: 'materializations.view' },
-  { section: 'datasets', label: 'Datasets', icon: Database, permission: 'datasets.view' },
   { section: 'explore', label: 'Explore', icon: Compass, permission: 'data.query', anywhere: true, phone: false },
+  { section: 'datasets', label: 'Datasets', icon: Database, permission: 'datasets.view' },
+  { section: 'materializations', label: 'Materializations', icon: Waves, permission: 'materializations.view' },
 ];
 
 /** Settings holds everyone's own account, so it is there for anyone signed in. */
