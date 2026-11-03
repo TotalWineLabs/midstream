@@ -137,12 +137,15 @@ export const Exploration = memo(function Exploration({
 
   const table = findTable(lake, doc.source);
   const lakeKnown = lake.length > 0 && lake.every((domain) => !domain.loading);
-  const writer = useTableWriter(table);
+  // Only a table the person may browse is looked up and browsed: the server would refuse the rest,
+  // and the page says why instead of starting what it knows will fail.
+  const browsable = table?.browsable ?? false;
+  const writer = useTableWriter(browsable ? table : null);
   // Made again only when where the table is changes - not with every frame the lake is rebuilt on.
   const source = useMemo<WorkbenchSource | null>(
-    () => (table && writer.materializationId ? { ...table.ref, datasetId: table.datasetId, materializationId: writer.materializationId } : null),
+    () => (table && browsable && writer.materializationId ? { ...table.ref, datasetId: table.datasetId, materializationId: writer.materializationId } : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [table?.key, table?.datasetId, writer.materializationId],
+    [table?.key, table?.datasetId, browsable, writer.materializationId],
   );
   const writingSql = doc.view.sql !== null;
 
@@ -266,6 +269,8 @@ export const Exploration = memo(function Exploration({
   } else if (doc.source && (!lakeKnown || writer.pending) && !source) {
     content = <Loading />;
   } else if (doc.source && !source) {
+    // Readable, though not browsable: a statement reads it without the materialization's detail.
+    const asSql = table !== null && table.queryable && !table.browsable;
     content = (
       <Panel>
         <EmptyState
@@ -274,11 +279,22 @@ export const Exploration = memo(function Exploration({
           description={
             table?.locked
               ? `Its dataset is locked to you. Ask one of the owners of ${doc.source.dataset} for a role on it.`
-              : table
-                ? 'You may not query its dataset, or see the materialization writing it.'
-                : 'It may have been dropped, or its domain cannot be asked right now.'
+              : asSql
+                ? 'You may query it, but not see the materialization writing it, which browsing reads. Ask it with SQL.'
+                : table
+                  ? `You may not query its dataset. Ask one of the owners of ${doc.source.dataset} for a role on it.`
+                  : 'It may have been dropped, or its domain cannot be asked right now.'
           }
-          action={chooser}
+          action={
+            asSql && table ? (
+              <Button size="sm" onClick={() => browse(table)}>
+                <Code2 className="size-3.5" />
+                Query it with SQL
+              </Button>
+            ) : (
+              chooser
+            )
+          }
         />
       </Panel>
     );
