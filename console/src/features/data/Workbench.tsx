@@ -6,6 +6,7 @@ import { ColumnRail } from './ColumnRail';
 import { FilterChips } from './FilterChips';
 import { HeadPeek } from './HeadPeek';
 import { autoRerunDelay, liveHold, liveTailAvailable, peekDone, tableQueryable, tailNotice, type TailNotice } from './live';
+import { RUN_LOST_CODE } from './lostRun';
 import { Pager } from './Pager';
 import type { EditorHandle } from './QueryEditor';
 import { ResizeHandle } from './ResizeHandle';
@@ -651,7 +652,8 @@ export function Workbench({
 
   const editorError = useMemo(() => {
     if (validation && validation.sql === sqlDraft) return validation;
-    if (run?.state === 'failed' && run.request.kind === 'sql' && run.request.sql === sqlDraft && run.error) {
+    // A run the console lost says nothing about the statement, so the editor marks nothing.
+    if (run?.state === 'failed' && run.request.kind === 'sql' && run.request.sql === sqlDraft && run.error && run.error.code !== RUN_LOST_CODE) {
       return { message: run.error.message, position: run.error.position ?? null };
     }
     return null;
