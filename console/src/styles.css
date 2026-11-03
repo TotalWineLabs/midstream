@@ -541,6 +541,11 @@
     transition: none;
   }
 
+  /* A chevron turns at once, open or closed; what slides or turns does not travel. */
+  .transition-transform {
+    transition: none;
+  }
+
   .skeleton {
     animation: none;
     background-image: none;
