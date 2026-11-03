@@ -257,8 +257,8 @@ after one (`update`) makes the table `update_topic` (`shared/tableNames.ts`, the
 | Runs scanning at once | 4 (`CONSOLE_RUN_CONCURRENCY`); more queue |
 | One person's runs scanning at once | 2 (`CONSOLE_RUN_CONCURRENCY_PER_PERSON`), within those 4; their others queue, so one person's explorations cannot hold every scan |
 | Wall clock | None while someone is watching — **Stop** interrupts every query a run has open. A run nobody has read for 30 min (`CONSOLE_RUN_RETENTION_MS`) is cancelled and its stored result deleted |
-| DuckDB memory | 4 GB per instance (`CONSOLE_DUCKDB_MEMORY_LIMIT`) |
-| DuckDB threads | 32 (`CONSOLE_DUCKDB_THREADS`) |
+| DuckDB memory | Per instance, the container's memory shared between the console's own and every concurrent statement's: 358 MiB in a 4 GiB pod (`CONSOLE_DUCKDB_MEMORY_LIMIT`); a statement spills past it to its run's directory |
+| DuckDB threads | 4 a CPU (`CONSOLE_DUCKDB_THREADS`) |
 | Cached profiles' downloads | 400 files / 2 GiB per scan (`CONSOLE_CACHED_MODE_MAX_FILES`, `_BYTES`) |
 
 ### Honest limitations

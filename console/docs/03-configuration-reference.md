@@ -155,8 +155,10 @@ old `schema-history/` directory can be deleted. See
 | `CONSOLE_STORAGE_FILE` | string | unset | The storage profiles, a JSON file the chart renders from `console.storage[]` (§3.6a). Unset with `CONSOLE_STORAGE` unset too, the console reads no object storage |
 | `CONSOLE_STORAGE` | JSON | unset | The same profiles inline, for development; the file wins when both are set |
 | `CONSOLE_STORAGE_<NAME>_…` | string | unset | Each profile's credentials, never in the JSON (§3.6a) |
-| `CONSOLE_DUCKDB_MEMORY_LIMIT` | string | `4GB` | Passed to DuckDB as `memory_limit`, for the shared instance and each statement's sandbox. Also bounds the in-memory cache of file bytes already read |
-| `CONSOLE_DUCKDB_THREADS` | int | `32` | DuckDB worker threads. Remote reads block a thread per range request, so this bounds the requests one query has in flight; see below |
+| `CONSOLE_CONTAINER_MEMORY_BYTES` | int | the cgroup's limit, else the machine's memory | The container's memory limit, which the chart passes (`limits.memory`). DuckDB's memory limit is derived from it |
+| `CONSOLE_CONTAINER_CPUS` | int | the CPUs Node sees, a cgroup's quota counted | The container's CPU limit, which the chart passes (`limits.cpu`, rounded up). DuckDB's threads are derived from it |
+| `CONSOLE_DUCKDB_MEMORY_LIMIT` | string | derived: 358MiB in a 4 GiB pod | Passed to DuckDB as `memory_limit`, for the shared instance and each statement's sandbox. Also bounds the shared instance's in-memory cache of file bytes already read. Unset, the container's memory less 512 MiB for Node is shared between the shared instance and `CONSOLE_RUN_CONCURRENCY` statements, and half of each share is its limit; see below |
+| `CONSOLE_DUCKDB_THREADS` | int | derived: 4 a CPU, 4–64 | DuckDB worker threads, for each instance. Remote reads block a thread per range request, so this bounds the requests one query has in flight; see below |
 | `CONSOLE_QUERY_STATS_TIMEOUT_MS` | int | `8000` | Budget for column profiles; an overrun returns a `partial` profile |
 | `CONSOLE_CACHED_MODE_MAX_FILES` | int | `400` | Files of cached profiles one scan may mirror; a wider time range is refused with a request to narrow it or give the profile direct access. Pages are never refused |
 | `CONSOLE_CACHED_MODE_MAX_BYTES` | int | `2147483648` (2 GiB) | The same, in bytes |
@@ -190,6 +192,9 @@ What matters is how many objects are in flight, and three settings decide it.
   finishes.
 - **`CONSOLE_DUCKDB_THREADS`** — DuckDB's own threads, shared by every query. A single statement
   over many objects uses them for its parallelism; many small per-object queries split across them.
+  A CPU-limited pod is throttled past a few threads a core: in a 2-CPU pod, a statement over 1,178
+  objects took 8.8 s on 4 threads, 10.5 s on 8 and 28.8 s on 16, and had not finished after 75 s
+  on 32. Unset, it is four a CPU.
 
 Measured from a laptop against GCS, cold, filtering all 1,866 objects (101 M rows, 25 GB) of the
 load-test materialization:
@@ -206,6 +211,30 @@ requests in flight multiply. They help a single large statement — an all-time 
 62 s on 32 threads and 43 s on 96 — but the setting is shared, and browse runs are the common case.
 A pod short on CPU can lower the scan width; one far from its object store gains most from raising
 it.
+
+### DuckDB's memory
+
+The console holds one DuckDB instance of its own and one more for each statement scanning, at most
+`CONSOLE_RUN_CONCURRENCY` of them, and `memory_limit` applies to each. It bounds what DuckDB's buffer
+manager holds, not the process: in a 2-CPU pod, a statement capped at 1.5 GB reached 1.27 GiB
+resident against the 490 MiB DuckDB said it held, and 2.5 GiB while its sandbox still kept an external
+file cache. Unset, the limit is derived so that all of them fit in the container together:
+
+```
+limit = (container memory − 512 MiB) ÷ (CONSOLE_RUN_CONCURRENCY + 1) ÷ 2,  at least 128 MiB
+```
+
+| Pod | Runs scanning at once | Each instance's limit |
+|-----|-----------------------|-----------------------|
+| 4 GiB (the chart's default) | 4 | 358 MiB |
+| 4 GiB | 1 | 896 MiB |
+| 16 GiB | 4 | 1,587 MiB |
+
+Half of each share is the limit; the other half is room for what DuckDB does not count. A sort,
+aggregate or join larger than the limit spills to `<CONSOLE_RUN_DIR>/<run id>/spill/`, removed with
+the run. A statement that needs more memory than its share is given more by a bigger pod or fewer
+runs scanning at once; setting `CONSOLE_DUCKDB_MEMORY_LIMIT` raises every instance's limit at once,
+and above the share that risks the pod being killed for its memory when several statements run.
 
 ## 3.6a Storage profiles
 
@@ -327,9 +356,9 @@ CONSOLE_STORAGE_LAKE_SECRET_ACCESS_KEY=...
 CONSOLE_STORAGE_ARCHIVE_GCS_HMAC_KEY_ID=GOOG1E...   # direct gs:// scanning: no downloads
 CONSOLE_STORAGE_ARCHIVE_GCS_HMAC_SECRET=...
 
-# Give DuckDB room on a larger pod
-CONSOLE_DUCKDB_MEMORY_LIMIT=6GB
-CONSOLE_DUCKDB_THREADS=32
+# Give each statement more than its share of the pod (it is sized from the pod's limits otherwise)
+CONSOLE_DUCKDB_MEMORY_LIMIT=1GB
+CONSOLE_DUCKDB_THREADS=16
 ```
 
 ## 3.9 Tuning cheat sheet
@@ -389,7 +418,8 @@ plane is unreachable. The Settings page is then read-only, because the overrides
 at startup stays with the deployment. The Settings page lists these read-only under
 **Deployment**: `PORT`/`HOST`, `CONSOLE_URL`, the registry (its domains and the settings home), `CONSOLE_VERSION`, the storage
 profiles (**Object storage access**, then a row per profile: its scope, mode and what it reads with),
-`CONSOLE_DUCKDB_MEMORY_LIMIT`, `CONSOLE_DUCKDB_THREADS`, `CONSOLE_RUN_CONCURRENCY`,
+`CONSOLE_CONTAINER_MEMORY_BYTES`, `CONSOLE_CONTAINER_CPUS`, `CONSOLE_DUCKDB_MEMORY_LIMIT`,
+`CONSOLE_DUCKDB_THREADS`, `CONSOLE_RUN_CONCURRENCY`,
 `CONSOLE_RUN_SCAN_CONCURRENCY` (they size `UV_THREADPOOL_SIZE` at start), `CONSOLE_DATA_DIR`,
 `CONSOLE_PARQUET_CACHE_MAX_BYTES`, `CONSOLE_CORS_ORIGIN`, `CONSOLE_SERVE_CLIENT`, and the
 sign-in wiring — `CONSOLE_SESSION_COOKIE`, `CONSOLE_COOKIE_SECURE` and each single sign-on provider

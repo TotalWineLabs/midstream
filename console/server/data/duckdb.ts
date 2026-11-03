@@ -56,6 +56,16 @@ const INSTANCE_SETTINGS = [
   "SET GLOBAL TimeZone = 'UTC'",
 ];
 
+/**
+ * A sandbox's: the same, but without the external file cache. A sandbox ends with its statement, so
+ * what the cache keeps is never read again, and it keeps every byte a scan reads up to the memory
+ * limit - 1.4 GB in 75 s of one statement, which with the shared instance outgrew the pod.
+ */
+const SANDBOX_SETTINGS = [
+  ...INSTANCE_SETTINGS.filter((setting) => !setting.includes('enable_external_file_cache')),
+  'SET GLOBAL enable_external_file_cache = false',
+];
+
 async function getInstance(): Promise<DuckDBInstance> {
   instancePromise ??= (async () => {
     const instance = await DuckDBInstance.create(':memory:', {
@@ -220,6 +230,11 @@ export async function withConnection<T>(
 export interface SandboxAccess {
   directories: string[];
   paths: string[];
+  /**
+   * Where the work may spill what does not fit in memory - a sort, an aggregate or a join larger than
+   * `CONSOLE_DUCKDB_MEMORY_LIMIT` - inside one of `directories`. Unset, it may not spill.
+   */
+  spillDirectory?: string;
 }
 
 /**
@@ -260,13 +275,14 @@ export async function withSandbox<T>(
   };
   signal?.addEventListener('abort', interrupt, { once: true });
   try {
-    for (const setting of INSTANCE_SETTINGS) {
+    for (const setting of SANDBOX_SETTINGS) {
       try {
         await connection.run(setting);
       } catch (cause) {
         logger.debug({ err: cause, setting }, 'duckdb setting unavailable');
       }
     }
+    await connection.run(`SET temp_directory = ${quoteLiteral(access.spillDirectory ?? '')}`);
     await enableProgress(connection);
     const profiles = storage().forDuckdbSources(access.paths);
     for (const extension of new Set(profiles.flatMap((profile) => profile.duckdbExtensions()))) {

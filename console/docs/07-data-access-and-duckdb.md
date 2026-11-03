@@ -262,12 +262,17 @@ current query finishes. Starting a run from the tab cancels the one before it if
 | `enable_http_metadata_cache = true` | so are the HEAD responses every remote open starts with |
 | `enable_external_file_cache = true` | byte ranges already read are served from memory, within `memory_limit` |
 | `TimeZone = 'UTC'` | a value never depends on where the console runs |
-| `threads = CONSOLE_DUCKDB_THREADS` (32) | remote reads block a thread per range request, so threads bound one query's requests in flight |
+| `threads = CONSOLE_DUCKDB_THREADS` (4 a CPU) | remote reads block a thread per range request, so threads bound one query's requests in flight; past a few a core, a CPU-limited pod is throttled |
+| `memory_limit = CONSOLE_DUCKDB_MEMORY_LIMIT` | this instance's share of the container, beside every statement's (03 §3.6) |
 
 All of this is safe only because data files never change once committed.
 
 **Statements** run in a **sandbox of their own** (`data/duckdb.ts::withSandbox`): a fresh in-memory
-instance with the same settings, `allowed_directories` set to the run's own directory
+instance with the same settings but no external file cache — the sandbox ends with the statement, so
+nothing would read the cache again, and it kept every byte a scan read up to the memory limit: 1.4 GB
+in 75 s of one statement, which beside the shared instance outgrew a 4 GiB pod — and its
+`temp_directory` in the run's own directory (`spill/`), so work larger than the limit spills to disk
+instead of failing. `allowed_directories` is set to the run's own directory
 (`<CONSOLE_RUN_DIR>/<run id>/`, which holds its result and nothing else) and
 `allowed_paths` to the snapshot's data files, then `enable_external_access = false` and
 `lock_configuration = true`. DuckDB enforces both instance-wide and will not undo them, so the

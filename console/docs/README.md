@@ -103,6 +103,7 @@ console/
   server/
     main.ts                    Bootstrap: Fastify, error handler, routes, static, shutdown
     workerPool.ts              Sizes Node's worker pool before anything starts it
+    resources.ts               DuckDB's memory limit and threads, sized from the container
     config.ts                  Environment-driven configuration, live overrides
     logger.ts                  Pino instance typed as FastifyBaseLogger
     errors.ts                  ConsoleError + constructors + identifier validation
