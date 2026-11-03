@@ -1,4 +1,4 @@
-import { Box, Check, ChevronsUpDown, Database, Info, Layers, LayoutGrid, LogIn, LogOut, PanelLeftClose, PanelLeftOpen, Search, Settings, UserRound, Waves, X } from 'lucide-react';
+import { Box, Check, ChevronsUpDown, Compass, Database, Info, Layers, LayoutGrid, LogIn, LogOut, PanelLeftClose, PanelLeftOpen, Search, Settings, UserRound, Waves, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 
@@ -24,11 +24,16 @@ import { FOCUS_SEARCH_EVENT, type FocusSearchKey } from '@/lib/shortcuts';
 import { itemStatus, statusGroup } from '@/lib/status';
 import type { ConsoleDomain } from '@shared/types';
 
-/** The places people work in, in every domain or in one (handbook 20). Search lives in ⌘K. */
-const NAV_ITEMS: Array<{ section: ShellSection; label: string; icon: typeof Waves; permission: string }> = [
+/**
+ * The places people work in, in every domain or in one (handbook 20). Search lives in ⌘K. Explore
+ * reads any domain's tables, so it is there for anyone who may query a dataset anywhere (`anywhere`),
+ * and it waits for the desktop: the phone's bar keeps its four places.
+ */
+const NAV_ITEMS: Array<{ section: ShellSection; label: string; icon: typeof Waves; permission: string; anywhere?: boolean; phone?: boolean }> = [
   { section: 'overview', label: 'Overview', icon: LayoutGrid, permission: 'materializations.view' },
-  { section: 'materializations', label: 'Materializations', icon: Waves, permission: 'materializations.view' },
+  { section: 'explore', label: 'Explore', icon: Compass, permission: 'data.query', anywhere: true, phone: false },
   { section: 'datasets', label: 'Datasets', icon: Database, permission: 'datasets.view' },
+  { section: 'materializations', label: 'Materializations', icon: Waves, permission: 'materializations.view' },
 ];
 
 /** Settings holds everyone's own account, so it is there for anyone signed in. */
@@ -139,7 +144,7 @@ function Shell({ children }: { children: ReactNode }): ReactNode {
   const scope = useScopeDomainId();
   // The shell sits around a domain's pages, so it asks the address which domain they are of.
   const auth = scope ? consoleAuth.forDomain(scope) : consoleAuth.overall;
-  const navItems = NAV_ITEMS.filter((item) => auth.can(item.permission)).map((item) => ({
+  const navItems = NAV_ITEMS.filter((item) => (item.anywhere ? consoleAuth.overall.canAnywhere(item.permission) : auth.can(item.permission))).map((item) => ({
     ...item,
     to: sectionPath(item.section, scope),
     end: item.section === 'overview',
@@ -250,7 +255,7 @@ function Shell({ children }: { children: ReactNode }): ReactNode {
         </main>
       </div>
 
-      <BottomBar navItems={navItems} onCommand={() => setCommandOpen(true)} />
+      <BottomBar navItems={navItems.filter((item) => item.phone !== false)} onCommand={() => setCommandOpen(true)} />
       <CommandMenu open={commandOpen} onClose={() => setCommandOpen(false)} />
 
       <Dialog
@@ -754,6 +759,7 @@ export function PageHeader({
   subtitle,
   actions,
   meta,
+  wide = false,
   children,
 }: {
   title: ReactNode;
@@ -762,11 +768,13 @@ export function PageHeader({
   subtitle?: ReactNode;
   actions?: ReactNode;
   meta?: ReactNode;
+  /** Across the whole width, for a page that is a workspace: Explore. */
+  wide?: boolean;
   children?: ReactNode;
 }): ReactNode {
   return (
     <header className="border-b border-[var(--color-line)]">
-      <div className="mx-auto flex max-w-[1400px] flex-wrap items-start justify-between gap-4 px-4 pt-5 pb-4 sm:px-6 md:pt-7">
+      <div className={cn('flex flex-wrap items-start justify-between gap-4 px-4 pt-5 pb-4 sm:px-6 md:pt-7', !wide && 'mx-auto max-w-[1400px]')}>
         <div className="min-w-0">
           {crumbs ? <p className="mb-1 text-[13px] text-[var(--color-ink-muted)]">{crumbs}</p> : null}
           <h1 className="display truncate text-[24px] leading-tight font-semibold">{title}</h1>

@@ -311,6 +311,7 @@ export function formatValue(
     if (setting.unit === 'hours') return value === 1 ? '1 hour' : `${formatNumber(value)} hours`;
     if (setting.unit === 'days') return value === 1 ? '1 day' : `${formatNumber(value)} days`;
     if (setting.unit === 'attempts' && value === 1) return '1 attempt';
+    if (setting.unit === 'queries' && value === 1) return '1 query';
     if (setting.unit === 'bytes') return humanizeBytes(value);
     return setting.unit ? `${formatNumber(value)} ${UNIT_LABELS[setting.unit] ?? setting.unit}` : formatNumber(value);
   }

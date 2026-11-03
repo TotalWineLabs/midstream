@@ -9,12 +9,12 @@ Persistent around every page (`components/AppShell.tsx`), in the design language
 
 | Element | Behaviour |
 |---------|-----------|
-| Sidebar (≥ 768 px) | The mark and **Midstream** (to the overview); the domain switcher; **Search or jump to… ⌘K**; **Overview**, **Materializations**, **Datasets**; pinned items; **Settings** and the account at the foot, and the live indicator there only when the console's link to its control planes is down. In a domain the items are that domain's; under **All domains** every domain's. Items a person may not open are left out. Collapses to icons, remembered in `console.sidebar.collapsed` |
+| Sidebar (≥ 768 px) | The mark and **Midstream** (to the overview); the domain switcher; **Search or jump to… ⌘K**; **Overview**, **Explore** (for anyone who may query a dataset in some domain; §11.14), **Datasets**, **Materializations**; pinned items; **Settings** and the account at the foot, and the live indicator there only when the console's link to its control planes is down. In a domain the items are that domain's; under **All domains** every domain's. Items a person may not open are left out. Collapses to icons, remembered in `console.sidebar.collapsed` |
 | Needs-you count | Beside **Materializations**: how many failed or need attention, in Buoy (Flare when one failed). Nothing at all when none do |
 | Pinned | Materializations and datasets a person pinned (the pin on a materialization's page, or ⌘K), each with its state's glyph; kept in the browser (`console.pins`, `lib/pins.ts`); unpinned with the × on hover. No heading when nothing is pinned |
 | Domain switcher | Where the console serves several domains: **All domains**, then each domain. A domain's dot shows only when it needs saying — unreachable, reconnecting, not usable. Choosing one keeps the section open: the overview, the lists, settings |
 | Content panel | The page sits in an inset panel on the canvas, beside the sidebar |
-| Phone (< 768 px) | A top bar with the mark, search and the account (and the live indicator while the link is down); a bottom bar with **Overview**, **Materializations**, **Datasets** and **Search** |
+| Phone (< 768 px) | A top bar with the mark, search and the account (and the live indicator while the link is down); a bottom bar with **Overview**, **Datasets**, **Materializations** and **Search** |
 | ⌘K, Ctrl+K or / | The command menu (§11.1a) from anywhere; on the search page, focuses its field |
 | Account menu | The person's name and email, the domains they are signed in to (and **sign in to more**), **Appearance** (**System**, **Light**, **Dark**: `console.theme`, applied before first paint), **Your account**, **About this deployment**, **Sign out everywhere**. Signed in nowhere: **Sign in** |
 | Domain banners | Above the page, one per domain that is misconfigured (its control plane says it is another domain) or runs a release this console does not work with, saying which |
@@ -26,7 +26,7 @@ One field to go anywhere or do anything (`components/CommandMenu.tsx`):
 
 | Before typing | After |
 |---|---|
-| **Go to**: Overview, Materializations, Datasets, Settings, Your account (those the person may open); five materializations, the ones that need someone first | Places and materializations by name, id or topic, ranked and highlighted; **Actions** on the first three found: **Stop** (running), **Resume** (stopped), **Pin** or **Unpin**, each only with the permission in its domain; **Tables** and **Datasets** as search answers; **See every result** for the search page |
+| **Go to**: Overview, Materializations, Datasets, Explore and **New exploration** (a statement), Settings, Your account (those the person may open); five materializations, the ones that need someone first | Places and materializations by name, id or topic, ranked and highlighted; **Actions** on the first three found: **Stop** (running), **Resume** (stopped), **Pin** or **Unpin**, each only with the permission in its domain; **Tables** and **Datasets** as search answers; **Explore** `<domain>.<dataset>.<table>` for the first three tables found the person may query, each in a new exploration; **See every result** for the search page |
 
 ↑↓ move, ↵ opens or acts, Esc closes. A stop acts at once; its toast offers **Undo**.
 
@@ -662,9 +662,10 @@ run reads the table as it is now; the Data tab offers no older snapshot (the run
 | Running, statement | `Preparing · 26%`, then `Running · 45%` (or indeterminate), then `Counting rows` when it outgrew what is kept |
 | Succeeded | `✓ 1,234,567 rows` (how long it took in its tooltip) |
 | Failed | The error; a statement's is also marked in the editor |
+| Refused before it started | *Could not start*, its reason in the tooltip and in full below — a statement over a table the person may not query, say |
 | Cancelled | How long it ran and how many rows it had found |
 
-**More actions** (⋮), right of **Run**, lists **Peek**, **Share** and **Export…**, always all three:
+**More actions** (⋮), right of **Run**, lists **Peek**, **Share**, **Export…** and **Open in Explore**, which carries the question on screen, and its run, into a new exploration (§11.14). The first three are always there:
 one that does not apply is disabled, the reason in its tooltip — Peek *Available while this table is
 catching up*, Export until the run has succeeded, without `data.export`, or with nothing to export.
 **Export…** opens its formats in the same menu, with a way back.
@@ -790,15 +791,17 @@ closed until **Columns** opens it (Toolbar).
 ### SQL
 
 **SQL** opens the editor above the grid with a statement for the current filters on the chosen
-table — `SELECT * FROM sales.orders WHERE … LIMIT 1000`. Every table of the materialization the
-person may query, kept ones included, is there by its canonical name, `<dataset>.<table>` — the name
-an engine on the catalog uses — so a statement can read any of them and join them, across datasets
-(`… FROM sales.orders o JOIN finance.payments_v2 p ON p.order_id = o.order_id`); the header names
-them and says they hold the rows of the chosen time range. Completion offers those tables, the
-columns of the one being typed after, and `iceberg.<dataset>.<table>` for each — the same rows with
-the native columns, structs and lists as an external engine sees them. A name that is none of the
-tables, a bare `orders` included, fails with the list of those that are; one in a dataset the person
-may not query is refused, naming the dataset (08 §8.1). Columns carry their logical
+table — `SELECT * FROM domain_a.sales.orders WHERE … LIMIT 1000`. Every table of the materialization
+the person may query, kept ones included, is there by its full name, `<domain>.<dataset>.<table>`
+(handbook 20 §20.9), so a statement can read any of them and join them, across datasets and domains
+(`… FROM domain_a.sales.orders o JOIN domain_a.finance.payments_v2 p ON p.order_id = o.order_id`);
+the header names them and says they hold the rows of the chosen time range. Completion offers those
+tables, the columns of the one being typed after, every other table the person may query by name,
+and `<domain>_iceberg.<dataset>.<table>` for each — the same rows with the native columns, structs
+and lists as an external engine sees them. A name without its domain is underlined with the full name
+to write; one that is none of the tables fails with the list of those that are; one in a dataset the
+person may not query is refused, naming the dataset (08 §8.1). Nothing sits under the editor: ⌘↵ is in
+Run's tooltip. Columns carry their logical
 names, quoted: `"status"`, `"customer.email"`. A statement runs in a sandbox that can read nothing
 but the snapshot's files (07 §07.6). **Back to filters** leaves SQL.
 
@@ -1243,4 +1246,28 @@ table with a **Domain** column and domain filter chips, and **New materializatio
 domain first; **Datasets** lists every domain's, grouped by domain, and **New dataset** asks which
 domain first. A domain the person may not see, or that cannot be asked now, is named under the list
 with **Sign in** where that would help. Inside a domain each page is as before, about that domain.
+
+## 11.14 Explore (`/explore`, `/explore/<id>`)
+
+*What does the data say?* — over any table the person may read, in any domain, side by side
+(`features/explore/`, design: [docs/design/explore.md](../../docs/design/explore.md)). In the sidebar
+for anyone with `data.query` on a dataset somewhere; not on the phone's bottom bar, though its links
+open there.
+
+| Part | Behaviour |
+|---|---|
+| Header | **Explore**; **Tables** when the rail is closed (always on a phone); **History**, which opens beside every exploration and slides in only when opened; **All explorations** |
+| Tabs | One per open exploration, named by the person, else by its last question (*sales.orders · Last 7 days · 1 filter*), its table or its statement. **+** opens a new one, **×** closes one, which stays under All explorations. ← → (Home, End) move between them, Delete closes, a double click or F2 renames. Eight open at most: *8 explorations are open · Close one to open another*. Each keeps its place when another is shown (§10.10): its rows, its run, its editor, its scroll. The address names the one shown |
+| All explorations | Every exploration this browser keeps, most recently changed first, the open ones marked *open*: open one, **Duplicate** it (named *… (copy)*, with its history) to try a variation, or **Delete** it — at once, with **Undo** in its toast |
+| An exploration, empty | *Explore any table you may read*: **From · Choose a table**, or **Write SQL** |
+| Browsing a table | The workbench of a table's Data tab (§11.8): time range, filters, columns, order, **Streaming**, **SQL**, **Run**, **More actions** — led by **From**, the table by its full name, which chooses another. A table the person may query but whose materialization they may not see opens as a statement, `SELECT * FROM <full name> LIMIT 1000` — opened by a link, it says *You may query this table, but not browse it* and offers **Query it with SQL**. One they may not read is never run: it says why — its dataset locked to them, and whose owners to ask — or that the table is gone, with **From · Choose a table** for another. Another question about the same table keeps the frame on screen; another table loads its own |
+| SQL over the lake | **Write SQL**, or **SQL** on a table: a statement over any tables by their full names, across datasets and domains (07 §07.5). The editor's header names the tables it reads and the range that bounds them — before any is named, *The tables you name hold the rows in All time* — and nothing sits under the editor. A blank statement says *No statement yet · Write one above, naming each table you read in full*, and nothing of Run. A name without its domain is underlined before it runs, with the full name to write. The time range picker sizes every table named, together. ⌘↵ runs the shown exploration's, and only its. **More actions** offers no **Peek**: there is no table to peek at |
+| Tables rail | The lake as the person may see it: each domain (several), its datasets with their tables' counts (none for an empty one), each table with its writer's state glyph — its state in words to a screen reader — and a locked dataset with a lock. A long name is cut in the middle, keeping its end. **/** finds a table by name, each found one by its own name first and its place after; ↵ browses it in the shown exploration — or, while it writes SQL, puts its full name in the statement. A locked table chosen anyway says why: *sales is locked to you · Ask one of its owners for a role on it*. A table's columns open beneath it; choosing one puts its name in the statement, or copies it. Pointed at, a table also offers a new exploration, its name to copy and its page. Resized (220–480 px) and closed, both remembered; on a phone, a sheet whose tap browses, the other actions waiting for a desktop |
+| History | The shown exploration's questions, newest first, each led by what was asked — *Previous month · 1 filter*, or the statement — with its table after it, and its answer in a few words: rows and time, **Failed** in its state's shape, or **Cancelled** (§10.10). Choosing one shows its run again while the console keeps it (30 minutes after it was last read), else puts the question in the composer, waiting for Run. ↑ ↓ move through it. On a phone, a sheet, closed by the pick |
+| Queued | Two of one person's queries scan at once (**Scans per person**, 07 §07.5); a third says *Waiting for your other queries to finish*, and starts when one is done |
+| Share | **Share** copies a link that asks the question again — `/explore/new?source=<domain>.<dataset>.<table>&…`, the view as the Data tab writes it — for anyone who may read its tables: opened, it is a new exploration in their browser. *It reopens this question for anyone who may read its tables.* |
+| Kept | In this browser (09 §9.6): which are open and which is shown, per browser tab, through a reload; the explorations themselves, at most 100, a full storage giving up the oldest that are not open. An address naming one this browser does not keep says *That exploration is not in this browser* |
+
+Out of sight an exploration holds no connection open: its table's live detail closes and a run still
+working is asked how it is doing every few seconds, so many explorations cost one stream.
 

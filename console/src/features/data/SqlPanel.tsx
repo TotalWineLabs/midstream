@@ -1,10 +1,11 @@
 import { Copy, ListFilter, Repeat } from 'lucide-react';
-import { Suspense, lazy, type ReactNode } from 'react';
+import { Suspense, lazy, type ReactNode, type Ref } from 'react';
 
+import type { EditorHandle } from './QueryEditor';
 import { Button, Skeleton } from '@/components/ui/primitives';
 import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/cn';
-import type { CpTableSpec, StatementPosition } from '@shared/types';
+import type { CpTableSpec, StatementPosition, TableRef } from '@shared/types';
 
 // CodeMirror is only needed once someone writes SQL, so it stays out of the initial bundle.
 const QueryEditor = lazy(() =>
@@ -36,6 +37,8 @@ export function SqlPanel({
   onRun,
   onExit,
   autoRerun = null,
+  named = [],
+  editorRef,
 }: {
   sql: string;
   /** The table on screen: what the statement was started from. */
@@ -54,9 +57,13 @@ export function SqlPanel({
   error: { message: string; position?: StatementPosition | null } | null;
   onChange: (value: string) => void;
   onRun: () => void;
-  onExit: () => void;
+  /** Back to filters; null where there is no table to filter (Explore, with none chosen). */
+  onExit: (() => void) | null;
   /** The Auto re-run toggle; null where it does not apply (no live tail). */
   autoRerun?: { on: boolean; onChange: (on: boolean) => void } | null;
+  /** With no table of its own: the tables the statement names, which the header lists. */
+  named?: readonly TableRef[];
+  editorRef?: Ref<EditorHandle>;
 }): ReactNode {
   const toast = useToast();
   const current = tables.find((table) => table.name === tableName);
@@ -67,7 +74,23 @@ export function SqlPanel({
       <div className="flex shrink-0 flex-wrap items-center gap-2 px-3 py-1.5">
         <span className="text-[12px] font-medium text-[var(--color-ink-faint)]">SQL</span>
         <span className="min-w-0 truncate text-[11px] text-[var(--color-ink-muted)]">
-          {tables.length > 1 ? (
+          {tables.length === 0 ? (
+            named.length > 0 ? (
+              <>
+                {named.map((table, index) => (
+                  <span key={`${table.domain}.${table.dataset}.${table.table}`}>
+                    {index > 0 ? ', ' : ''}
+                    <code className="ident">
+                      {table.domain}.{table.dataset}.{table.table}
+                    </code>
+                  </span>
+                ))}{' '}
+                {named.length > 1 ? 'hold' : 'holds'} the rows in
+              </>
+            ) : (
+              <>The tables you name hold the rows in</>
+            )
+          ) : tables.length > 1 ? (
             <>
               {tables.map((table, index) => (
                 <span
@@ -75,7 +98,7 @@ export function SqlPanel({
                   title={`The rows of topic ${table.source_topic}; its native columns are ${domain}_iceberg.${table.dataset}.${table.name}`}
                 >
                   {index > 0 ? ', ' : ''}
-                  <code className="numeric">
+                  <code className="ident">
                     {domain}.{table.dataset}.{table.name}
                   </code>
                 </span>
@@ -84,7 +107,7 @@ export function SqlPanel({
             </>
           ) : (
             <>
-              <code className="numeric" title={`Its native columns are ${domain}_iceberg.${dataset}.${tableName}`}>
+              <code className="ident" title={`Its native columns are ${domain}_iceberg.${dataset}.${tableName}`}>
                 {domain}.{dataset}.{tableName}
               </code>{' '}
               holds the rows in
@@ -127,16 +150,18 @@ export function SqlPanel({
             <Copy className="size-3.5" />
             Copy
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 px-2 text-[11px]"
-            onClick={onExit}
-            title="Leave SQL and go back to filtering the table"
-          >
-            <ListFilter className="size-3.5" />
-            Back to filters
-          </Button>
+          {onExit ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-[11px]"
+              onClick={onExit}
+              title="Leave SQL and go back to filtering the table"
+            >
+              <ListFilter className="size-3.5" />
+              Back to filters
+            </Button>
+          ) : null}
         </span>
       </div>
 
@@ -154,6 +179,7 @@ export function SqlPanel({
             onChange={onChange}
             onRun={onRun}
             error={error}
+            editorRef={editorRef}
           />
         </Suspense>
       </div>

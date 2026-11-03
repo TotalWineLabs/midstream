@@ -1,5 +1,7 @@
 import { createContext, memo, useContext, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 
+import { cn } from '@/lib/cn';
+
 const TabShownContext = createContext(true);
 
 /**
@@ -41,18 +43,21 @@ export const TabPanel = memo(
     id,
     labelledBy,
     shown,
+    className,
     children,
   }: {
     id: string;
     /** The id of the tab that shows it. */
     labelledBy: string;
     shown: boolean;
+    /** Where it sits, shown or not: Explore stacks its explorations in one place. */
+    className?: string;
     children: ReactNode;
   }): ReactNode {
     const ref = useRef<HTMLDivElement>(null);
     useKeptScroll(ref, shown);
     return (
-      <div ref={ref} id={id} role="tabpanel" aria-labelledby={labelledBy} inert={!shown} className={shown ? undefined : 'tab-kept'}>
+      <div ref={ref} id={id} role="tabpanel" aria-labelledby={labelledBy} inert={!shown} className={cn(className, !shown && 'tab-kept') || undefined}>
         <TabShownContext.Provider value={shown}>{children}</TabShownContext.Provider>
       </div>
     );

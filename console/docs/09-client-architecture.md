@@ -54,6 +54,7 @@ under `/api/d/<domain>`) and its cache; `useDomain()`, `useDomainPath()` read th
 <Route path="/materializations"   element={<Materializations />} />
 <Route path="/datasets"           element={<Datasets />} />
 <Route path="/search"             element={<SearchPage />} />
+<Route path="/explore[/:explorationId]" element={<Explore />} />                 // explorations over any domain's tables (lazy chunk); `new?…` from a share link
 <Route path="/settings[/:section[/:itemId]]" element={<SettingsPage />} />        // the console's own sections
 // One domain:
 <Route path="/d/:domain/*" element={<DomainScope><DomainRoutes /></DomainScope>} />
@@ -86,6 +87,18 @@ other (`selectedTable.ts::namedTable`). Each of its tabs, once opened, stays mou
 left, hidden while another is shown, so going back finds it as it was left (§9.6, *Kept tabs*); the
 route is the same for every tab, so moving between them keeps the page mounted. The materialization's old `data`, `schema` and `table` tabs
 redirect to it, `?table=` naming which (`resolveTable`: the first when absent or unknown).
+
+**Explore** is the console's own, like search: `/explore` shows what this browser tab showed last,
+else the most recently changed exploration, else a new one; `/explore/<id>` one exploration;
+`/explore/new?source=<domain>.<dataset>.<table>&…` a new one from a share link. Entered from inside a
+domain it carries the domain along, `?domain=`, so the switcher stays there and the Tables rail opens
+on it (`lib/paths.ts::sectionPath`, `lib/domains.tsx::useScopeDomainId`). `RequireDatasetPermission`
+gates it on `data.query` in some dataset of some domain.
+
+The router moves the address inside `startTransition`, so a handler that changes Explore's tab strip
+and then navigates renders once with the new strip and the old address. The page's effect that opens
+the exploration the address names skips that render (`ExplorePage.tsx`: `leaving`, the location key
+the navigation left): acting on it would open again a tab just closed.
 
 The server's SPA fallback (`main.ts`) is what makes deep links work on a cold load; the old
 hostnames' redirect (handbook 20 §20.3) lands on `/d/<domain>/<path>`.
@@ -242,6 +255,10 @@ so the UI never renders `NaN` or `undefined`.
 | The run's snapshot | `useRun`, fed by the run's event stream (polling if it drops) | Kept across the page's tabs, followed while out of sight; lost on leaving the page, though the run itself keeps going server-side until it finishes |
 | Pages of a run | TanStack Query, keyed by run, offset and readiness | Complete pages never change, so they are cached for good and the next one is prefetched |
 | SQL editor height, column rail width, column rail open | `localStorage` (`console.data.sqlHeight`, `console.data.railWidth`, `console.data.columnsOpen`) | Survives reload; guarded for private browsing |
+| Explorations: each one's table, view, name and history | `BrowserExplorationStore` (`features/explore/store.ts`): `localStorage['console.explore.v1.doc.<id>']` and an index, `console.explore.v1.index`, behind the `ExplorationStore` interface a store with the account will take | Persistent, per browser; at most 100, a full storage giving up the oldest that are not open; other browser tabs follow through the `storage` event |
+| Which explorations are open, their order, the one shown | `useTabStrip`: `sessionStorage['console.explore.tabs']` | Per browser tab; survives reload, so a reload restores the strip and re-attaches the shown one's run |
+| An exploration's view as it is edited | `Exploration` (`latest`), written to the store 300 ms after the last edit, at once for a question asked, a rename or a delete | As the store |
+| Tables rail open and width, History open | `localStorage` (`console.explore.tablesOpen`, `console.explore.tablesWidth`, `console.explore.historyOpen`) | Survives reload |
 | JSON layout for exports and the row properties' copy | `localStorage` (`console.data.jsonShape`: `nested` or `flat`) | Survives reload; nested when unset |
 | Consumer-lag window, throughput metric | `StateReadout` and `DiagnosticsPanels` local state | Lost on navigation |
 | Search text, recently deleted | `MaterializationsPage` local state | Lost on navigation |
@@ -277,6 +294,13 @@ where they are. Leaving the page unmounts them all.
 | What it does on its own | `useTabShown()` says whether the tab is on screen (true outside a tab panel). Hidden, the Data tab writes nothing to the address bar, takes no ⌘↵ and lets a row take no keys, streams nothing (`liveHold` sees it as unseen, as for a hidden browser tab), auto re-runs nothing and keeps its row sheet off the page. Polls are `enabled` only while shown — the Data tab's summary, the Schema tab's versions, `useTableDetail` — so a hidden tab reads nothing on a timer, and TanStack Query reads one at once when its tab is shown with its data aged |
 | The page's scroll | Each panel remembers where `main` was scrolled while it was shown and scrolls it back when it is shown again; a tab shown for the first time leaves it where it is |
 | The address bar | The tab on screen's. The Data tab mirrors its view only while shown, and writes it back, replacing the entry, when shown again |
+
+Explore keeps each open exploration the same way, a `TabPanel` each, stacked in one place
+(`className`). Hidden, an exploration closes its materialization's detail stream
+(`useDetailStream(id, { enabled })`), keeping its last frame, and follows a run still working by
+polling it (`useRun({ stream: false })`) — a browser opens six connections to a host at most, and the
+shell's fleet stream holds one. The shown one's stream opens again, from where things are, when it is
+shown.
 
 `keptTabs.test.ts` checks the one rule a script can: a key listener on the document or window, in
 what the table's tabs render, asks `useTabShown()` first.
@@ -317,7 +341,20 @@ features/
     SchemaTimelineView.tsx                  The changes by the day the data had them
     timeline.ts                             Dates from the data, in UTC: spans, version dates, the timeline's groups (no React; tested)
   data/
-    DataTab.tsx                             Toolbar, status, rail, grid and pager; owns the view's state
+    Workbench.tsx                           One table's rows, or a statement over the lake: toolbar, status, rail, grid and pager; owns the view's state, its host seeds and keeps it
+    DataTab.tsx                             The workbench on a table's page, its view in the address bar; Open in Explore
+    scope.ts                                What a workbench is about (`WorkbenchSource`) and which tables a statement reads
+  explore/
+    ExplorePage.tsx                         Explore: the exploration tabs, the Tables rail, History; what the address names
+    Exploration.tsx                         One exploration: its workbench (a new key loads another question) and its document
+    ExplorationTabs.tsx                     The tab strip (arrows, F2, Delete) and All explorations (open, duplicate, delete with Undo)
+    explorations.ts                         The document: its view, questions, share links, migration; no React
+    store.ts                                ExplorationStore and the browser's; the tab strip
+    TablesRail.tsx, TableChooser.tsx         The lake's domains, datasets and tables to browse or name; From's chooser
+    HistoryColumn.tsx                       The questions an exploration asked, to go back to
+    Names.tsx                               Found tables by their own name first; long names cut in the middle, heard whole
+    useSheet.ts                             A phone's sheet as a dialog: focus in, Esc out, focus back
+    lake.ts, useLake.ts                     The lake as the person may see it: the fleet and each domain's datasets
     useRun.ts                               One run at a time: start, follow over SSE, cancel, re-attach; pages
     timeRange.ts                            Time range presets, resolution to instants, labels, URL form
     TimeRangePicker.tsx                     Splunk-style picker with per-preset row estimates
@@ -452,6 +489,11 @@ tells the user to watch the phase converge; the actual state change arrives over
 | `useMemo` on derived lists | Overview, list, schema, data | Filtering and sorting re-run only when inputs change |
 | Row virtualization | `DataGrid` | Only the visible slice of up to 5 000 rows is mounted |
 | `lazy()` + `Suspense` | `QueryEditor` | Keeps ~145 kB gzip of CodeMirror out of first load |
+| `lazy()` + `Suspense` | `ExplorePage` | Explore is a chunk of its own (13 kB gzip), read when it is first opened |
+| A stream only while shown | `Exploration` | One detail stream however many explorations are open: hidden ones poll a working run instead |
+| The frame kept between questions | `Exploration::SourceBench` | Mounted once per table, holding its live detail; another question about the table mounts only the workbench inside, so nothing drops to a skeleton |
+| A keystroke renders the workbench alone | `Exploration::commit` (`changesWhatIsShown`) | A view's edits are kept without rendering the exploration around it; an update per keystroke from the effect that reports it would also outrun React's nested-update limit after ~50 fast keystrokes |
+| `memo` with stable props | `Exploration` | A save, which changes the list of explorations, renders the page and leaves the explorations as they are |
 | Hand-rolled SVG charts | `Sparkline`, `TimeSeriesChart` | No charting library; a chart re-render is a few path strings |
 | Snapshot reuse in `emitAll` | server | One serialization shared by all fleet subscribers |
 

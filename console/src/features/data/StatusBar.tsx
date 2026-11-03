@@ -2,9 +2,12 @@ import { AlertTriangle, Ban, CheckCircle2, Hourglass, RotateCw } from 'lucide-re
 import type { ReactNode } from 'react';
 
 import { newerSnapshot, type TailNotice } from './live';
+import { statusLineState } from './statusLine';
 import { Shimmer } from '@/components/motion/Shimmer';
+import { StatusGlyph } from '@/components/Status';
 import { cn } from '@/lib/cn';
 import { formatDuration, formatExact } from '@/lib/format';
+import { plainStatus } from '@/lib/status';
 import type { DataSummary, RunSnapshot } from '@shared/types';
 
 /**
@@ -21,9 +24,15 @@ import type { DataSummary, RunSnapshot } from '@shared/types';
  * newest records the view is, or why Live stopped, in amber at the row's right (`LiveWarning`).
  * Peek, Share and Export are under More actions, in the toolbar.
  */
+/** A run that failed, or could not start: the Failed state's shape, as everywhere (§10.6). */
+const FAILED = plainStatus('failed', 'Failed');
+
 export function StatusBar({
   run,
   starting,
+  idle = false,
+  blank = false,
+  refusal = null,
   summary,
   dirty,
   waiting = null,
@@ -33,6 +42,12 @@ export function StatusBar({
 }: {
   run: RunSnapshot | null;
   starting: boolean;
+  /** Nothing asked yet: a question waiting for Run (Explore, reopened from History). */
+  idle?: boolean;
+  /** A statement with nothing written in it yet: nothing to run, nothing to say of Run. */
+  blank?: boolean;
+  /** Why the last start was refused; the panel below says it in full. */
+  refusal?: string | null;
   summary: DataSummary | null;
   /** The controls describe a different query than the one on screen. */
   dirty: boolean;
@@ -45,12 +60,22 @@ export function StatusBar({
   warning?: TailNotice | null;
 }): ReactNode {
   const running = starting || run?.state === 'running';
+  const line = statusLineState({ run, starting, idle, refused: refusal !== null, blank });
 
   return (
     <div className="relative border-b border-[var(--color-line)] bg-[var(--color-surface)]" data-role="status-line">
       <div className="flex min-h-[40px] flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5">
         <div className="flex min-w-0 flex-1 items-center gap-2" aria-live="polite" data-role="run-status">
-          {starting || !run ? (
+          {line === 'blank' ? null : line === 'idle' ? (
+            <span className="text-[12px] text-[var(--color-ink-muted)]">Changes not run yet</span>
+          ) : line === 'refused' ? (
+            <>
+              <StatusGlyph status={FAILED} size={14} className="shrink-0" />
+              <span className="min-w-0 truncate text-[12px] text-[var(--color-flare-ink)]" title={refusal ?? undefined}>
+                Could not start
+              </span>
+            </>
+          ) : line === 'starting' || !run ? (
             <Shimmer className="text-[12px] text-[var(--color-ink-muted)]">Starting…</Shimmer>
           ) : (
             <RunSummary run={run} />
@@ -120,7 +145,7 @@ function RunSummary({ run }: { run: RunSnapshot }): ReactNode {
   if (run.state === 'failed') {
     return (
       <>
-        <AlertTriangle className="size-4 shrink-0 text-[var(--color-flare-ink)]" />
+        <StatusGlyph status={FAILED} size={14} className="shrink-0" />
         <span className="numeric min-w-0 truncate text-[12px] text-[var(--color-flare-ink)]" title={run.error?.message}>
           {run.error?.message ?? 'The run failed'}
         </span>
@@ -173,6 +198,8 @@ function readAcross(run: RunSnapshot): ReactNode {
 function runningText(run: RunSnapshot): string {
   const { progress } = run;
   if (run.phase === 'planning') return 'Preparing';
+  // Admitted one at a time: how many of one person's scan at once, and of everyone's (Settings › Data explorer).
+  if (run.phase === 'queued') return run.queued === 'own' ? 'Waiting for your other queries to finish' : 'Waiting for other queries to finish';
   if (run.phase === 'preparing') {
     return progress.objectsTotal > 0 ? `Preparing · ${Math.floor((progress.objectsDone / progress.objectsTotal) * 100)}%` : 'Preparing';
   }

@@ -182,7 +182,7 @@ Three faces, each with one job, all open source and self-hosted (`@fontsource-va
 | Materializations | Which one needs me? | Groups by state, one fact per row | Size and last change, into a row's properties |
 | A materialization | Is it healthy, and what does it write? | Its state's number, one chart, its tables | Reconciliation, specification and runtime state, into properties and Diagnostics |
 | A table | What's in it? | Rows, newest first, with the waterline | Snapshots and maintenance, into History |
-| Query | What does the data say? | A thread of statements and answers | — |
+| Explore | What does the data say? | The answer to the question asked: rows and their count under the composer, the lake's tables beside | Earlier questions, into History; a table's snapshots and maintenance, into its page |
 | Datasets | What data is there, and who can use it? | Datasets, their tables, your access | Access management, into a Share popover |
 | Settings | How should this domain behave? | A page per area, searchable | Provenance on unchanged values |
 
@@ -194,7 +194,7 @@ Three faces, each with one job, all open source and self-hosted (`@fontsource-va
 - **Phone (under 768 px):** the sidebar becomes a bottom bar of four places: Overview, Datasets,
   Activity, Search. Secondary actions wait in a ⋯ menu. The phone is for checking and acting: status,
   stop and resume, rows, search.
-- **Width:** content is capped at 1400 px and centred.
+- **Width:** content is capped at 1400 px and centred. Explore alone takes the width (`PageHeader wide`): a workspace with a rail on either side of its rows.
 - **Spacing:** a 4 px grid. Panels 20 px inside, 16 px on phones. Rows 40–48 px tall on desktop,
   48 px or more on touch.
 - **Radius:** `--radius-control` 8 px for controls, `--radius-panel` 12 px for panels,
@@ -386,11 +386,11 @@ The glossary: terms the console says differently from the system.
 | **Properties column** | A selected thing's details | A right column, closable, keys in Silt, values in Foam; on a phone, a sheet. The materialization's properties, and a row of a table's Data tab (`RowProperties.tsx`), whose grid marks the open row with an ink bar |
 | **(i)** | How a number is measured | A popover beside the number |
 | **Activity** | Changes in flight and what just happened | Real steps with estimates; a refusal that arrives later lands here too |
-| **Query thread** | Asking the data | Each statement and its answer in turn, kept in the browser by day |
+| **History** | Asking the data | An exploration's questions, newest first, each with its answer in a few words — rows, time, or why it failed — beside the rows as a properties column (a sheet on a phone). Choosing one puts it back in the composer and shows its run again, or, once the run is gone, waits for Run; Run pressed again on the newest asks it again in its place rather than adding one (`features/explore/HistoryColumn.tsx`) |
 | **Share** | Who can use a dataset | A popover like a document's, opened from **Share** in the header: a row to add someone with a role, the people and groups with their role as a choice, roles in one sentence each, what access doesn't cover (`SharePopover.tsx`) |
 | **Search in place** | A page with many things to find: Settings | A box heading the page's navigation, focused with `/` (a page claims the key through `FOCUS_SEARCH_EVENT`; ⌘K stays the command menu's). What matches replaces the content, grouped by where it lives, each result the thing itself — a setting is changed right there |
 | **Drafts** | Edits saved together: Settings | An edited row has a raised ground and an ink bar in its margin, *Unsaved* beside its name; its section has a dot; a bar at the foot counts the edits and offers Discard and Save |
-| **Tabs keep their place** | The tabs of one page: a table's | Going back to a tab finds it as it was left until the page is left — its rows, what was asked of them, the row open, where it and the page were scrolled. Out of sight, a tab waits rather than works: no streaming, no reads on a timer, no keys; shown again, it catches up. Nothing says so: it is simply still there (`components/TabPanel.tsx`) |
+| **Tabs keep their place** | The tabs of one page: a table's, Explore's explorations | Going back to a tab finds it as it was left until the page is left — its rows, what was asked of them, the row open, where it and the page were scrolled. Out of sight, a tab waits rather than works: no streaming, no reads on a timer, no keys; shown again, it catches up. Nothing says so: it is simply still there (`components/TabPanel.tsx`) |
 | **Empty state** | Nothing here yet | What this is, in one sentence, and the one action that fills it |
 
 ## 10.11 Components
@@ -414,6 +414,11 @@ The glossary: terms the console says differently from the system.
 | `SharePopover` | `features/datasets/SharePopover.tsx` | Share (§10.10) |
 | `SettingsSearchField`, `SettingsSearchResults` | `features/settings/SettingsSearch.tsx` | Search in place (§10.10), on the Settings pages |
 | `TabPanel`, `useOpenedTabs`, `useTabShown` | `components/TabPanel.tsx` | Tabs keep their place (§10.10): a page's opened tabs, each kept mounted and hidden while another is shown; whether the tab something renders in is on screen |
+| `ExplorationTabs`, `ExplorationsMenu` | `features/explore/ExplorationTabs.tsx` | Explore's open explorations as tabs (← →, F2 to rename, Delete to close; on a phone only the shown tab closes, its controls 44 px), and every exploration kept, to open, duplicate or delete with Undo |
+| `TablesRail` | `features/explore/TablesRail.tsx` | The lake: domains, datasets and tables with their writers' glyphs, found with `/`; a table browsed, or its name put in the statement being written; a sheet on a phone |
+| `TableChooser` | `features/explore/TableChooser.tsx` | **From**: the table a workbench in Explore is about, chosen by name |
+| `HistoryColumn` | `features/explore/HistoryColumn.tsx` | History (§10.10) |
+| `FoundName`, `CutName` | `features/explore/Names.tsx` | A table found by a search, its own name first and its place after in faint; a name too long for its row cut in the middle — its start and its last characters, where names that share a start differ — and read whole to a screen reader |
 | `TimeSeriesChart`, `Sparkline` | `components/` | Charts (§10.8) |
 | `DataGrid` | `components/DataGrid.tsx` | Rows |
 | `Avatar`, `RelativeTime`, `Identifier`, `CopyButton` | `components/` | People, times, ids |

@@ -26,6 +26,9 @@ import {
   type HeadPeek,
   type RunExportFormat,
   type RunRefresh,
+  type ScopeEstimate,
+  type TableRef,
+  type TimeRange,
 } from '../../shared/types.ts';
 
 /** Epoch milliseconds, bounded to the years a Kafka timestamp can plausibly hold. */
@@ -35,6 +38,14 @@ const rangeSchema = z.object({ from: instant, to: instant });
 const snapshotId = z.string().regex(/^-?\d{1,20}$/, 'a snapshot id is a whole number').nullish();
 /** One of the materialization's tables, by name; its first when absent. */
 const tableName = z.string().min(1).max(128).nullish();
+/** A name in SQL: a dataset's or a table's, compared without regard to case. */
+const sqlName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/, 'is not a dataset or table name');
+/** A table wherever it is: `<domain>.<dataset>.<table>` (handbook 20), checked before it is looked up. */
+const tableRefSchema = z.strictObject({
+  domain: z.string().regex(/^[a-z][a-z0-9_]{0,31}$/, 'is not a domain id'),
+  dataset: sqlName,
+  table: sqlName,
+});
 
 const runSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -57,6 +68,37 @@ const runSchema = z.discriminatedUnion('kind', [
     liveTail: z.boolean().optional(),
   }),
 ]);
+/**
+ * A run started from Explore, `POST /api/runs`: a table by reference to browse, or a statement - with
+ * the table it is about, or none, reading the lake.
+ */
+const consoleRunSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('browse'),
+    source: tableRefSchema,
+    range: rangeSchema,
+    rangeLabel: z.string().max(120).nullish(),
+    filters: filtersSchema,
+    order: z.enum(['newest', 'oldest']).optional(),
+    asOf: snapshotId,
+    liveTail: z.boolean().optional(),
+  }),
+  z
+    .object({
+      kind: z.literal('sql'),
+      source: tableRefSchema.nullish(),
+      range: rangeSchema,
+      rangeLabel: z.string().max(120).nullish(),
+      sql: z.string().min(1).max(20_000),
+      asOf: snapshotId,
+      liveTail: z.boolean().optional(),
+    })
+    .refine((body) => !body.asOf || body.source, { message: 'asOf pins the source table: name one', path: ['asOf'] }),
+]);
+/** What time ranges would read of some tables, together: a statement's, from Explore. */
+const consoleEstimateSchema = z.object({ tables: z.array(tableRefSchema).min(1).max(8), ranges: z.array(rangeSchema).min(1).max(32) });
+/** A statement to bind, and the table it is about, if any: its name is offered when one is not found. */
+const consoleValidateSchema = z.object({ sql: z.string().min(1).max(20_000), source: tableRefSchema.nullish() });
 /** A refresh may bring the run's range resolved again, for the run that replaces it. */
 const refreshSchema = z.object({ range: rangeSchema.optional() });
 /** The newest records of a topic: at most what the tail app peeks at once (`live_tail_peek_max_rows`). */
@@ -82,6 +124,15 @@ const profileSchema = z.object({ column: z.string().min(1).max(1_024) });
  */
 function ownerIn(request: FastifyRequest, domain: Domain): string {
   return `${domain.id}:${authIn(request, domain).state.principal.user_id ?? `guest:${request.ip}`}`;
+}
+
+/**
+ * Who someone is across the console, so their runs share one admission (`runConcurrencyPerPerson`):
+ * their email, which is the same person in every domain (handbook 20); a guest, their address there.
+ */
+function personIn(request: FastifyRequest, domain: Domain): string {
+  const email = authIn(request, domain).state.principal.email;
+  return email ? `email:${email.toLowerCase()}` : ownerIn(request, domain);
 }
 
 function runId(request: FastifyRequest): string {
@@ -128,71 +179,165 @@ async function tailAccess(request: FastifyRequest, domain: Domain, materializati
 }
 
 /**
- * The tables a statement names, found in their domains (handbook 20): each `<domain>.<dataset>.<table>`
- * through its domain's live fleet to the materialization that writes it, and its location. Refused,
- * naming what to write instead: a table named without its domain, and a name no domain holds. The
- * caller must be allowed to query each table, in its dataset, as their domain knows them - resolved
- * here in a domain the request did not name, with their session there.
+ * Tables named by reference, each found in its domain (handbook 20): through its domain's live fleet
+ * to the materialization that writes it - or straight to the one a reference says, when it still
+ * writes the table - then its detail, for where it lives; the caller resolved in that domain - with
+ * their session there, in a domain the request did not name - and, unless `tails` is false, how its
+ * live tail is read there. Each once, in the order given. Refused, naming what to write instead: a
+ * domain this console does not serve, or cannot reach now, and a table no materialization there
+ * writes. `field` is the request's field a refusal is about.
+ */
+async function resolveTables(
+  request: FastifyRequest,
+  refs: ReadonlyArray<TableRef & { materializationId?: string | null }>,
+  field: string,
+  options: { tails?: boolean } = {},
+): Promise<ResolvedTable[]> {
+  const resolved: ResolvedTable[] = [];
+  const seen = new Set<string>();
+  for (const ref of refs) {
+    const dataset = ref.dataset.toLowerCase();
+    const name = ref.table.toLowerCase();
+    const key = canonicalName(ref.domain, dataset, name);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const domain = domains().require(ref.domain);
+    if (!domain.served) {
+      throw new ConsoleError('domain_misconfigured', domain.statusMessage ?? `Domain ${domain.id} is misconfigured.`, 503, {
+        reason: 'domain_misconfigured',
+        domain: domain.id,
+      });
+    }
+    const qualified = `${dataset}.${name}`;
+    if (domain.status === 'unreachable') throw domainUnreachable(domain, key);
+    const found = (ref.materializationId ? await writtenBy(domain, ref.materializationId, qualified, key) : null) ?? (await inFleet(domain, qualified, key, field));
+    const { materialization, table } = found;
+    // Who the person is there, before their session there reads its tail and its datasets are checked.
+    await authInResolving(request, domain);
+    resolved.push({ ...table, tail: options.tails === false ? null : await tailAccess(request, domain, materialization) });
+  }
+  return resolved;
+}
+
+/** A table of one materialization, by `<dataset>.<table>`, or null when it no longer writes it. */
+async function writtenBy(
+  domain: Domain,
+  materializationId: string,
+  qualified: string,
+  key: string,
+): Promise<{ materialization: CpMaterialization; table: RunTableSource } | null> {
+  let found: Awaited<ReturnType<typeof materializationTables>>;
+  try {
+    found = await materializationTables(domain, materializationId);
+  } catch (cause) {
+    if (cause instanceof ConsoleError && cause.code === 'control_plane_unreachable') throw domainUnreachable(domain, key);
+    if (cause instanceof ConsoleError && cause.code === 'not_found') return null;
+    throw cause;
+  }
+  const table = found.tables.find((candidate) => `${candidate.dataset}.${candidate.name}`.toLowerCase() === qualified);
+  return table ? { materialization: found.materialization, table } : null;
+}
+
+/**
+ * A table found through its domain's live fleet, by `<dataset>.<table>`: refused when none has it.
+ *
+ * The fleet lists each materialization's written tables; a kept one - its topic removed, the table
+ * still readable in its dataset (handbook 11 §11.7) - is only in the datasets the materialization
+ * names, so it is looked for among the materializations with tables in its dataset.
+ */
+async function inFleet(
+  domain: Domain,
+  qualified: string,
+  key: string,
+  field: string,
+): Promise<{ materialization: CpMaterialization; table: RunTableSource }> {
+  const dataset = qualified.slice(0, qualified.indexOf('.'));
+  const items = domain.live.fleetSnapshot().items.filter((candidate) => candidate.desired_phase !== 'deleted');
+  const item = items.find((candidate) => candidate.tables.some((table) => table.toLowerCase() === qualified));
+  if (!item) {
+    for (const candidate of items.filter((entry) => (entry.datasets ?? []).some((name) => name.toLowerCase() === dataset))) {
+      const kept = await writtenBy(domain, candidate.materialization_id, qualified, key);
+      if (kept) return kept;
+    }
+    const inDataset = domain.live
+      .fleetSnapshot()
+      .items.flatMap((candidate) => candidate.tables)
+      .filter((table) => table.toLowerCase().startsWith(`${dataset}.`))
+      .map((table) => `${domain.id}.${table}`);
+    throw badRequest(
+      inDataset.length > 0
+        ? `There is no table ${key}; ${domain.id}.${dataset} holds ${listOf(inDataset)}.`
+        : `There is no table ${key}: ${domain.name} has no dataset ${dataset} with tables.`,
+      { field },
+    );
+  }
+  const found = await writtenBy(domain, item.materialization_id, qualified, key);
+  if (!found) throw badRequest(`There is no table ${key}.`, { field });
+  return found;
+}
+
+/**
+ * Every table of the materialization writing `table`, `table` first: what a run about it may be
+ * about, and what a statement's error lists as the tables there are. First, because tables of one
+ * materialization in different datasets may share a name, and a run's table is picked by its name.
+ * The detail is the one `resolveTables` read moments ago, kept by the live store.
+ */
+async function siblingsOf(table: ResolvedTable): Promise<RunTableSource[]> {
+  const all = await tablesOf(domains().require(table.domain), table.materializationId);
+  return [table, ...all.filter((candidate) => !(candidate.dataset === table.dataset && candidate.name === table.name))];
+}
+
+/**
+ * The tables a statement names, found in their domains (`resolveTables`). Refused before anything
+ * is found: a table named without its domain, with the name to write instead in every domain that
+ * holds it - `runDomain`'s first. The caller must be allowed to query each table, in its dataset, as
+ * their domain knows them.
  */
 async function resolveStatement(
   request: FastifyRequest,
   sql: string,
-  runDomain: Domain,
   own: RunTableSource[],
+  runDomain: Domain | null,
 ): Promise<{ sources: ResolvedTable[]; tableNames: string[] }> {
   const served = domains().served();
-  const unqualified = unqualifiedReferences(
-    sql,
-    runDomain.live.fleetSnapshot().items.flatMap((item) => item.tables.map((name) => splitName(name))),
-  );
-  if (unqualified.length > 0) {
-    const fixes = unqualified.map((name) =>
-      name.startsWith('iceberg.') ? `${nativeCatalog(runDomain.id)}.${name.slice('iceberg.'.length)} for ${name}` : `${runDomain.id}.${name} for ${name}`,
-    );
-    throw badRequest(`Name every table with its domain: write ${listOf(fixes)}.`, { field: 'sql' });
-  }
-  const sources: ResolvedTable[] = [];
-  const seen = new Set<string>();
-  for (const reference of namedTables(sql, served.map((domain) => domain.id))) {
-    const key = canonicalName(reference.domain, reference.dataset, reference.table);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const domain = domains().require(reference.domain);
-    const qualified = `${reference.dataset}.${reference.table}`;
-    if (domain.status === 'unreachable') throw domainUnreachable(domain, key);
-    const item = domain.live
-      .fleetSnapshot()
-      .items.find((candidate) => candidate.desired_phase !== 'deleted' && candidate.tables.some((name) => name.toLowerCase() === qualified));
-    if (!item) {
-      const inDataset = domain.live
-        .fleetSnapshot()
-        .items.flatMap((candidate) => candidate.tables)
-        .filter((name) => name.toLowerCase().startsWith(`${reference.dataset}.`))
-        .map((name) => `${domain.id}.${name}`);
-      throw badRequest(
-        inDataset.length > 0
-          ? `There is no table ${key}; ${domain.id}.${reference.dataset} holds ${listOf(inDataset)}.`
-          : `There is no table ${key}: ${domain.name} has no dataset ${reference.dataset} with tables.`,
-        { field: 'sql' },
-      );
-    }
-    let found: Awaited<ReturnType<typeof materializationTables>>;
-    try {
-      found = await materializationTables(domain, item.materialization_id);
-    } catch (cause) {
-      if (cause instanceof ConsoleError && cause.code === 'control_plane_unreachable') throw domainUnreachable(domain, key);
-      throw cause;
-    }
-    const { materialization, tables } = found;
-    const table = tables.find((candidate) => `${candidate.dataset}.${candidate.name}`.toLowerCase() === qualified);
-    if (!table) throw badRequest(`There is no table ${key}.`, { field: 'sql' });
-    // Who the person is there, before their session there reads its tail and its datasets are checked.
-    await authInResolving(request, domain);
-    sources.push({ ...table, tail: await tailAccess(request, domain, materialization) });
-  }
+  assertQualified(sql, runDomain ? [runDomain, ...served.filter((domain) => domain !== runDomain)] : served);
+  const sources = await resolveTables(request, namedTables(sql, served.map((domain) => domain.id)), 'sql');
   requireOnTables(request, 'data.query', sources);
-  const tableNames = [...new Set([...own.map((table) => canonicalName(table.domain, table.dataset, table.name)), ...seen])];
+  const tableNames = [...new Set([...own, ...sources].map((table) => canonicalName(table.domain, table.dataset, table.name)))];
   return { sources, tableNames };
+}
+
+/**
+ * Refuse a statement naming a table without its domain - `sales.orders`, or the native
+ * `iceberg.sales.orders` of before - saying what to write in every domain holding it, in `domains`'
+ * order: a statement reads the same wherever it is pasted.
+ */
+function assertQualified(sql: string, domains: readonly Domain[]): void {
+  const holders = new Map<string, string[]>();
+  for (const domain of domains) {
+    for (const item of domain.live.fleetSnapshot().items) {
+      for (const name of item.tables) {
+        const key = name.toLowerCase();
+        const ids = holders.get(key) ?? [];
+        if (!ids.includes(domain.id)) holders.set(key, [...ids, domain.id]);
+      }
+    }
+  }
+  const unqualified = unqualifiedReferences(sql, [...holders.keys()].map((name) => splitName(name)));
+  if (unqualified.length === 0) return;
+  const fixes = unqualified.map((name) => {
+    const native = name.startsWith('iceberg.');
+    const bare = native ? name.slice('iceberg.'.length) : name;
+    const options = (holders.get(bare) ?? []).map((id) => (native ? `${nativeCatalog(id)}.${bare}` : `${id}.${bare}`));
+    return `${oneOf(options)} for ${name}`;
+  });
+  throw badRequest(`Name every table with its domain: write ${listOf(fixes)}.`, { field: 'sql' });
+}
+
+/** `a`, `a or b`, `a, b or c`. */
+function oneOf(names: readonly string[]): string {
+  if (names.length <= 1) return names.join('');
+  return `${names.slice(0, -1).join(', ')} or ${names.at(-1) as string}`;
 }
 
 /** A statement naming a table of a domain that cannot be reached now. */
@@ -201,6 +346,20 @@ function domainUnreachable(domain: Domain, table: string): ConsoleError {
     reason: 'domain_unreachable',
     domain: domain.id,
   });
+}
+
+/** One range's estimates over several tables, together: exact only when each table's is. */
+function sumEstimates(range: TimeRange, estimates: readonly ScopeEstimate[]): ScopeEstimate {
+  return estimates.reduce<ScopeEstimate>(
+    (sum, estimate) => ({
+      range,
+      objects: sum.objects + estimate.objects,
+      bytes: sum.bytes + estimate.bytes,
+      rows: sum.rows + estimate.rows,
+      rowsExact: sum.rowsExact && estimate.rowsExact,
+    }),
+    { range, objects: 0, bytes: 0, rows: 0, rowsExact: true },
+  );
 }
 
 /** `sales.orders` as its dataset and table. */
@@ -268,7 +427,7 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
     const body = parseBody(validateSchema, request.body);
     const domain = domainOf(request);
     const own = await tablesOf(domain, id);
-    const { sources, tableNames } = await resolveStatement(request, body.sql, domain, own);
+    const { sources, tableNames } = await resolveStatement(request, body.sql, own, domain);
     await validateStatement({ sources, sql: body.sql, tableNames });
     return { ok: true };
   });
@@ -282,13 +441,14 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
     const body = parseBody(runSchema, request.body);
     const domain = domainOf(request);
     const { materialization, tables } = await materializationTables(domain, id);
-    const named = body.kind === 'sql' ? await resolveStatement(request, body.sql, domain, tables) : null;
+    const named = body.kind === 'sql' ? await resolveStatement(request, body.sql, tables, domain) : null;
     requireOnTables(request, 'data.query', tablesRead(tables, body, named?.sources));
     const tail = await tailAccess(request, domain, materialization);
     const run = await startRun({
       domain: domain.id,
       materializationId: id,
       ownerId: ownerIn(request, domain),
+      person: personIn(request, domain),
       tables,
       request: body,
       tail,
@@ -342,27 +502,89 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
  * knows them, and reading it needs `data.query` again on every dataset it reads, in each one's domain.
  */
 export async function registerRunRoutes(app: FastifyInstance): Promise<void> {
+  /**
+   * Run, from anywhere: the console's own route to the run engine, not tied to a materialization
+   * (Explore). A browse run names its table by reference, `source`; a statement names its tables in
+   * full, in any domain, and may name the table it is about, or none. The run belongs to its table's
+   * domain - the first a statement names, without one; the settings home's for one naming none - and
+   * the caller must be allowed to query every table it reads, each in its own domain.
+   */
+  app.post('/api/runs', { preHandler: permitInSomeDomain('data.query') }, async (request, reply) => {
+    const body = parseBody(consoleRunSchema, request.body);
+    const primary = body.source ? ((await resolveTables(request, [body.source], 'source'))[0] ?? null) : null;
+    const own = primary ? await siblingsOf(primary) : [];
+    const named = body.kind === 'sql' ? await resolveStatement(request, body.sql, own, primary ? domains().require(primary.domain) : null) : null;
+    // The table a run is about is one the person may query, whether or not a statement reads it.
+    requireOnTables(request, 'data.query', [...(primary ? [primary] : []), ...(named?.sources ?? [])]);
+    const lead = primary ?? named?.sources[0] ?? null;
+    const domain = lead ? domains().require(lead.domain) : domains().home;
+    const run = await startRun({
+      domain: domain.id,
+      materializationId: lead?.materializationId ?? null,
+      ownerId: ownerIn(request, domain),
+      person: personIn(request, domain),
+      tables: own,
+      request: { ...body, table: primary?.name ?? null },
+      tail: primary?.tail ?? null,
+      ...(named ? { sources: named.sources, tableNames: named.tableNames } : {}),
+    });
+    return reply.code(201).send(run.snapshot());
+  });
+
+  /** Bind a statement without running it, so the editor can mark an error while it is typed, in Explore. */
+  app.post('/api/data/validate', { preHandler: permitInSomeDomain('data.query') }, async (request) => {
+    const body = parseBody(consoleValidateSchema, request.body);
+    const primary = body.source ? ((await resolveTables(request, [body.source], 'source', { tails: false }))[0] ?? null) : null;
+    requireOnTables(request, 'data.query', primary ? [primary] : []);
+    const own = primary ? await siblingsOf(primary) : [];
+    const { sources, tableNames } = await resolveStatement(request, body.sql, own, primary ? domains().require(primary.domain) : null);
+    await validateStatement({ sources, sql: body.sql, tableNames });
+    return { ok: true };
+  });
+
+  /**
+   * What each time range would read of some tables together, before anything is read: the time
+   * picker's figures for a table, or for the tables a statement names. Each range's files, bytes
+   * and rows are summed over the tables; its rows are exact only when every table's are.
+   */
+  app.post('/api/data/estimate', { preHandler: permitInSomeDomain('data.query') }, async (request) => {
+    const body = parseBody(consoleEstimateSchema, request.body);
+    const tables = await resolveTables(request, body.tables, 'tables', { tails: false });
+    requireOnTables(request, 'data.query', tables);
+    const catalogs = await Promise.all(tables.map((table) => loadCatalog(table.materializationId, table.location, { table: table.name })));
+    return {
+      asOf: new Date(Math.min(...catalogs.map((catalog) => catalog.loadedAt))).toISOString(),
+      estimates: body.ranges.map((range) => sumEstimates(range, catalogs.map((catalog) => estimateRange(catalog, range)))),
+    };
+  });
+
   app.get('/api/runs/:runId', { preHandler: permitInSomeDomain('data.query') }, async (request) => ownRun(request).snapshot());
 
   /**
    * Bring a run up to date: the live tail's newest records appended to it, or a new run in its place
    * when the table has a newer snapshot or the run is a statement. The Data tab's Live mode calls it
-   * every few seconds for a browse run; a statement's Auto re-run gets a new run each time.
+   * every few seconds for a browse run; a statement's Auto re-run gets a new run each time. The
+   * run's table and a statement's are found again by reference, as they are now.
    */
   app.post('/api/runs/:runId/refresh', { preHandler: permitInSomeDomain('data.query') }, async (request): Promise<RunRefresh> => {
     const run = ownRun(request);
     const body = parseBody(refreshSchema, request.body ?? {});
     const domain = domains().require(run.domain);
-    const { materialization, tables } = await materializationTables(domain, run.materializationId);
+    // Its table where the run found it, unless it has moved since.
+    const primary = run.request.source
+      ? ((await resolveTables(request, [{ ...run.request.source, materializationId: run.materializationId }], 'source'))[0] ?? null)
+      : null;
+    const own = primary ? await siblingsOf(primary) : [];
     // A run that replaces this one reads what it names now, in each domain as it is now.
-    const named = run.request.kind === 'sql' ? await resolveStatement(request, run.request.sql ?? '', domain, tables) : null;
-    requireOnTables(request, 'data.query', tablesRead(tables, run.request, named?.sources));
+    const named = run.request.kind === 'sql' ? await resolveStatement(request, run.request.sql ?? '', own, primary ? domain : null) : null;
+    requireOnTables(request, 'data.query', [...(primary ? [primary] : []), ...(named?.sources ?? [])]);
     const outcome = await refreshRun({
       run,
       ownerId: ownerIn(request, domain),
-      tables,
+      person: personIn(request, domain),
+      tables: own,
       range: body.range ?? null,
-      tail: await tailAccess(request, domain, materialization),
+      tail: primary?.tail ?? null,
       ...(named ? { sources: named.sources, tableNames: named.tableNames } : {}),
     });
     return { replaced: outcome.replaced, run: outcome.run.snapshot() };

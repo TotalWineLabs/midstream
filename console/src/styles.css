@@ -541,6 +541,13 @@
     transition: none;
   }
 
+  /* A chevron turns at once, open or closed, and a progress bar takes its length at once: nothing
+     that slides, turns or grows travels. */
+  .transition-transform,
+  .transition-\[width\] {
+    transition: none;
+  }
+
   .skeleton {
     animation: none;
     background-image: none;

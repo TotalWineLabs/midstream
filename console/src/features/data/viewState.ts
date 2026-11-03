@@ -1,5 +1,6 @@
-import { ALL_TIME, decodeRange, encodeRange, type TimeRangeSpec } from './timeRange';
-import { TABLE_PARAM } from '../tables/selectedTable';
+// With their extensions, so `node --test` loads it without the bundler.
+import { ALL_TIME, decodeRange, encodeRange, type TimeRangeSpec } from './timeRange.ts';
+import { TABLE_PARAM } from '../tables/selectedTable.ts';
 import type { BrowseFilter, RunOrder } from '@shared/types';
 
 /**
@@ -28,6 +29,9 @@ export interface ViewState {
    */
   live: boolean;
 }
+
+/** The view a workbench keeps, wherever its host keeps it: the address bar's, less the table. */
+export type WorkbenchView = Omit<ViewState, 'table'>;
 
 export const PAGE_SIZES = [50, 100, 250, 500, 1000];
 export const DEFAULT_PAGE_SIZE = 100;

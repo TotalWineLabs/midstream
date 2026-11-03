@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { ArrowRight, CornerDownLeft, Database, FolderOpen, LayoutGrid, Pin, Play, Plus, Search, Settings, Square, Table2, UserRound, Waves } from 'lucide-react';
+import { ArrowRight, Compass, CornerDownLeft, Database, FolderOpen, LayoutGrid, Pin, Play, Plus, Search, Settings, Square, Table2, UserRound, Waves } from 'lucide-react';
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
@@ -13,7 +13,7 @@ import { cn } from '@/lib/cn';
 import { useScopeDomainId, useDomains } from '@/lib/domains';
 import { useFleet, type DomainMaterialization } from '@/lib/fleet';
 import { matchName, searchTerms, segmentName } from '@/lib/nameSearch';
-import { domainPath, sectionPath } from '@/lib/paths';
+import { domainPath, explorePath, sectionPath } from '@/lib/paths';
 import { isPinned, togglePin, usePins } from '@/lib/pins';
 import { rootQueryClient } from '@/lib/queryClient';
 import { itemStatus, statusGroup, type Status } from '@/lib/status';
@@ -110,6 +110,12 @@ function CommandPanel({ onClose }: { onClose: () => void }): ReactNode {
     if (creatable && consoleAuth.forDomain(creatable).can('materializations.create')) {
       places.push({ label: 'New materialization', icon: Plus, to: domainPath(creatable, '/materializations/new'), permission: null });
     }
+    // Explore reads any domain's tables: there for anyone who may query a dataset anywhere.
+    const explores = consoleAuth.overall.canAnywhere('data.query');
+    if (explores) {
+      places.push({ label: 'Explore', icon: Compass, to: sectionPath('explore', scope), permission: null });
+      places.push({ label: 'New exploration', icon: Plus, to: explorePath('new'), permission: null });
+    }
     for (const place of places) {
       if (place.permission && !auth.can(place.permission)) continue;
       if (!place.permission && !consoleAuth.overall.signedIn) continue;
@@ -193,6 +199,7 @@ function CommandPanel({ onClose }: { onClose: () => void }): ReactNode {
 
     // Tables and datasets, as search answers. Materializations are already listed from the fleet.
     if (query.length > 1) {
+      const explorable: Command[] = [];
       for (const result of search.data?.results ?? []) {
         if (result.kind === 'materialization') continue;
         out.push({
@@ -204,7 +211,19 @@ function CommandPanel({ onClose }: { onClose: () => void }): ReactNode {
           icon: result.kind === 'table' ? <Table2 className="size-4" /> : <Database className="size-4" />,
           run: go(resultPath(result)),
         });
+        // A table someone may query can be explored, in a new exploration: its full name says where.
+        if (result.kind === 'table' && consoleAuth.forDomain(result.domain).canAnywhere('data.query') && explorable.length < 3) {
+          explorable.push({
+            key: `explore:${result.domain}/${result.id}`,
+            group: 'Explore',
+            label: `Explore ${result.domain}.${result.id}`,
+            detail: 'In a new exploration',
+            icon: <Compass className="size-3.5" />,
+            run: go(`${explorePath('new')}?source=${encodeURIComponent(`${result.domain}.${result.id}`)}`),
+          });
+        }
       }
+      out.push(...explorable);
       out.push({
         key: 'search:all',
         group: 'Search',

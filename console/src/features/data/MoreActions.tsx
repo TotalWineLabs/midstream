@@ -6,8 +6,20 @@ import { Popover } from '@/components/ui/Popover';
 import { cn } from '@/lib/cn';
 import type { ConsoleConfig, RunSnapshot } from '@shared/types';
 
+/** An action a workbench's host adds to More actions: the table page's Open in Explore. */
+export interface ExtraAction {
+  key: string;
+  icon: ReactNode;
+  label: string;
+  title?: string;
+  /** Why it does not apply now; null when it does. */
+  blocked?: string | null;
+  onSelect: () => void;
+}
+
 /**
- * The Data tab's More actions, right of Run: peek at the newest records, share the view, export the result.
+ * The workbench's More actions, right of Run: peek at the newest records, share the view, export the
+ * result, and whatever its host adds.
  *
  * Every action is always listed, so the menu does not change shape; one that does not apply is
  * disabled, with the reason in its tooltip. Export opens its options in the same menu.
@@ -18,6 +30,9 @@ export function MoreActions({
   exportable,
   onShare,
   onPeek,
+  peekOffered = true,
+  shareTitle = 'Copy a link that reopens this view',
+  extra = [],
 }: {
   run: RunSnapshot | null;
   config: ConsoleConfig | null;
@@ -26,6 +41,10 @@ export function MoreActions({
   onShare: () => void;
   /** Open the peek at the newest records; null while the table is not behind them. */
   onPeek: (() => void) | null;
+  /** A table to peek at at all: a statement over the lake has none, and is offered no Peek. */
+  peekOffered?: boolean;
+  shareTitle?: string;
+  extra?: readonly ExtraAction[];
 }): ReactNode {
   const [view, setView] = useState<'menu' | 'export'>('menu');
   const finished = run?.state === 'succeeded';
@@ -69,20 +88,22 @@ export function MoreActions({
           <ExportOptions run={run} config={config} onBack={() => setView('menu')} onDone={close} />
         ) : (
           <div className="p-1" role="menu" aria-label="More actions">
-            <MenuItem
-              icon={<Eye className="size-3.5" />}
-              label="Peek"
-              title="See the newest incoming records that are not in the table yet"
-              blocked={onPeek ? null : 'Available while this table is catching up'}
-              onSelect={() => {
-                close();
-                onPeek?.();
-              }}
-            />
+            {peekOffered ? (
+              <MenuItem
+                icon={<Eye className="size-3.5" />}
+                label="Peek"
+                title="See the newest incoming records that are not in the table yet"
+                blocked={onPeek ? null : 'Available while this table is catching up'}
+                onSelect={() => {
+                  close();
+                  onPeek?.();
+                }}
+              />
+            ) : null}
             <MenuItem
               icon={<Link2 className="size-3.5" />}
               label="Share"
-              title="Copy a link that reopens this view"
+              title={shareTitle}
               blocked={null}
               onSelect={() => {
                 close();
@@ -90,6 +111,19 @@ export function MoreActions({
               }}
             />
             <MenuItem icon={<Download className="size-3.5" />} label="Export…" blocked={exportBlocked} onSelect={() => setView('export')} />
+            {extra.map((action) => (
+              <MenuItem
+                key={action.key}
+                icon={action.icon}
+                label={action.label}
+                title={action.title}
+                blocked={action.blocked ?? null}
+                onSelect={() => {
+                  close();
+                  action.onSelect();
+                }}
+              />
+            ))}
           </div>
         )
       }

@@ -164,6 +164,7 @@ old `schema-history/` directory can be deleted. See
 | `CONSOLE_TABLE_METADATA_FRESH_MS` | int | `5000` | How old a pointer the Data tab's summary and estimates accept as current |
 | `CONSOLE_CATALOG_MAX_STALE_MS` | int | `300000` (5 min) | How old a pointer may be served at once while a fresh one is read in the background. Runs always ask for a fresh one |
 | `CONSOLE_RUN_CONCURRENCY` | int | `4` | Runs scanning at once; more wait their turn. Runs the manifests answer alone never wait |
+| `CONSOLE_RUN_CONCURRENCY_PER_PERSON` | int | `2` | Of those, one person's runs scanning at once, so one person's explorations cannot take every scan; their others wait, and say so. `0`: no limit but `CONSOLE_RUN_CONCURRENCY` (07 §07.5) |
 | `CONSOLE_RUN_SCAN_CONCURRENCY` | int | `48` | Files one run reads in parallel: a browse run counting, a statement reading footers |
 | `UV_THREADPOOL_SIZE` | int | derived | Node's worker pool. Unset, the console sets it at startup to `RUN_CONCURRENCY × RUN_SCAN_CONCURRENCY + 32` (224 by default), because every DuckDB query in flight holds one of its threads; see below |
 | `CONSOLE_RUN_RETENTION_MS` | int | `1800000` (30 min) | How long a run is kept after it was last read; its stored result goes with it |
@@ -358,7 +359,7 @@ and what a reset returns to.
 | Section | Key → variable |
 |---------|----------------|
 | Live updates | `listPollIntervalMs` → `CONSOLE_LIST_POLL_MS`, `detailPollIntervalMs` → `CONSOLE_DETAIL_POLL_MS`, `fleetDetailPollIntervalMs` → `CONSOLE_FLEET_DETAIL_POLL_MS`, `idlePollIntervalMs` → `CONSOLE_IDLE_POLL_MS`, `detailConcurrency` → `CONSOLE_DETAIL_CONCURRENCY`, `seriesRetention` → `CONSOLE_SERIES_POINTS`, `seriesSampleMs` → `CONSOLE_SERIES_SAMPLE_MS`, `seriesHistoryMs` → `CONSOLE_SERIES_HISTORY_MS`, `ingestRateWindowMs` → `CONSOLE_INGEST_RATE_WINDOW_MS`, `writeRateWindowMs` → `CONSOLE_WRITE_RATE_WINDOW_MS`, `lagHistoryMs` → `CONSOLE_LAG_HISTORY_MS` |
-| Data explorer | `dataAccessEnabled` → `CONSOLE_DATA_ACCESS_ENABLED`, `pageRowLimit` → `CONSOLE_PAGE_ROW_LIMIT`, `autoRunMaxBytes` → `CONSOLE_AUTO_RUN_MAX_BYTES`, `resultRowLimit` → `CONSOLE_RESULT_ROW_LIMIT`, `exportRowLimit` → `CONSOLE_EXPORT_ROW_LIMIT`, `queryStatsTimeoutMs` → `CONSOLE_QUERY_STATS_TIMEOUT_MS`, `runIdleRetentionMs` → `CONSOLE_RUN_RETENTION_MS`, `snapshotCacheMs` → `CONSOLE_SNAPSHOT_CACHE_MS`, `tableMetadataFreshMs` → `CONSOLE_TABLE_METADATA_FRESH_MS`, `catalogMaxStaleMs` → `CONSOLE_CATALOG_MAX_STALE_MS`, `cachedModeMaxFiles` → `CONSOLE_CACHED_MODE_MAX_FILES`, `cachedModeMaxBytes` → `CONSOLE_CACHED_MODE_MAX_BYTES` |
+| Data explorer | `dataAccessEnabled` → `CONSOLE_DATA_ACCESS_ENABLED`, `pageRowLimit` → `CONSOLE_PAGE_ROW_LIMIT`, `autoRunMaxBytes` → `CONSOLE_AUTO_RUN_MAX_BYTES`, `resultRowLimit` → `CONSOLE_RESULT_ROW_LIMIT`, `exportRowLimit` → `CONSOLE_EXPORT_ROW_LIMIT`, `queryStatsTimeoutMs` → `CONSOLE_QUERY_STATS_TIMEOUT_MS`, `runIdleRetentionMs` → `CONSOLE_RUN_RETENTION_MS`, `snapshotCacheMs` → `CONSOLE_SNAPSHOT_CACHE_MS`, `tableMetadataFreshMs` → `CONSOLE_TABLE_METADATA_FRESH_MS`, `catalogMaxStaleMs` → `CONSOLE_CATALOG_MAX_STALE_MS`, `cachedModeMaxFiles` → `CONSOLE_CACHED_MODE_MAX_FILES`, `cachedModeMaxBytes` → `CONSOLE_CACHED_MODE_MAX_BYTES`, `runConcurrencyPerPerson` → `CONSOLE_RUN_CONCURRENCY_PER_PERSON` (**Scans per person**, 2; 0–64) |
 | Topics & Kafka | `topicCatalogTtlMs` → `CONSOLE_TOPIC_CATALOG_TTL_MS`, `topicCatalogMinRefreshMs` → `CONSOLE_TOPIC_CATALOG_MIN_REFRESH_MS` |
 | Diagnostics | `logLevel` → `LOG_LEVEL`, `controlPlaneTimeoutMs` → `CONTROL_PLANE_TIMEOUT_MS` |
 | Security | `sessionCheckMs` → `CONSOLE_SESSION_CHECK_MS`, `signInAttemptsPerMinute` → `CONSOLE_SIGN_IN_ATTEMPTS_PER_MINUTE` |
@@ -370,7 +371,7 @@ refresh), and the page refuses a value outside them.
 The Live tail section also holds the control plane's nine `live_tail_*` settings (17 §17.3): one
 section, settings of two scopes, as Security has.
 
-**How an override applies.** `config.ts` declares these 31 in `tunableDeployment` and defines
+**How an override applies.** `config.ts` declares these 34 in `tunableDeployment` and defines
 each as a getter on `config`, so every read sees the override in force. Code must read
 `config.<key>` where the value is used, never copy it at startup. Overrides are stored by the
 control plane, in its `console` settings scope. `ConsoleSettingsStore` (`server/settings/store.ts`)

@@ -164,17 +164,18 @@ execute  COPY (SELECT * FROM (<statement>) LIMIT resultRowLimit + 1) TO <run>.pa
 count    only when the result was larger than kept: count(*) over the statement
 ```
 
-A statement reads each of the materialization's tables by its **canonical name**, its dataset and
-its name — `sales.orders` and `finance.payments_v2` for a materialization whose `orders` table went in
-`sales` and `payments.v2`'s in `finance`, the name an engine on the REST catalog uses too — with the
-logical columns, and as **`iceberg.<dataset>.<table>`** with the native ones: structs and lists as they
-are, which is what an external engine sees (`SELECT customer.email, unnest(items).sku FROM
-iceberg.sales.orders`). A bare `orders` resolves to nothing. A statement may read several of the
-tables, across datasets, and join them:
+A statement reads a table by its **full name**, `<domain>.<dataset>.<table>` — `domain_a.sales.orders`
+and `domain_a.finance.payments_v2` for a materialization of `domain_a` whose `orders` table went in
+`sales` and `payments.v2`'s in `finance` — with the logical columns, and as
+**`<domain>_iceberg.<dataset>.<table>`** with the native ones: structs and lists as they are, which is
+what an external engine sees (`SELECT customer.email, unnest(items).sku FROM
+domain_a_iceberg.sales.orders`). A name without its domain is refused with the name to write instead,
+so a statement reads the same wherever it is pasted (handbook 20 §20.9). A statement may read several
+tables, across datasets and domains, and join them:
 
 ```sql
 SELECT o.status, count(*) AS payments, sum(p.amount) AS paid
-FROM sales.orders o JOIN finance.payments_v2 p ON p.order_id = o.order_id
+FROM domain_a.sales.orders o JOIN domain_a.finance.payments_v2 p ON p.order_id = o.order_id
 GROUP BY 1
 ```
 
@@ -189,14 +190,11 @@ moment the person loses `data.query` (`data.export` for an export) on any of the
 Every table it names is bounded by the run's time range, so a statement is as cheap as the range is
 narrow without saying so in its own `WHERE`; one it does not name is never planned or read
 (`runs/view.ts::referencedTables`). `asOf` pins the run's own table — the one the tab shows — and the
-others are read at their current snapshot. Before the statement runs, the sandbox creates a schema
-for each dataset the statement's tables are in, holding a view for each of its tables, and attaches
-an in-memory database, `iceberg`, holding the same schemas with the native views
-(`runs/view.ts::statementViews`); all of it goes with the statement. `iceberg.<anything else>` is
-refused: `there is no table iceberg.sales.x; this materialization's native tables are
-iceberg.sales.orders and iceberg.finance.payments_v2` (`assertNativeReferences`). A name that is none
-of the tables — a bare `orders` included — fails with DuckDB's own message, ending `This
-materialization's tables are sales.orders and finance.payments_v2.` — DuckDB's nearest-name guess is
+others are read at their current snapshot. Before the statement runs, the sandbox attaches each
+domain the statement names, and its native catalog, as an in-memory database, with a schema for each
+dataset holding a view for each of its tables (`runs/view.ts::statementViews`); all of it goes with
+the statement. A name that is none of the tables fails with DuckDB's own message, ending `The tables
+here are domain_a.sales.orders and domain_a.finance.payments_v2.` — DuckDB's nearest-name guess is
 kept when it is one of them and dropped when it is a system table (`data/duckdb.ts::suggestTableName`).
 Because a dataset is a DuckDB schema, it cannot be named after one of DuckDB's own catalogs or schemas
 (`main`, `memory`, `temp`, `temporary`, `system`, `information_schema`, `pg_catalog`;
@@ -214,12 +212,42 @@ count. `DESCRIBE`, `SUMMARIZE`, `PIVOT` and the rest are wrapped the same way as
 The statement starts on its own line inside the wrapper, so an engine error on line *N* is reported
 on line *N + 1* at the same column; the console subtracts one and the editor marks the exact token.
 
+### Runs not tied to a materialization — Explore
+
+Explore (11 §11.14) starts runs through the console's own route, `POST /api/runs` (08 §8.16a), not
+through a materialization's: a browse run names its table **by reference**, `{ domain, dataset,
+table }`, and a statement names whatever tables it reads by their full names, with or without a
+`source` table. The engine is the same; only how the tables are found differs
+(`routes/data.ts::resolveTables`, `resolveStatement`):
+
+```
+reference or full name  →  its domain (refused: one this console does not serve, or cannot reach now)
+                        →  the materialization writing it, through the domain's live fleet;
+                           a kept table, through the materializations whose datasets hold it
+                        →  data.query on its dataset, as that domain knows the person
+                        →  its detail: where it lives, its tail; then planned like any run
+```
+
+- A statement over the lake has no table of its own: its run's `materializationId` and `table` are
+  null, it pins nothing (`asOf` needs a `source`), and `SELECT 1` reads nothing at all.
+- A run refreshed later is found again the same way, by its request's reference — the
+  materialization it was started on first, the fleet when that one no longer writes the table.
+- `POST /api/data/validate` binds a statement the same way without running it, and `POST
+  /api/data/estimate` sizes several tables together for each time range, from their manifests: the
+  time range picker's figures for a statement over the lake.
+
 ### Admission and lifetime
 
 At most `CONSOLE_RUN_CONCURRENCY` (4) runs scan at once; more wait. Only the scanning phase is
-admitted — a run the manifest answers on its own never waits behind someone else's scan. A run nobody
-has read for `CONSOLE_RUN_RETENTION_MS` (30 min) is discarded with its stored result; a live event
-stream keeps it alive.
+admitted — a run the manifest answers on its own never waits behind someone else's scan. Within that,
+at most `CONSOLE_RUN_CONCURRENCY_PER_PERSON` (2; 0 for no limit) of one person's runs scan at once —
+the person by their email, the same in every domain — so one person's explorations cannot take every
+scan (`runs/store.ts::admit`). A waiting run's phase is `queued`, with `queued: 'own'` while the
+person's own runs hold their share and `'others'` while everyone's do, and the status line says which:
+*Waiting for your other queries to finish* or *Waiting for other queries to finish*. Waiting runs are
+admitted in the order they came, skipping a person at their limit. A run nobody has read for
+`CONSOLE_RUN_RETENTION_MS` (30 min) is discarded with its stored result; a live event stream keeps it
+alive.
 
 Cancelling aborts every DuckDB connection the run has open, so it stops at once rather than when its
 current query finishes. Starting a run from the tab cancels the one before it if it is still working.

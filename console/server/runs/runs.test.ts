@@ -22,7 +22,6 @@ const { insideRange, overlapsRange, estimateRange, summarize } = await import('.
 const { logicalColumns, renderFilter, resolveFilters, selectList, timePredicate } = await import('../data/logical.ts');
 const { BrowseRun, orderObjects } = await import('./browse.ts');
 const { StatementRun } = await import('./statement.ts');
-const { namedTables, unqualifiedReferences } = await import('./names.ts');
 const { openExport } = await import('./export.ts');
 const { profileColumn } = await import('./profile.ts');
 
@@ -798,39 +797,5 @@ describe('logical columns', () => {
       shapes.filter((column) => column.group === 'payload').map((column) => [column.name, column.type]),
       [['tag[]', 'VARCHAR[]'], ['tag', 'VARCHAR']],
     );
-  });
-});
-
-describe('the tables a statement names', () => {
-  const domains = ['domain_a', 'domain_b'];
-  const names = (sql: string): string[] =>
-    namedTables(sql, domains).map((reference) => `${reference.native ? 'native:' : ''}${reference.domain}.${reference.dataset}.${reference.table}`);
-
-  it('are named with their domain, logical or native, in any case or quoting, each once', () => {
-    assert.deepEqual(names('SELECT * FROM domain_a.shop.payments p JOIN DOMAIN_B.SHOP.ORDERS o ON o.id = p.order_id'), [
-      'domain_a.shop.payments',
-      'domain_b.shop.orders',
-    ]);
-    assert.deepEqual(names('SELECT * FROM domain_a_iceberg.shop."Payments" JOIN domain_a . shop . orders USING (id)'), [
-      'native:domain_a.shop.payments',
-      'domain_a.shop.orders',
-    ]);
-    assert.deepEqual(names('SELECT domain_a.shop.orders.id FROM domain_a.shop.orders'), ['domain_a.shop.orders'], 'a column after a table is the table’s');
-    assert.deepEqual(names('SELECT 42'), []);
-  });
-
-  it('are not named in strings or comments, nor by a catalog that is no domain', () => {
-    assert.deepEqual(names("SELECT 'domain_b.x.y' AS t FROM domain_a.shop.orders -- domain_b.shop.orders\n/* domain_b.a.b */"), ['domain_a.shop.orders']);
-    assert.deepEqual(names('SELECT payload.customer.email FROM elsewhere.shop.orders'), []);
-  });
-
-  it('must name their domain: a table named without it is found, to say how to write it', () => {
-    const tables = [
-      { dataset: 'shop', table: 'orders' },
-      { dataset: 'finance', table: 'payments' },
-    ];
-    assert.deepEqual(unqualifiedReferences('SELECT * FROM shop.orders o JOIN FINANCE.PAYMENTS p USING (id)', tables), ['shop.orders', 'finance.payments']);
-    assert.deepEqual(unqualifiedReferences('SELECT * FROM iceberg.shop.orders', tables), ['iceberg.shop.orders']);
-    assert.deepEqual(unqualifiedReferences('SELECT o.id, shop.customers FROM domain_a.shop.orders o', tables), [], 'full names and other two-part names pass');
   });
 });

@@ -70,6 +70,48 @@ still hold for any harness:
 
 ## 14.4 Browser verification
 
+### Explore on a test cluster
+
+Verified on 2026-11-02 against two domains on a test cluster — a console built from the branch, run
+locally against both control planes and their tail apps — with Playwright (Chromium) at 1440 × 900
+and 390 × 844, in both themes, with reduced motion and by keyboard alone; the tables are the cluster's
+own (`midstream.*`, a few thousand to 47,000 rows) and a 102,582,940-row orders table.
+
+| Flow | Result |
+|---|---|
+| Sidebar › **Explore** | A new exploration in the address; the Tables rail lists both domains, Domain B *No tables yet* |
+| **From** › the orders table | Its exact count, *102,582,940 rows*, 130–141 ms after the choice; the tab named *sales.materializer_loadtest_orders · All time* |
+| A time range | **Previous month** runs as it is chosen: *701,972 rows* |
+| The rail, a table chosen | Browsed in the same exploration; History lists the three questions, newest first, each with its rows and time |
+| SQL over the lake | A table chosen in the rail goes into the statement as `domain_a.midstream.midstream_b_identity_requests`; ⌘↵ runs it; the header says *… holds the rows in All time*; a join of two tables by their full names answers 9 rows; a name without its domain is underlined before it runs; a 130-character statement typed key by key runs, with no update loop |
+| Two explorations | Each as it was left; ⌘↵ runs the shown one's question and no other |
+| History | An older question shown again, its run picked back up in 97–104 ms |
+| Reload | The strip and the shown exploration back, its run re-attached |
+| **Share**, opened in another browser | A new exploration there, the question run under that person's access |
+| Rename, duplicate, delete, close | Double click and F2 rename; **Duplicate** opens *… (copy)*; **Delete** acts at once, the exploration not kept again, **Undo** puts it back; closing the shown one shows its neighbour and keeps it under All explorations; a ninth refused with *8 explorations are open* |
+| **Open in Explore** on a table's Data tab | The question, and its run, in a new exploration |
+| Signed out | No Explore in the sidebar; `/explore` and a share link ask to sign in |
+| Connections | Four explorations open, each on a table: one detail stream, the shown one's, beside the fleet stream; at rest only the shown one's Live refresh, every 1.5 s; none of Explore's streams after leaving it |
+| A statement's range picker | Both tables sized together for every range, from their manifests (*All time 44.9K*) |
+| Phone | The empty exploration, Tables and History as sheets, a table's rows: nothing scrolls sideways but the grid; the strip's controls 44 px |
+| Reduced motion | Nothing moves but fades and the run ring's breathing, which is meant (`styles.css`) |
+| Keyboard | ← → between explorations, F2 renames, Delete closes, `/` to **Find a table**, ↵ browses it, ⌘K › **New exploration** |
+| Across domains | A throwaway materialization in Domain B of the topic Domain A's `midstream.midstream_maintenance_requests` holds, made for this and deleted after: browsed from the rail (*22,813 rows*, through its live tail ahead of its first commit); a statement joining the two by `"target.materialization_id"` answered *9 rows across domain_a, domain_b*, every materialization's count the same in both domains; the range picker sized both tables together |
+| Some datasets only | A throwaway account, deleted after, in both domains, whose Domain B dataset grants it nothing: Explore in its sidebar; the dataset in the rail with a lock and ↵ on its table doing nothing; a link to the table saying *Its dataset is locked to you. Ask one of the owners of explore_check for a role on it.*; a statement over Domain A answering, and one over the locked table, or joining it, refused — *Could not start*, *it needs "Query data" on dataset domain_b.explore_check*; `POST /api/runs` on it `403` with `details.dataset` |
+
+**A design pass**, the same day: every state looked at in both themes, at desktop and phone widths, by
+keyboard and with reduced motion, and an independent review of the code against 10. Defects 48–55
+below came of it; the flows above, the Data tab's fourteen and fifteen checks of the changes passed
+after.
+
+**Against the commit before Explore** (the Data tab now hosts the shared workbench): the Data tab's
+fourteen flows pass on both — opening, ranges, SQL, the address bar, Streaming, reload, More actions —
+three rounds each against the same tables. The orders table's exact count landed in 289–323 ms (before:
+234–306 ms) and its first rows in 451–508 ms (before: 410–520 ms), the difference within one run's
+spread. The main bundle grew 4.83 kB gzipped (269.22 → 274.05 kB), the shared workbench and the
+statement names the client now reads; Explore is a chunk of its own, 13.32 kB gzipped, read when it is
+first opened.
+
 ### Domains on a test cluster: one console, two domains
 
 Verified on 2026-10-26 against two domains on a test cluster — Domain A (the settings home, the console
@@ -429,6 +471,24 @@ process exists to catch. 1–19 are from the 0.x releases, 20 on from 1.0.
 | 35 | On a phone the Users list squeezed every name to a letter | Its four columns kept their widths under 768 px | Name and status alone under `md` (`UsersSection.tsx::GRID`) |
 | 36 | An invitation to two domains offered a provider only one of them takes, which would have joined that one alone, unsaid | The join page offered every provider some domain of the invitation took | Only those every domain takes (`access/logic.ts::takenByAll`); the invite dialog names a domain no link reaches |
 | 37 | One failed 15 s read of a dataset replaced its page, and a table's page with every tab it kept, by *could not be loaded* until the next read | The pages read `isError`, which TanStack Query also sets on a failed refresh that keeps `data` | Only a read with nothing to keep, or a final answer (401, 403, 404), shows the failure (`lib/reads.ts::readFailed`) |
+| 38 | Closing the exploration shown left it open, its neighbour shown beside it | The router moves the address in a transition: the strip changed at once, and the effect that opens what the address names ran with the closed one's address still there | The effect skips the renders whose address the page is leaving (`ExplorePage.tsx`: `leaving`) |
+| 39 | Deleting an open exploration said *That exploration is not in this browser* | The same: the address still named the deleted one when the list no longer held it | The same |
+| 40 | Typing a statement over the lake quickly failed after 51 keystrokes: *Maximum update depth exceeded*, the keystroke lost | Each keystroke's commit ran the effect reporting the view, whose update of the exploration around it waited for the next keystroke — React renders a default update with the next input — so every commit counted as nested | A view's edits are kept without rendering the exploration (`explorations.ts::changesWhatIsShown`), which also halves the renders per keystroke |
+| 41 | An exploration deleted within 300 ms of an edit came back under All explorations, and Undo restored it without the edit | The edit's pending save ran when the exploration unmounted, after the delete; the delete read the stored document | Its handle's `flush` before a delete or a duplicate reads it |
+| 42 | Chevrons kept turning with reduced motion asked for, across the console | `transition-transform` had no reduced-motion rule | One in the reduced-motion block (`styles.css`) |
+| 43 | On a phone the strip's × and + were 20 and 28 px, a tab not shown could be closed by a tap on its unseen ×, and the Tables sheet left a blank strip | Desktop sizes and hover-revealed controls on a touch screen; the rail kept its desktop width in the sheet | 44 px under `md`, a × on the shown tab only, the sheet the screen's width |
+| 44 | History kept a failed question's whole error, which can quote a value the statement read | The outcome stored the engine's message | Of an engine error only its kind is kept (`explorations.ts::keptMessage`) |
+| 45 | An exploration opened on a table whose dataset the person may not query — by a link — started a run the server refused | It browsed any table whose writing materialization it found, and a person may see the materialization of a dataset they may not query | Only a table the person may browse is browsed; the rest say why (`Exploration.tsx`) |
+| 46 | A refused start left *Starting…* shimmering above *The query could not start* — on a table's Data tab too | The status line said *Starting…* whenever no run was on screen | *Could not start*, in the failed run's form (`data/statusLine.ts`) |
+| 47 | A request with an empty or malformed JSON body was answered `500`, *the console failed to handle this request*, and logged as a failure | The error handler knew only `ConsoleError`, so Fastify's own `400`s became `500`s | They keep their status, as `invalid_request` (`errors.ts::answerError`) |
+| 48 | Reopening a question from History dropped the whole frame — toolbar, **From**, status line — to a skeleton for 30–100 ms | The workbench, remounted for each question, took the table's live detail stream with it | The stream lives one level up, once per table (`Exploration::SourceBench`) |
+| 49 | The rail's search results all read `domain_a.midstream.mid…`; at its width two tables read `midstream_cont…` | Full names cut at their end, where names that share a start differ | A found table's own name first, its place after; long names cut in the middle (`Names.tsx`); the row's actions overlay the name only while pointed at |
+| 50 | History cut a long table name over the range that told two questions apart, and set the table's name in the interface face | One string, table first | What was asked first, the table after it in the code face (`explorations.ts::questionParts`) |
+| 51 | On a phone the rail's and the menu's hover actions were invisible but tappable, and rows, chevrons and header buttons were 20–36 px | Hover-revealed controls and desktop sizes on a touch screen | 44 px under `md`; the rail's secondary actions wait for a desktop, the menu's are always there |
+| 52 | The phone's sheets did not take focus or close on Esc; History stayed over the answer after a pick; Delete on a tab dropped focus to the page | — | `useSheet.ts`; History closes on a pick; focus moves to the tab shown |
+| 53 | A blank statement said *Changes not run yet* and *Press Run*, which ran nothing; ⌘K's **New exploration** opened a statement where + opened a choice | — | *No statement yet*, nothing of Run (`data/statusLine.ts`); ⌘K opens what + opens |
+| 54 | History said *Failed* in Flare without the state's shape, and *Stopped* where the status line said *Cancelled*; a statement over the lake offered a **Peek** it could not have; an empty dataset showed *0*; the chooser said *There is no table* while its tables loaded; a locked table's click did nothing | — | The Failed shape (`Status.tsx`), *Cancelled*, no Peek without a table, no zero count, a loading list, the reason said on any choice |
+| 55 | Under every statement, on a table's Data tab too, a paragraph of instructions took a third of the panel | — | Removed; Run's tooltip gives ⌘↵ |
 
 ## 14.6 The unit suite
 
@@ -446,7 +506,7 @@ fake-gcs-server at `http://localhost:4443` (`-scheme http`). `CONSOLE_STORAGE_LI
 them elsewhere (the file's header lists them). They make a bucket and a container named
 `console-live` where there is none, write under a key of their own, and remove what they wrote after.
 
-`node --test` runs the `.ts` files natively, so there is no transform step. **575 tests, 152 suites** — with `server/storage/live.test.ts` skipped unless `CONSOLE_STORAGE_LIVE` is set (20 more).
+`node --test` runs the `.ts` files natively, so there is no transform step. **752 tests, 193 suites** — with `server/storage/live.test.ts` skipped unless `CONSOLE_STORAGE_LIVE` is set (20 more).
 
 | File | Covers |
 |------|--------|
@@ -458,6 +518,15 @@ them elsewhere (the file's header lists them). They make a bucket and a containe
 | `server/schema/diff.test.ts` | Schema diffs by field id: every kind of change named, a type promotion and a nullability change on one field, the first schema against nothing |
 | `server/routes/system.test.ts` | Control-plane compatibility: 4.0 or later, unknown for an unknown version; the console's live tail configuration, and why a run reads no tail — no tail app, this console, the control plane, a materialization not running, and, on a control plane before 4.3, the switch for one; a create taking no live-tail default; the control plane's autoscaling — whether, how far and for what catch-up time — and none known before 4.4 or while it cannot be reached |
 | `server/runs/runs.test.ts` | The run engine against real Parquet: counts from the manifest, time pruning and the 999 ms upper bound, filters (including list columns), streaming first pages, the page cache, cancellation, statements bounded by range, truncation with an exact total, error positions, a column some objects lack, statements reading a table by its name in any case, a name that is none of the tables answered with the list of those that are (DuckDB's own guess kept when it is one of them), CSV export, nested and flat JSON exports, profiles, logical columns over forks, names without the `payload.` root (and where a metadata name keeps it), `payload.`-rooted names from older links, the hint for a statement that still uses one, which fields hold JSON text; tables read by their canonical names, `<dataset>.<table>` — `shop.orders` and `iceberg.shop.orders` — and a bare name pointed at its canonical one |
+| `server/routes/runs.test.ts` | Runs not tied to a materialization (`POST /api/runs`): a table browsed wherever it is, by reference, with its live tail unless told not to; a statement with no table of its own, about a table it does not read, or reading none, in the settings home; a name without its domain answered with the full name in every domain holding it; a source not found, a domain out of reach, a guest, `data.query` missing on the source's dataset, `asOf` without a source; a kept table browsed and read by name though the fleet lists only written tables, and refused once nothing has it; refreshing and replacing by reference; a refresh refused once the person may no longer query a table it reads; validation and estimates across domains and tables, only of tables the person may query |
+| `server/runs/admission.test.ts` | Admission per person: one person's share at once, without holding up anyone else; waiting behind everyone at the console's limit; no share at 0; a run cancelled while waiting forgotten; a lowered share taken at once; `queued` and behind whose runs |
+| `shared/statementNames.test.ts` | The tables a statement names: with their domain, logical or native, in any case or quoting, each once; not in strings or comments, nor by a catalog that is no domain; a name without its domain found, to say how to write it; positions kept so a match points into the statement as written |
+| `server/errors.test.ts` | Failures answered: a body the console cannot read with its own status as `invalid_request` — empty JSON, malformed JSON, a type it does not take; a `ConsoleError` as it says; anything else `500` without its message |
+| `src/features/data/statusLine.test.ts` | What the status line leads with: the run on screen, *Starting…* while one starts, *Could not start* once refused with none on screen, nothing of Run for a blank statement, a question waiting for Run |
+| `src/features/data/scope.test.ts` | What a workbench is about: tables compared as SQL compares names; a run picked back up only when it is about the same table — or, with none, a statement with none; the lake's tables a statement names, each once |
+| `src/features/explore/explorations.test.ts` | An exploration's name; its questions newest first, the same one asked again in its place, at most 50; a question settled by its run, or the one on screen; a question back in the composer; what renders the exploration and what only its workbench; what a failure keeps; History's parts, what was asked before its table; share links both ways; a stored document read defensively |
+| `src/features/explore/store.test.ts` | The browser's store: a key per exploration and an index; past the limit or in a full storage the least recently changed go, never an open one; working in memory without storage; listeners told of every change, another tab's too; the tab strip — open, close, its limit, a reload |
+| `src/features/explore/lake.test.ts` | The lake as the person may see it: each domain's datasets and tables with the materialization writing each; whether a table may be queried, browsed or only named; the fleet where the datasets cannot be read; a misconfigured domain left out; finding tables by name, best first; a found name split into its own name and its place, each with what matched |
 | `server/live/rates.test.ts` | Rates from heartbeats against a simulated runtime — eight members on staggered 30 s heartbeats, second-precision timestamps, polled every 1.5 s — within 4% of the true rate on every poll; no total until every member has reported twice; restarts; members leaving; a control plane without per-member progress; bytes sealed in irregular waves read within 15%; series spacing, a day of throughput a minute apart, and lag-history thinning; the running count of records arriving on the source topics, which counts neither a topic just added nor one whose offsets started over |
 | `server/live/store.test.ts` | What the materializations list and the fleet Overview count: the rows, bytes and files of each table's current snapshot as its committer reported them, summed — never the runtime's written counters, which a crash-looping runtime inflated to three times the table on a test cluster; unknown before any table is reported |
 | `shared/fieldPaths.test.ts` | Field names without the `payload.` root, renaming paths in runtime messages, and nested JSON: objects, lists lining up across columns, lists inside lists, nulls, fields that changed shape, overlapping columns merging, conflicts kept under a flat name, JSON text decoded, `__proto__` |

@@ -17,29 +17,27 @@ import {
 import { Popover } from '@/components/ui/Popover';
 import { Button, Input, Select } from '@/components/ui/primitives';
 import { cn } from '@/lib/cn';
+import { api } from '@/lib/api';
 import { formatCount, formatTimestamp, localZone } from '@/lib/format';
-import { useApi } from '@/lib/domains';
-import type { DataSummary, ScopeEstimate } from '@shared/types';
+import type { DataSummary, ScopeEstimate, TableRef } from '@shared/types';
 
 /**
  * Chooses the time range every run is bounded by, the way Splunk's time picker does.
  *
  * Presets cover the common questions in one click. Each is annotated with how many rows it covers of
- * the table on screen, read from its manifests, so the cost of a question is visible before it is
- * asked — a
- * narrower range reads fewer files and is faster, and the numbers say so. Choosing a range
- * does not run anything: Run does.
+ * the tables the question reads — the table on screen, or the tables a statement names — read from
+ * their manifests, so the cost of a question is visible before it is asked: a narrower range reads
+ * fewer files and is faster, and the numbers say so. Choosing a range does not run anything: Run
+ * does.
  */
 export function TimeRangePicker({
-  materializationId,
-  table,
+  tables,
   value,
   onChange,
   summary,
 }: {
-  materializationId: string;
-  /** The table whose rows the estimates count. */
-  table: string;
+  /** The tables whose rows the estimates count, together; none, and the presets carry no figures. */
+  tables: readonly TableRef[];
   value: TimeRangeSpec;
   onChange: (spec: TimeRangeSpec) => void;
   summary: DataSummary | null;
@@ -70,8 +68,7 @@ export function TimeRangePicker({
     >
       {({ close }) => (
         <PickerBody
-          materializationId={materializationId}
-          table={table}
+          tables={tables}
           value={value}
           summary={summary}
           onChoose={(spec) => {
@@ -85,29 +82,28 @@ export function TimeRangePicker({
 }
 
 function PickerBody({
-  materializationId,
-  table,
+  tables,
   value,
   summary,
   onChoose,
 }: {
-  materializationId: string;
-  table: string;
+  tables: readonly TableRef[];
   value: TimeRangeSpec;
   summary: DataSummary | null;
   onChoose: (spec: TimeRangeSpec) => void;
 }): ReactNode {
-  const api = useApi();
   const [open, setOpen] = useState<'relative' | 'dates' | 'datetimes' | null>(null);
   const presets = useMemo(() => [...CALENDAR_PRESETS, ...LAST_PRESETS, ALL_TIME], []);
+  const tablesKey = tables.map((table) => `${table.domain}.${table.dataset}.${table.table}`).join(',');
 
   // Resolved once per opening, so the figures describe the ranges as they would run now.
   const estimates = useQuery({
-    queryKey: ['range-estimates', materializationId, table, summary?.asOf ?? null],
+    queryKey: ['range-estimates', tablesKey, summary?.asOf ?? null],
     queryFn: () => {
       const now = Date.now();
-      return api.dataEstimate(materializationId, table, presets.map((spec) => resolveRange(spec, now)));
+      return api.estimate(tables, presets.map((spec) => resolveRange(spec, now)));
     },
+    enabled: tables.length > 0,
     staleTime: 30_000,
     retry: 0,
   });

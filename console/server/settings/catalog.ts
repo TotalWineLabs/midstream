@@ -207,6 +207,21 @@ export const CONSOLE_SETTINGS: readonly ConsoleSettingDefinition[] = [
     effect: 'the next change to a view',
   },
   {
+    key: 'runConcurrencyPerPerson',
+    envVar: 'CONSOLE_RUN_CONCURRENCY_PER_PERSON',
+    section: 'data',
+    label: 'Scans per person',
+    description:
+      'How many of one person’s queries may scan at once; the rest wait their turn, so one ' +
+      'person’s explorations cannot take every scan. The console’s own limit still applies. 0: no ' +
+      'limit but the console’s.',
+    kind: 'integer',
+    unit: 'queries',
+    minimum: 0,
+    maximum: 64,
+    effect: 'the next query to scan',
+  },
+  {
     key: 'resultRowLimit',
     envVar: 'CONSOLE_RESULT_ROW_LIMIT',
     section: 'data',

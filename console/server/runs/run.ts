@@ -41,13 +41,14 @@ import type {
 } from '../../shared/types.ts';
 
 export interface RunInit {
-  /** The domain the run was started in: its materialization's (handbook 20). */
+  /** The domain the run belongs to: its table's (handbook 20); the settings home's for none. */
   domain: string;
-  materializationId: string;
+  /** The materialization writing the run's table; null for a statement that reads no table. */
+  materializationId: string | null;
   /** Who started the run, as its domain knows them; only they can read it (`runs/store.ts::getRun`). */
   ownerId: string;
-  /** The run's table: the one browsed, or the statement's (`RunRequest.table`). */
-  tableName: string;
+  /** The run's table: the one browsed, or the statement's (`RunRequest.table`); null for none. */
+  tableName: string | null;
   /**
    * The datasets of the tables it reads, each in its domain: reading its rows needs `data.query` on
    * each, again, as the person is in that domain.
@@ -57,8 +58,11 @@ export interface RunInit {
   /** The run's table at the snapshot it reads. */
   catalog: Catalog;
   columns: LogicalColumn[];
-  /** Admission for the scanning phase, so a burst of runs cannot saturate DuckDB. */
-  admit: (signal: AbortSignal) => Promise<() => void>;
+  /**
+   * Admission for the scanning phase, so a burst of runs cannot saturate DuckDB; `onQueued` hears
+   * that the run has to wait its turn, and behind whose runs (`runs/store.ts::admit`).
+   */
+  admit: (signal: AbortSignal, onQueued?: (reason: 'own' | 'others') => void) => Promise<() => void>;
   /** How the run reads its tables' live tails; absent, it reads none (`liveTail: false`, `asOf`). */
   tail?: TailAccess | null;
 }
@@ -78,9 +82,9 @@ export interface RunDataset {
 export abstract class Run {
   readonly id = randomUUID();
   readonly domain: string;
-  readonly materializationId: string;
+  readonly materializationId: string | null;
   readonly ownerId: string;
-  readonly tableName: string;
+  readonly tableName: string | null;
   readonly datasets: ReadonlyArray<RunDataset>;
   readonly request: RunRequest;
   readonly startedAt = Date.now();
@@ -100,6 +104,8 @@ export abstract class Run {
 
   state: RunState = 'running';
   phase: RunPhase = 'planning';
+  /** While `phase` is `queued`: whose runs it waits behind. */
+  private queuedBehind: 'own' | 'others' | null = null;
   finishedAt: number | null = null;
   scope = { objects: 0, bytes: 0, rows: 0 };
   progress: RunProgress = {
@@ -148,11 +154,10 @@ export abstract class Run {
    */
   /**
    * Fetch the live tail of each table, keyed as the run reports the table. A browse run reads its
-   * own table's with the run's access; a statement reads each table's through its own domain's tail
-   * app (`access`), and none at all when the run reads no tails.
+   * own table's with the run's access, if it has one; a statement reads each table's through its own
+   * domain's tail app (`access`), null for none - every one, when the run reads no tails.
    */
   protected async fetchTails(tables: Array<{ key: string; table: string; catalog: Catalog; access?: TailAccess | null }>): Promise<void> {
-    if (this.tailAccess === null) return;
     await Promise.all(
       tables.map(async ({ key, table, catalog, access }) => {
         const reads = access === undefined ? this.tailAccess : access;
@@ -170,8 +175,8 @@ export abstract class Run {
   }
 
   /** The live tail of a table the run reads — its own by default — or undefined when it read none. */
-  tailOf(table: string = this.tableName): TableTail | undefined {
-    return this.tails.get(table);
+  tailOf(table: string | null = this.tableName): TableTail | undefined {
+    return table === null ? undefined : this.tails.get(table);
   }
 
   /** The snapshot of its own table the run is pinned to; null for a table with none yet. */
@@ -182,6 +187,25 @@ export abstract class Run {
   /** Aborted on cancel, and on the first failure, so every scan this run started stops at once. */
   protected get signal(): AbortSignal {
     return this.abortController.signal;
+  }
+
+  /**
+   * Wait for a turn to scan (`RunInit.admit`). A run that has to wait says so, `queued` and behind
+   * whose runs, and goes back to what it was doing once admitted. Resolves to the release.
+   */
+  protected async admitted(): Promise<() => void> {
+    const phase = this.phase;
+    const release = await this.admit(this.signal, (reason) => {
+      this.phase = 'queued';
+      this.queuedBehind = reason;
+      this.changed(true);
+    });
+    if (this.phase === 'queued') {
+      this.phase = phase;
+      this.queuedBehind = null;
+      this.changed(true);
+    }
+    return release;
   }
 
   /** The work. Resolving leaves the run to be marked succeeded; throwing marks it failed. */
@@ -206,6 +230,7 @@ export abstract class Run {
 
   /** Every table the run reads, at the snapshot it is pinned to. A browse run reads its own. */
   protected tableReads(): RunTableRead[] {
+    if (this.tableName === null) return [];
     const dataset = this.datasets[0];
     const place = { domain: this.domain, dataset: dataset?.name ?? '', datasetId: dataset?.id ?? '' };
     return [tableRead(this.tableName, this.catalog, place, this.tails.get(this.tableName))];
@@ -341,6 +366,7 @@ export abstract class Run {
       request: this.request,
       state: this.state,
       phase: this.phase,
+      ...(this.phase === 'queued' && this.queuedBehind !== null ? { queued: this.queuedBehind } : {}),
       startedAt: new Date(this.startedAt).toISOString(),
       finishedAt: this.finishedAt === null ? null : new Date(this.finishedAt).toISOString(),
       elapsedMs: Math.max(0, until - this.startedAt),
@@ -362,7 +388,7 @@ export abstract class Run {
       error: this.error,
       expiresAt: new Date(this.lastAccess + config.runIdleRetentionMs).toISOString(),
       revision: this.revision,
-      ...(this.tails.has(this.tableName) ? { tail: (this.tails.get(this.tableName) as TableTail).view() } : {}),
+      ...(this.tableName !== null && this.tails.has(this.tableName) ? { tail: (this.tails.get(this.tableName) as TableTail).view() } : {}),
     };
   }
 

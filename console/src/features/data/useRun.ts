@@ -2,9 +2,14 @@ import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-quer
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { pageQueryKey } from './live.ts';
-import { ApiError } from '@/lib/api';
+import { ApiError, api } from '@/lib/api';
 import { useApi } from '@/lib/domains';
 import type { RunPage, RunRefresh, RunRequest, RunSnapshot, TimeRange } from '@shared/types';
+
+/** How often a run is asked how it is doing while it is followed without its event stream. */
+const POLL_MS = 1_000;
+/** The same, while its tab is out of sight: it needs to know when the run ends, not every step. */
+const HIDDEN_POLL_MS = 2_000;
 
 export { pageQueryKey, pageStage } from './live.ts';
 
@@ -40,9 +45,14 @@ export interface RunController {
  * old one, and leaving it to finish would spend the server on an answer nobody will look at.
  * Progress arrives over server-sent events; if the stream drops, the hook polls instead, because a
  * status frozen by a dead transport is indistinguishable from a hung query.
+ *
+ * Runs start through the console's own route (`POST /api/runs`), whatever their table's domain.
+ * `belongs` says whether a run, picked back up by its id, is about what the caller shows. With
+ * `stream` false the run is followed by asking every few seconds rather than over an event stream:
+ * an exploration out of sight keeps following its run without holding a connection open, since a
+ * browser over HTTP/1.1 gives a page only six.
  */
-export function useRun(materializationId: string): RunController {
-  const api = useApi();
+export function useRun({ belongs, stream = true }: { belongs: (run: RunSnapshot) => boolean; stream?: boolean }): RunController {
   const [run, setRun] = useState<RunSnapshot | null>(null);
   const [carried, setCarried] = useState<RunSnapshot | null>(null);
   const [starting, setStarting] = useState(false);
@@ -50,6 +60,10 @@ export function useRun(materializationId: string): RunController {
   const current = useRef<RunSnapshot | null>(null);
   const source = useRef<EventSource | null>(null);
   const poll = useRef<number | null>(null);
+  const streaming = useRef(stream);
+  streaming.current = stream;
+  const belongsTo = useRef(belongs);
+  belongsTo.current = belongs;
 
   const show = useCallback((snapshot: RunSnapshot) => {
     if (current.current && current.current.id !== snapshot.id) return;
@@ -74,6 +88,21 @@ export function useRun(materializationId: string): RunController {
       if (snapshot.state !== 'running') return;
 
       const id = snapshot.id;
+      const ask = (every: number): void => {
+        poll.current ??= window.setInterval(() => {
+          void api
+            .run(id)
+            .then((next) => {
+              show(next);
+              if (next.state !== 'running') stopFollowing();
+            })
+            .catch(() => undefined);
+        }, every);
+      };
+      if (!streaming.current) {
+        ask(HIDDEN_POLL_MS);
+        return;
+      }
       const events = new EventSource(api.runStreamUrl(id));
       source.current = events;
       events.onmessage = (event) => {
@@ -89,19 +118,17 @@ export function useRun(materializationId: string): RunController {
         if (source.current !== events) return;
         events.close();
         source.current = null;
-        poll.current ??= window.setInterval(() => {
-          void api
-            .run(id)
-            .then((next) => {
-              show(next);
-              if (next.state !== 'running') stopFollowing();
-            })
-            .catch(() => undefined);
-        }, 1_000);
+        ask(POLL_MS);
       };
     },
     [show, stopFollowing],
   );
+
+  // Out of sight or back: a run still working is followed the other way, from where it is.
+  useEffect(() => {
+    const active = current.current;
+    if (active && active.state === 'running') follow(active);
+  }, [stream, follow]);
 
   const start = useCallback(
     async (request: RunRequest): Promise<RunSnapshot | null> => {
@@ -113,7 +140,7 @@ export function useRun(materializationId: string): RunController {
       setStarting(true);
       setStartError(null);
       try {
-        const snapshot = await api.startRun(materializationId, request);
+        const snapshot = await api.startRun(request);
         follow(snapshot);
         return snapshot;
       } catch (error) {
@@ -123,7 +150,7 @@ export function useRun(materializationId: string): RunController {
         setStarting(false);
       }
     },
-    [materializationId, follow, stopFollowing],
+    [follow, stopFollowing],
   );
 
   const cancel = useCallback(() => {
@@ -142,7 +169,7 @@ export function useRun(materializationId: string): RunController {
     async (runId: string): Promise<boolean> => {
       try {
         const snapshot = await api.run(runId);
-        if (snapshot.materializationId !== materializationId) return false;
+        if (!belongsTo.current(snapshot)) return false;
         setCarried(null);
         follow(snapshot);
         return true;
@@ -150,7 +177,7 @@ export function useRun(materializationId: string): RunController {
         return false;
       }
     },
-    [materializationId, follow],
+    [follow],
   );
 
   const refresh = useCallback(

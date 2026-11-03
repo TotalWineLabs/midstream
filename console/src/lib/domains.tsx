@@ -120,10 +120,13 @@ export function useDomainPath(): (path: string) => string {
 
 /**
  * The domain the address names, for what sits around a page rather than in it - the shell's switcher
- * and navigation: `/d/<domain>/…` names one; every other page is the console's own.
+ * and navigation: `/d/<domain>/…` names one, and Explore, the console's own, carries one as
+ * `?domain=`; every other page is the console's own.
  */
 export function useScopeDomainId(): string | null {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const match = /^\/d\/([^/]+)/.exec(pathname);
-  return match ? decodeURIComponent(match[1] as string) : null;
+  if (match) return decodeURIComponent(match[1] as string);
+  if (pathname.startsWith('/explore')) return new URLSearchParams(search).get('domain');
+  return null;
 }

@@ -963,3 +963,16 @@ through a provider or with its link.
 - **Dataset roles are given on the dataset**, through its Share popover, not in the invitation dialog,
   which chooses groups only.
 
+## 14.22 Explore: open items
+
+Explore as built (console 11 §11.14; design: [docs/design/explore.md](../design/explore.md)):
+explorations over any table, dataset and domain, kept by the browser.
+
+- **Explorations live in one browser.** Not with the account: another browser or device does not have
+  them, and *Sign out everywhere* leaves them, as it leaves pins. *To implement:* an `ExplorationStore`
+  kept by the control plane, the browser's moved into it on first use, then sharing with the same
+  per-dataset checks a share link has today (console 16 §16.8).
+- **Two browser tabs editing one exploration** each write the whole document: the later save wins.
+- **Each person's scans** are capped per console process (`CONSOLE_RUN_CONCURRENCY_PER_PERSON`), as
+  runs are; replicas count their own.
+

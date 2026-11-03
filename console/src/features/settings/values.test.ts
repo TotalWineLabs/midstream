@@ -189,6 +189,8 @@ describe('formatting', () => {
     assert.equal(formatValue({ kind: 'boolean', unit: null }, false), 'Off');
     assert.equal(formatValue({ kind: 'destination_uri', unit: null }, null), 'None');
     assert.equal(formatValue({ kind: 'integer', unit: 'hours' }, 168), '168 hours');
+    assert.equal(formatValue({ kind: 'integer', unit: 'queries' }, 2), '2 queries');
+    assert.equal(formatValue({ kind: 'integer', unit: 'queries' }, 1), '1 query');
   });
 
   it('hints at a readable equivalent only where the raw number is hard to read', () => {

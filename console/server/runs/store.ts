@@ -10,16 +10,16 @@ import { config } from '../config.ts';
 import { badRequest, notFound } from '../errors.ts';
 import { logger } from '../logger.ts';
 import { cancelledError, withSandbox } from '../data/duckdb.ts';
-import { loadCatalog, pauseWarming, type Catalog } from '../data/catalog.ts';
+import { loadCatalog, noTableCatalog, pauseWarming, type Catalog } from '../data/catalog.ts';
 import { logicalColumns, resolveFilters } from '../data/logical.ts';
 import { assertReadOnlyStatement } from '../data/sql.ts';
 import { BrowseRun } from './browse.ts';
 import { canonicalName } from './names.ts';
 import { StatementRun, statementError, type StatementSource } from './statement.ts';
 import { listOf, statementViews } from './view.ts';
-import type { Run, RunDataset } from './run.ts';
+import type { Run, RunDataset, RunInit } from './run.ts';
 import type { TailAccess } from './tail.ts';
-import type { RunRequest, TimeRange } from '../../shared/types.ts';
+import type { RunRequest, TableRef, TimeRange } from '../../shared/types.ts';
 
 const runs = new Map<string, Run>();
 
@@ -29,24 +29,52 @@ const runs = new Map<string, Run>();
  * Only the scanning phase is admitted. A run the manifests answer on their own — the first page of
  * any table, a time range over whole files — never waits behind someone else's scan. Background
  * footer warming waits while any run is admitted.
+ *
+ * At most `runConcurrency` runs scan at once, and at most `runConcurrencyPerPerson` of one person's:
+ * someone with several explorations open cannot take every scan. A run waiting only for the
+ * person's own is passed over, not waited behind, so it never holds up anyone else's.
  */
 let scanning = 0;
-const waiting: Array<{ grant: () => void; signal: AbortSignal; reject: (cause: unknown) => void }> = [];
+const scanningBy = new Map<string, number>();
+const waiting: Array<{ person: string; grant: () => void; signal: AbortSignal; reject: (cause: unknown) => void }> = [];
 
-function admit(signal: AbortSignal): Promise<() => void> {
+/** Why a run waits its turn: behind the person's own runs, or behind everyone's. */
+export type QueueReason = 'own' | 'others';
+
+function ownLimitReached(person: string): boolean {
+  const limit = config.runConcurrencyPerPerson;
+  return limit > 0 && (scanningBy.get(person) ?? 0) >= limit;
+}
+
+function canScan(person: string): boolean {
+  return scanning < config.runConcurrency && !ownLimitReached(person);
+}
+
+/**
+ * Wait for a turn to scan, as `person`; `onQueued` hears, once, that the run has to wait and behind
+ * whose runs. Resolves to the release, which must be called when the scan is done. Exported for
+ * tests; runs reach it through `RunInit.admit`.
+ */
+export function admit(signal: AbortSignal, person: string, onQueued?: (reason: QueueReason) => void): Promise<() => void> {
   if (signal.aborted) return Promise.reject(cancelledError());
   const grant = (): (() => void) => {
     scanning += 1;
+    scanningBy.set(person, (scanningBy.get(person) ?? 0) + 1);
     const resumeWarming = pauseWarming();
     return once(() => {
       scanning -= 1;
+      const left = (scanningBy.get(person) ?? 1) - 1;
+      if (left > 0) scanningBy.set(person, left);
+      else scanningBy.delete(person);
       resumeWarming();
       pump();
     });
   };
-  if (scanning < config.runConcurrency) return Promise.resolve(grant());
+  if (canScan(person)) return Promise.resolve(grant());
+  onQueued?.(ownLimitReached(person) ? 'own' : 'others');
   return new Promise((resolve, reject) => {
     const entry = {
+      person,
       signal,
       reject,
       grant: () => resolve(grant()),
@@ -64,10 +92,21 @@ function admit(signal: AbortSignal): Promise<() => void> {
   });
 }
 
+/** Grant waiting runs their turn, oldest first, passing over anyone at their own limit. */
 function pump(): void {
-  while (scanning < config.runConcurrency && waiting.length > 0) {
-    const next = waiting.shift();
-    if (next && !next.signal.aborted) next.grant();
+  let index = 0;
+  while (scanning < config.runConcurrency && index < waiting.length) {
+    const next = waiting[index] as (typeof waiting)[number];
+    if (next.signal.aborted) {
+      waiting.splice(index, 1);
+      continue;
+    }
+    if (ownLimitReached(next.person)) {
+      index += 1;
+      continue;
+    }
+    waiting.splice(index, 1);
+    next.grant();
   }
 }
 
@@ -104,12 +143,25 @@ export interface ResolvedTable extends RunTableSource {
 }
 
 export interface StartRunInput {
-  /** The domain the run is started in: its materialization's. */
+  /**
+   * The domain the run belongs to: its own table's; for a statement without one, the domain of the
+   * first table it names, else the settings home's.
+   */
   domain: string;
-  materializationId: string;
+  /** The materialization writing the run's own table; null for a statement without one. */
+  materializationId: string | null;
   /** Who is starting the run, as the domain knows them. Nobody else can read it. */
   ownerId: string;
-  /** Every table of the materialization, in its order. */
+  /**
+   * Who the person is across the console, for admission (`runConcurrencyPerPerson`): their email,
+   * which is the same person in every domain (handbook 20); `ownerId` when they have none.
+   */
+  person?: string;
+  /**
+   * The tables the run may be about, in order: a materialization's every table, from its own
+   * route; the one a request names by reference, from the console's (`POST /api/runs`); none for a
+   * statement with no table of its own.
+   */
   tables: RunTableSource[];
   request: RunRequest;
   /**
@@ -128,7 +180,7 @@ export interface StartRunInput {
 
 /**
  * The tables a run reads: the one it browses; a statement's named tables, or - a statement that
- * names none - its request's table. Whoever starts it must be allowed to query each one.
+ * names none - its request's table, if it has one. Whoever starts it must be allowed to query each.
  */
 export function tablesRead(
   tables: RunTableSource[],
@@ -136,7 +188,14 @@ export function tablesRead(
   sources: readonly RunTableSource[] = [],
 ): RunTableSource[] {
   if (request.kind === 'sql' && sources.length > 0) return [...sources];
+  // A statement with no table of its own that names none reads no table at all: `SELECT 1`.
+  if (request.kind === 'sql' && tables.length === 0) return [];
   return [pickTable(tables, request.table)];
+}
+
+/** Whether a run reads its tables' live tails: not as of an older snapshot, nor when asked not to. */
+export function readsTails(request: Pick<RunRequest, 'asOf' | 'liveTail'>): boolean {
+  return !request.asOf && request.liveTail !== false;
 }
 
 /** The datasets of some tables, each once, in their domains. */
@@ -145,44 +204,56 @@ function datasetsOf(tables: RunTableSource[]): RunDataset[] {
   return [...byId.values()];
 }
 
+/** A table, as a request names it wherever it is. */
+function refOf(table: RunTableSource): TableRef {
+  return { domain: table.domain, dataset: table.dataset, table: table.name };
+}
+
 /**
  * Create a run, start it, and return it at once; progress arrives through `subscribe`.
  *
- * A browse run reads its table (`request.table`, the materialization's first by default). A
- * statement reads every table it names, each pinned to its current snapshot — the request's table
- * to `asOf` when it names one — and no other.
+ * A browse run reads its table (`request.table`, the first of `tables` by default). A statement
+ * reads every table it names, each pinned to its current snapshot — the request's table to `asOf`
+ * when it names one — and no other; it may have no table of its own (`tables` empty), and may name
+ * none.
  */
 export async function startRun(input: StartRunInput): Promise<Run> {
   validateRange(input.request);
-  const selected = pickTable(input.tables, input.request.table);
   const statement = input.request.kind === 'sql' ? assertReadOnlyStatement(input.request.sql ?? '') : null;
+  // A browse run is always about a table; a statement may have none of its own.
+  const selected = statement === null || input.tables.length > 0 ? pickTable(input.tables, input.request.table) : null;
   const named = statement === null ? [] : (input.sources ?? []);
   const datasets = datasetsOf(tablesRead(input.tables, input.request, named));
   // A run as of an older snapshot is about the past: what arrived since is not part of it.
-  const tail = input.request.asOf || input.request.liveTail === false ? null : (input.tail ?? null);
+  const tails = readsTails(input.request);
+  const tail = tails ? (input.tail ?? null) : null;
+  const person = input.person ?? input.ownerId;
+  const admitAs: RunInit['admit'] = (signal, onQueued) => admit(signal, person, onQueued);
+  const source = selected ? refOf(selected) : null;
 
   if (statement === null) {
-    const catalog = await loadCatalog(input.materializationId, selected.location, {
+    const table = selected as RunTableSource;
+    const catalog = await loadCatalog(table.materializationId, table.location, {
       fresh: true,
       snapshotId: input.request.asOf ?? null,
-      table: selected.name,
+      table: table.name,
     });
     assertReadable(catalog);
     const columns = logicalColumns(catalog.schema, catalog.forkMap, catalog.protection);
     // The run echoes its request back, so it carries the filters as applied: a link that still
     // names `payload.status` gets a run, and a request, about `status`.
-    const request = { ...input.request, table: selected.name, filters: resolveFilters(input.request.filters ?? [], columns) };
+    const request = { ...input.request, table: table.name, source, filters: resolveFilters(input.request.filters ?? [], columns) };
     return register(
       new BrowseRun({
         domain: input.domain,
         materializationId: input.materializationId,
         ownerId: input.ownerId,
-        tableName: selected.name,
+        tableName: table.name,
         datasets,
         request,
         catalog,
         columns,
-        admit,
+        admit: admitAs,
         tail,
       }),
     );
@@ -190,7 +261,7 @@ export async function startRun(input: StartRunInput): Promise<Run> {
 
   // The request's table is read as of `asOf`; every other table at its current snapshot.
   const isRequested = (table: RunTableSource): boolean =>
-    table.domain === input.domain && table.materializationId === input.materializationId && table.name === selected.name;
+    selected !== null && table.domain === selected.domain && table.materializationId === selected.materializationId && table.name === selected.name;
   const sources: StatementSource[] = await Promise.all(
     named.map(async (table): Promise<StatementSource> => {
       const catalog = await loadCatalog(table.materializationId, table.location, {
@@ -206,38 +277,40 @@ export async function startRun(input: StartRunInput): Promise<Run> {
         name: table.name,
         catalog,
         columns: logicalColumns(catalog.schema, catalog.forkMap, catalog.protection),
-        tail: tail === null ? null : table.tail,
+        tail: tails ? table.tail : null,
       };
     }),
   );
   // The run is about the request's table when the statement reads it, else the first it reads; a
-  // statement that reads no table at all is about the request's table.
+  // statement that reads no table at all is about the request's table, or about none.
   const primary =
     sources.find((_source, index) => isRequested(named[index] as RunTableSource)) ??
     sources[0] ??
-    (await (async (): Promise<StatementSource> => {
-      const catalog = await loadCatalog(input.materializationId, selected.location, { fresh: true, table: selected.name });
-      return {
-        domain: input.domain,
-        namespace: selected.dataset,
-        datasetId: selected.datasetId,
-        name: selected.name,
-        catalog,
-        columns: logicalColumns(catalog.schema, catalog.forkMap, catalog.protection),
-        tail: null,
-      };
-    })());
+    (selected === null
+      ? null
+      : await (async (): Promise<StatementSource> => {
+          const catalog = await loadCatalog(selected.materializationId, selected.location, { fresh: true, table: selected.name });
+          return {
+            domain: selected.domain,
+            namespace: selected.dataset,
+            datasetId: selected.datasetId,
+            name: selected.name,
+            catalog,
+            columns: logicalColumns(catalog.schema, catalog.forkMap, catalog.protection),
+            tail: null,
+          };
+        })());
   return register(
     new StatementRun({
       domain: input.domain,
       materializationId: input.materializationId,
       ownerId: input.ownerId,
-      tableName: primary.name,
+      tableName: primary?.name ?? null,
       datasets,
-      request: { ...input.request, table: selected.name },
-      catalog: primary.catalog,
-      columns: primary.columns,
-      admit,
+      request: { ...input.request, table: selected?.name ?? null, source },
+      catalog: primary?.catalog ?? noTableCatalog(),
+      columns: primary?.columns ?? [],
+      admit: admitAs,
       tail,
       statement,
       sources,
@@ -250,7 +323,9 @@ export interface RefreshRunInput {
   run: Run;
   /** Who is refreshing: the run's owner, as `getRun` checked. A run that replaces it is theirs too. */
   ownerId: string;
-  /** Every table of the materialization, in its order, as it is now. */
+  /** Who the person is across the console, for a run that replaces it (`StartRunInput.person`). */
+  person?: string;
+  /** The tables the run may be about, as they are now (`StartRunInput.tables`). */
   tables: RunTableSource[];
   /** A statement's tables, found in their domains again: a run that replaces it reads them as they are now. */
   sources?: ResolvedTable[];
@@ -281,6 +356,7 @@ export async function refreshRun(input: RefreshRunInput): Promise<{ replaced: bo
       domain: run.domain,
       materializationId: run.materializationId,
       ownerId: input.ownerId,
+      ...(input.person ? { person: input.person } : {}),
       tables: input.tables,
       request,
       tail: input.tail,
@@ -295,7 +371,7 @@ export async function refreshRun(input: RefreshRunInput): Promise<{ replaced: bo
   if (run.request.kind === 'sql' || run.state !== 'succeeded' || !(run instanceof BrowseRun)) return replace();
 
   const table = pickTable(input.tables, run.tableName);
-  const catalog = await loadCatalog(run.materializationId, table.location, { fresh: true, table: table.name });
+  const catalog = await loadCatalog(table.materializationId, table.location, { fresh: true, table: table.name });
   if ((catalog.snapshot?.snapshotId ?? null) !== run.snapshotId) return replace();
 
   const tail = run.tailOf();
@@ -441,4 +517,5 @@ export async function resetRuns(): Promise<void> {
   runs.clear();
   waiting.length = 0;
   scanning = 0;
+  scanningBy.clear();
 }

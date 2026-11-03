@@ -11,7 +11,7 @@ import Fastify, { LogController } from 'fastify';
 
 import { registerAuth } from './auth/guard.ts';
 import { config } from './config.ts';
-import { ConsoleError } from './errors.ts';
+import { answerError } from './errors.ts';
 import { consoleSettings, domains } from './domains/index.ts';
 import { logger } from './logger.ts';
 import { registerAuthRoutes, registerConsoleAuthRoutes } from './routes/auth.ts';
@@ -51,16 +51,7 @@ async function main(): Promise<void> {
     await app.register(cors, { origin: config.corsOrigin, credentials: false });
   }
 
-  app.setErrorHandler((error, request, reply) => {
-    if (error instanceof ConsoleError) {
-      request.log.debug({ err: error, url: request.url }, 'console error');
-      return reply.code(error.statusCode).send(error.toBody());
-    }
-    request.log.error({ err: error, url: request.url }, 'unhandled console failure');
-    return reply.code(500).send({
-      error: { code: 'internal_error', message: 'the console failed to handle this request', details: {} },
-    });
-  });
+  app.setErrorHandler(answerError);
 
   // The domains this console serves, and the storage it reads their tables from; a registry that
   // breaks a rule stops the console here.

@@ -65,6 +65,9 @@ Outside `/api`: the federated Iceberg REST catalog at `/catalog` and each domain
 | `POST` | `/api/materializations/:id/data/estimate` | `data.query` on the table's dataset | the table | What time ranges would read of one table |
 | `POST` | `/api/materializations/:id/data/validate` | `data.query` on every table it names | DuckDB | Bind a statement without running it |
 | `POST` | `/api/materializations/:id/runs` | `data.query` on every table it reads | run engine | Start a run; `201` |
+| `POST` | `/api/runs` | `data.query` in some domain, then on every table it reads, in its domain | run engine | Start a run not tied to a materialization: a table by reference, or a statement over any tables (§8.16a); `201` |
+| `POST` | `/api/data/validate` | `data.query` in some domain, then on every table it names | DuckDB | Bind a statement over any tables without running it (§8.16a) |
+| `POST` | `/api/data/estimate` | `data.query` in some domain, then on every table, in its domain | the tables | What time ranges would read of several tables together (§8.16a) |
 | `GET` | `/api/runs/:runId` | `data.query` on its datasets, own run | run engine | Snapshot |
 | `POST` | `/api/runs/:runId/cancel` | `data.query` anywhere, own run | run engine | Stop it |
 | `POST` | `/api/runs/:runId/refresh` | `data.query` on every dataset the run reads | run store + tail app | The live tail's newest records appended, or a new run in its place (§8.17a) |
@@ -130,7 +133,7 @@ with `403` (`reason: cross_site_request`).
 
 | Code | Status | Raised by |
 |------|--------|-----------|
-| `invalid_request` | 400 | Zod validation, SQL guard, column validation, cache limits |
+| `invalid_request` | 400 (413, 415) | Zod validation, SQL guard, column validation, cache limits; a body the console cannot read — empty or malformed JSON, too large, a type it does not take — with Fastify's own status (`errors.ts::answerError`) |
 | `unauthenticated` | 401 | No usable session for something a guest may not do: `details.reason` is `sign_in_required`, `session_expired`, `session_ended`, `invalid_session` or `account_deactivated` |
 | `forbidden` | 403 | Signed in, but without `details.permission`; `reason: password_change_required` until the password is changed; `cross_site_request` |
 | `too_many_attempts` | 429 | Sign-in attempts from one address over `CONSOLE_SIGN_IN_ATTEMPTS_PER_MINUTE` (`retry-after` header), or the control plane's lockout |
@@ -723,9 +726,48 @@ once; progress follows on the event stream (§8.20).
 | `rangeLabel` | Echoed back for display; ≤ 120 chars |
 | `filters` | ≤ 20; `column` must be one of the view's columns. Columns are field paths without the schema's `payload.` root — `status`, `customer.email`. A `payload.`-rooted name from an older link is accepted, and the run's `request` echoes the column's current name |
 | `operator` | `eq` `neq` `contains` `starts_with` `gt` `gte` `lt` `lte` `is_null` `is_not_null`. On a list column (`…[]…`), `eq`/`neq` mean "an element is / no element is"; ordering comparisons are refused |
-| `sql` | One read-only statement over any of the materialization's tables — each by `<dataset>.<table>`, or `iceberg.<dataset>.<table>` for its native columns — ≤ 20,000 chars. It may join them, across datasets; only the tables it names are read (see [07](./07-data-access-and-duckdb.md)). The caller needs `data.query` on every one of their datasets, and on the run's `table`'s |
+| `sql` | One read-only statement over any tables the console serves — each by its full name, `<domain>.<dataset>.<table>`, or `<domain>_iceberg.<dataset>.<table>` for its native columns — ≤ 20,000 chars. It may join them, across datasets and domains; only the tables it names are read (see [07](./07-data-access-and-duckdb.md)). A name without its domain is a `400` naming what to write instead. The caller needs `data.query` on every one of their datasets, in its domain, and on the run's `table`'s |
 | `asOf` | A snapshot id, as text, to read `table` as of; the current snapshot when absent, and always for the statement's other tables. An id the table does not have is a `404`; a snapshot holding delete files, or data files outside the table's location, is a `400` naming the table |
 | `liveTail` | Boolean, optional. Read each table's records newer than its snapshot from the live tail, every materialization's (07 §07.9). On unless `false`; never with `asOf` |
+
+## 8.16a `POST /api/runs`, `POST /api/data/validate`, `POST /api/data/estimate`
+
+The console's own routes, which Explore uses (11 §11.14): runs, validation and estimates not tied to
+one materialization. Each table is named by **reference**, `{ "domain", "dataset", "table" }`, and
+found in its domain — through its live fleet to the materialization writing it, a kept table through
+the materializations whose datasets hold it (07 §07.5). The caller needs `data.query` in some domain
+to be heard at all, then on the dataset of every table, as that table's domain knows them: no session
+there is a `401`, a missing grant a `403` naming `<domain>.<dataset>`; a domain this console does not
+serve is a `404`, one misconfigured or out of reach now a `503`, and a table no materialization there
+writes a `400` listing what its dataset holds.
+
+```json
+{ "kind": "browse",
+  "source": { "domain": "domain_a", "dataset": "sales", "table": "orders" },
+  "range": { "from": 1759100000000, "to": null }, "rangeLabel": "Last 7 days",
+  "filters": [], "order": "newest" }
+```
+
+```json
+{ "kind": "sql",
+  "range": { "from": null, "to": null }, "rangeLabel": "All time",
+  "sql": "SELECT o.status, count(*) FROM domain_a.sales.orders o JOIN domain_b.billing.payments p ON p.order_id = o.order_id GROUP BY 1" }
+```
+
+| Field | Rules |
+|---|---|
+| `source` | Required for a browse run: its table. Optional for a statement: the table it is about, which `asOf` pins and whose name an unknown name's error offers. `asOf` without a `source` is a `400` |
+| `sql` | As in §8.16, every table by its full name. `SELECT 1` reads nothing |
+| everything else | As in §8.16 |
+
+The snapshot is a `RunSnapshot` like any other; a statement with no `source` has `materializationId`
+and `table` `null`. Refreshing it, reading its rows, exporting and cancelling go through the same
+routes as every run (§8.17–§8.20), which find its tables again by its request.
+
+`POST /api/data/validate`: `{ "sql": "…", "source": <reference|null> }` → `{ "ok": true }`, or a `400`
+as in §8.15. `POST /api/data/estimate`: `{ "tables": [<reference>, …], "ranges": […] }` (1–8 tables,
+1–32 ranges) → `{ "asOf", "estimates": ScopeEstimate[] }` as in §8.14, each range's figures summed
+over the tables.
 
 ### `RunSnapshot`
 
@@ -756,7 +798,9 @@ once; progress follows on the event stream (§8.20).
 | `snapshotId` / `snapshotAt` | The snapshot the run reads, fixed when it starts, so paging and exports stay stable while commits keep arriving |
 | `pinned` | The run was asked (`asOf`) for an older snapshot than the table's current one |
 | `validThrough` | As in §8.13, for the run's snapshot |
-| `phase` | `planning`, `preparing` (statement: reading footers, `objectsDone` counts them), `scanning`, `counting` (statement: counting a result larger than kept), `done` |
+| `materializationId` / `table` | The materialization the run was started on, and its table the run is about; both `null` for a statement over the lake with no `source` (§8.16a) |
+| `phase` | `planning`, `queued` (waiting to scan, 07 §07.5), `preparing` (statement: reading footers, `objectsDone` counts them), `scanning`, `counting` (statement: counting a result larger than kept), `done` |
+| `queued` | While `phase` is `queued`: `own` when the person's other runs hold their share of the scans (`CONSOLE_RUN_CONCURRENCY_PER_PERSON`), `others` when everyone's runs hold all of them; absent otherwise |
 | `progress.fraction` | 0–1. Exact for browse runs — rows of objects read over rows in range; DuckDB's estimate for statements; `null` while indeterminate |
 | `progress.objectsRead` | Files actually opened; `objectsDone` also counts the ones the manifests answered without a read |
 | `rows` / `totalExact` | Rows matched so far, and whether that is final. A finished run always has `totalExact: true` |

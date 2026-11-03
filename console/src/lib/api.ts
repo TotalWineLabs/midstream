@@ -51,6 +51,7 @@ import type {
   SchemaDiff,
   SchemaTimeline,
   ScopeEstimate,
+  TableRef,
   SettingsChangeInput,
   SettingsHistory,
   SettingsOverview,
@@ -162,6 +163,17 @@ function tablePath(base: string, id: string, table: string): string {
  */
 export const api = {
   config: () => request<ConsoleConfig>('/api/config'),
+  /**
+   * Run: the only way the console executes a query, whatever the domain of the tables it reads. A
+   * browse run names its table by reference (`source`); a statement names its tables in full.
+   */
+  startRun: (body: RunRequest) => request<RunSnapshot>('/api/runs', { method: 'POST', body: JSON.stringify(body) }),
+  /** Bind a statement without running it; rejects with the error and its position. */
+  validateSql: (sql: string, source: TableRef | null = null) =>
+    request<{ ok: true }>('/api/data/validate', { method: 'POST', body: JSON.stringify(source ? { sql, source } : { sql }) }),
+  /** What each time range would read of some tables together, before anything is read. */
+  estimate: (tables: readonly TableRef[], ranges: TimeRange[]) =>
+    request<{ asOf: string; estimates: ScopeEstimate[] }>('/api/data/estimate', { method: 'POST', body: JSON.stringify({ tables, ranges }) }),
   run: (runId: string) => request<RunSnapshot>(`/api/runs/${encodeURIComponent(runId)}`),
   cancelRun: (runId: string) =>
     request<RunSnapshot>(`/api/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }),
@@ -289,25 +301,6 @@ export function domainApi(domain: string) {
       if (asOf) params.set('asof', asOf);
       return request<DataSummary>(`${base}/materializations/${encodeURIComponent(id)}/data/summary?${params.toString()}`);
     },
-    /** What each time range would read of a table, before anything is read. */
-    dataEstimate: (id: string, table: string, ranges: TimeRange[], asOf: string | null = null) =>
-      request<{ asOf: string; estimates: ScopeEstimate[] }>(
-        `${base}/materializations/${encodeURIComponent(id)}/data/estimate`,
-        { method: 'POST', body: JSON.stringify({ ranges, table, ...(asOf ? { asOf } : {}) }) },
-      ),
-    /** Bind a statement without running it; rejects with the error and its position. */
-    validateSql: (id: string, sql: string) =>
-      request<{ ok: true }>(`${base}/materializations/${encodeURIComponent(id)}/data/validate`, {
-        method: 'POST',
-        body: JSON.stringify({ sql }),
-      }),
-
-    /** Run: the only way the console executes a query. */
-    startRun: (id: string, body: RunRequest) =>
-      request<RunSnapshot>(`${base}/materializations/${encodeURIComponent(id)}/runs`, {
-        method: 'POST',
-        body: JSON.stringify(body),
-      }),
     /** The newest records on a table's topic, committed or not, in its columns: a peek while it is backlogged. */
     tableHead: (id: string, table: string, rows = 200) => request<HeadPeek>(`${tablePath(base, id, table)}/head?rows=${rows}`),
     /** Every setting with its value and where it comes from, and the deployment's fixed ones. */
