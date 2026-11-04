@@ -1012,10 +1012,13 @@ own. The control plane has 94 components:
   earlier): every app keeps a ConfigMap per component. The first deployment with an operator that
   has them rolls each app once, as its definitions move into a bundle.
 
-Checking it:
+Checking it: an app in bundle mode mounts `kaspr-definitions-0` (one volume per bundle), and its
+bundles carry the label `kaspr.io/component: definitions`. The KasprApp's status says nothing about
+delivery.
 
 ```bash
-kubectl -n midstream get kasprapp midstream-control-plane -o jsonpath='{.status.definitions}'
+kubectl -n midstream get statefulset midstream-control-plane-app \
+  -o jsonpath='{.spec.template.spec.volumes[*].name}'
 kubectl -n midstream get configmap -l kaspr.io/component=definitions
 ```
 
