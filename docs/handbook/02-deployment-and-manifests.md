@@ -51,6 +51,7 @@ Derived names, with a release called `midstream`:
 | Runtimes | `midstream-mat-<id>` (`controlPlane.settings.runtimeNamePrefix`), their tables under `<destination>/midstream/` (`storagePrefix`) |
 | Secrets | `midstream-auth` unless `auth.existingSecret`; the Kafka Secret, the lake's (`storage.*.credentialsSecret`) and the console profiles' (`console.storage[].credentialsSecret`) are named in values |
 | ServiceAccounts | `midstream-console`, the chart's; kaspr-operator gives each app and each runtime its own, `<app>-app`: `midstream-control-plane-app`, `midstream-maintenance-app`, `midstream-tail-app`, `midstream-mat-<id>-app` (§2.9a) |
+| Definitions | kaspr-operator keeps each app's and each runtime's components in `<app>-app-definitions-<digest>` ConfigMaps, labelled `kaspr.io/component: definitions`, owned by the app (§2.10d) |
 
 Lint, render and apply:
 
@@ -983,6 +984,40 @@ to the VPA alone restarts none: with the CPU only, the pod template does not cha
 `memory` to `controlledResources` restarts each app's pods once, since kaspr-operator then gives
 the container a `resizePolicy`. The Settings page shows the runtimes' value read-only, at
 **Deployment › Runtimes › Vertical autoscaling** (17 §17.3).
+
+## 2.10d Definitions delivery
+
+Every Kaspr app of the deployment carries the annotation `kaspr.io/definitions-delivery: bundle`:
+the control plane, the maintenance app, the tail app and, from the template the control plane
+renders them with, every runtime. kaspr-operator then writes all of an app's components (agents,
+webviews, tables, tasks) into one YAML document. It keeps the document in an immutable ConfigMap,
+`<app>-app-definitions-<digest>`, owned by the KasprApp, and mounts it into the pods as one file
+(kaspr-operator, `docs/user-guide/definitions-delivery.md`).
+
+Without the annotation the operator gives every component a ConfigMap, a volume and a mount of its
+own. The control plane has 94 components:
+
+| Control plane | A ConfigMap per component | Bundle |
+|---|---|---|
+| Its ConfigMaps | 95 | 2 |
+| Mounts in its pod | 124 | 31 |
+| Its pod template | 53.7 KiB | 15.1 KiB |
+
+- **A changed component is a new ConfigMap.** The pods roll once, as before. The operator deletes
+  the previous bundle once the rollout has completed and no pod mounts it, so a pod restarted
+  mid-rollout still finds the definitions it was rolled for.
+- **Size.** A bundle holds up to 512 KiB of definitions, and webviews spill into a second one
+  past that. The control plane's are about 190 KiB.
+- **Operators without definitions bundles ignore the annotation** (kaspr-operator 0.19.8 and
+  earlier): every app keeps a ConfigMap per component. The first deployment with an operator that
+  has them rolls each app once, as its definitions move into a bundle.
+
+Checking it:
+
+```bash
+kubectl -n midstream get kasprapp midstream-control-plane -o jsonpath='{.status.definitions}'
+kubectl -n midstream get configmap -l kaspr.io/component=definitions
+```
 
 ## 2.11 Deployment checklist
 

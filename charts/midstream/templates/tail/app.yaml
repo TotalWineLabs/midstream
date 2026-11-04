@@ -11,6 +11,10 @@ metadata:
   labels:
     {{- include "midstream.labels" . | nindent 4 }}
     app.kubernetes.io/component: tail
+  annotations:
+    # Every component in one immutable ConfigMap per shard, one mount each, instead of a ConfigMap and
+    # a mount per component (kaspr-operator definitions bundles; handbook 02 §2.10d).
+    kaspr.io/definitions-delivery: bundle
 spec:
   # Up to the tick topic's partitions; two for availability (handbook 19 §19.9).
   replicas: {{ .Values.tail.replicas }}

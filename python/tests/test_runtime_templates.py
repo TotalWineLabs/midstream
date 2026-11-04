@@ -150,6 +150,10 @@ class RuntimeTemplateTests(unittest.TestCase):
             "git+https://github.com/vmirz/midstream.git@pkg-rev-1#egg=midstream-platform&subdirectory=python",
         )
         annotations = app["metadata"]["annotations"]
+        # The runtime's components reach its pods in a definitions bundle (handbook 02 §2.10d).
+        self.assertEqual(annotations["kaspr.io/definitions-delivery"], "bundle")
+        for component in [*rendered["kaspr_agents"], *rendered["kaspr_tasks"], *rendered["kaspr_tables"]]:
+            self.assertNotIn("kaspr.io/definitions-delivery", component["metadata"].get("annotations") or {})
         self.assertEqual(annotations["control-plane/package-revision"], "pkg-rev-1")
         self.assertEqual(annotations["control-plane/source-topics"], "orders")
         self.assertEqual(annotations["control-plane/tables"], "orders")

@@ -136,6 +136,9 @@ RUNTIME_COMPONENT_KEYS = (
     "state_table_name",
 )
 
+#: How kaspr-operator delivers a runtime's components to its pods: in definitions bundles.
+RUNTIME_DEFINITIONS_DELIVERY_ANNOTATION = "kaspr.io/definitions-delivery"
+
 #: Template file per rendered resource, in the order they are applied (app, table, agents, tasks).
 RUNTIME_TEMPLATES = {
     "kaspr_app": "kaspr-app.yaml.j2",
@@ -157,6 +160,9 @@ def render_dedicated_runtime_resources(template_input: dict[str, Any]) -> dict[s
     }
     shared_annotations = {
         **template_input.get("annotations", {}),
+        # The runtime's components in one immutable ConfigMap, one mount, instead of a ConfigMap
+        # and a mount each (kaspr-operator definitions bundles; handbook 02 §2.10d).
+        RUNTIME_DEFINITIONS_DELIVERY_ANNOTATION: "bundle",
         "control-plane/template-version": str(template_input["template_version"]),
         "control-plane/package-revision": template_input["package_revision"],
         "control-plane/source-topics": ",".join(template_input["source_topics"]),
