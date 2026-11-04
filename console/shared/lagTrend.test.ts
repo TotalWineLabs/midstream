@@ -6,6 +6,15 @@ import { backlogProgress, catchUpProgress, formatEta, lagTrend } from './lagTren
 const minute = 60_000;
 const series = (lags: number[], every = minute) => lags.map((lag, index) => ({ t: index * every, lag }));
 
+/**
+ * Eleven minutes on the floor (15 records a second arriving, 5,000 behind, 500 of them unread), then
+ * a million records at once, and `lags` a minute apart while the workers read through it.
+ */
+const burst = (lags: number[]) => [
+  ...Array.from({ length: 11 }, (_, index) => ({ t: index * minute, lag: 5_000, arrived: index * 900, unread: 500 })),
+  ...lags.map((lag, index) => ({ t: (11 + index) * minute, lag, arrived: 1_000_000 + (11 + index) * 900, unread: lag - 1_500 })),
+];
+
 describe('lagTrend', () => {
   it('reads the drain rate and the time left from the measured lags', () => {
     const trend = lagTrend(series([107_357_698, 106_938_384, 106_543_644, 106_130_762]));
@@ -45,6 +54,21 @@ describe('lagTrend', () => {
     assert.equal(lagTrend(growing).state, 'growing');
   });
 
+  it('reads a burst its workers are still reading as a backlog, though it arrived within the floor', () => {
+    // A million records produced in half a minute, after ten minutes on the floor: within what
+    // arrived over the last 630 s, so the floor alone called it caught up for ten minutes while one
+    // worker worked through it, and the quiet minutes before it read as growth.
+    const history = burst([1_005_000, 880_000, 760_000]);
+    const trend = lagTrend(history);
+    assert.equal(trend.state, 'draining');
+    assert.ok(Math.abs((trend.perSecond as number) + 2_042) < 5, `${trend.perSecond}`);
+    assert.ok(Math.abs((trend.etaMs as number) / minute - 6.2) < 0.1, `${trend.etaMs}`);
+    // Read but for what arrived since the workers last said, the same lag is the floor.
+    assert.equal(lagTrend(history.map((point) => ({ ...point, unread: 2_000 }))).state, 'caught-up');
+    // As it is for a quiet topic whose last few records are not read yet.
+    assert.equal(lagTrend(series([35, 49, 41, 35]).map((point, index) => ({ ...point, arrived: index * 6, unread: 4 }))).state, 'caught-up');
+  });
+
   it('never calls a rate under half a record a second a trend', () => {
     assert.equal(lagTrend(series([5_000, 5_010, 5_020, 5_030])).state, 'steady');
   });
@@ -78,6 +102,10 @@ describe('catchUpProgress', () => {
       { t: 4 * minute, lag: 250_000, arrived: 40 },
     ];
     assert.equal(catchUpProgress(history), 0.75);
+  });
+
+  it('measures a burst from its peak, not from the floor it arrived within', () => {
+    assert.equal(catchUpProgress(burst([1_005_000, 502_500])), 0.5);
   });
 
   it('ignores an older backlog it already caught up from', () => {

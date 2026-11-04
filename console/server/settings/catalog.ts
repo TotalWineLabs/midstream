@@ -299,7 +299,7 @@ export const CONSOLE_SETTINGS: readonly ConsoleSettingDefinition[] = [
     envVar: 'CONSOLE_CATALOG_MAX_STALE_MS',
     section: 'data',
     label: 'Stale table limit',
-    description: 'How long an older read of a table may still be shown while a fresh one is made.',
+    description: 'How long an older read of a table may still be shown while a fresh one is made. A read older than a commit the control plane has recorded is never shown.',
     kind: 'integer',
     unit: 'ms',
     minimum: SECOND,

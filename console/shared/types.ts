@@ -873,6 +873,12 @@ export interface LagSample {
    * the control plane did not report the topics' end offsets.
    */
   arrived?: number;
+  /**
+   * Records on the source topics its workers had not read by this measurement: each partition's end
+   * offset past the highest offset a worker last reported handling, never more than its lag. Absent
+   * when the control plane did not report the topics' end offsets.
+   */
+  unread?: number;
 }
 
 export interface MaterializationSummary extends CpListItem {

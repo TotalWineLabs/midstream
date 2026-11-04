@@ -38,13 +38,17 @@ async function tableOf(request: FastifyRequest): Promise<{ id: string; table: st
   return {
     id,
     table: spec.name,
-    summary: summary ? { location: summary.location ?? null, granularity: summary.partition_granularity ?? 'day' } : null,
+    summary: summary
+      ? { location: summary.location ?? null, granularity: summary.partition_granularity ?? 'day', currentSnapshotId: summary.current_snapshot_id ?? null }
+      : null,
   };
 }
 
 interface TableSummary {
   location: string | null;
   granularity: PartitionGranularity;
+  /** The current snapshot the control plane last recorded (`iceberg/table.ts::loadTable`). */
+  currentSnapshotId: string | null;
 }
 
 /**
@@ -142,7 +146,7 @@ async function schemaTimeline(id: string, table: string, summary: TableSummary |
   if (!location) return unavailable('the table has not been created yet');
   if (!config.dataAccessEnabled) return unavailable('data access is turned off for this console (Settings › Data explorer)');
   try {
-    const loaded = await loadTable(location);
+    const loaded = await loadTable(location, { knownSnapshotId: summary?.currentSnapshotId ?? null });
     if (!loaded) return unavailable('the table has not been created yet');
     const granularity = partitionGranularity(loaded.metadata);
     const presence = await tablePresence(loaded.metadata);

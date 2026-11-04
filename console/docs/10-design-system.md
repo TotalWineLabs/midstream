@@ -232,8 +232,10 @@ the phone, the sidebar badge.
   in Diagnostics.
 - **The lag floor is normal.** Offsets commit only once their rows are in the table, so a caught-up
   runtime always trails its topics by what arrived in the last batch ceiling and commit interval
-  (630 s). A lag at or under that floor is Flowing (`shared/lagTrend.ts`). Catching up
-  appears only for a backlog clearly falling, with an end time that means something.
+  (630 s). A lag at or under that floor is Flowing (`shared/lagTrend.ts`), so long as the workers
+  have read all of it but what arrived in the last two minutes: a burst that landed within the floor
+  but is still being read is a backlog, not the floor. Catching up appears only for a backlog clearly
+  falling, with an end time that means something.
 - **Groups**, for lists: Needs you (failed, needs attention), In progress (starting, catching up,
   stopping, deleting), Flowing, Stopped (`statusGroup`).
 - **Components:** `StatusGlyph` (the shape, 12 px), `StatusLabel` (shape and word in the state's ink,
@@ -292,6 +294,11 @@ Rules:
 - **Formats** (`lib/format.ts`): `formatCount` compacts at 10,000 (`1.2M`); `formatExact` for
   anything someone compares or copies. Rates read "75,312 a second" in a readout and `/s` in dense
   rows. Bytes use `formatBytes` (SI).
+- **A result's numbers line up by magnitude:** in a grid a number column and its header are
+  right-aligned, and a measure's digits are grouped in the reader's locale (`45,291`), every digit
+  kept (`formatNumberCell`). An integer named like an identifier or a year — `order_id`, `year`,
+  `_kafka_offset` — keeps its digits ungrouped, since `2,026` reads wrong and ids are typed back as
+  they came (`features/data/numberColumns.ts`). Copying a cell copies its value, never the display.
 - **A distribution over time is columns on a true time axis** — empty stretches left empty — binned
   as finely as the width allows, with the line above it reading out the whole or the column pointed
   at (a table's partitions, §11.10). What matters is emphasised by strength, not by a state's colour.

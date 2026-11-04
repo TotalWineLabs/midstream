@@ -166,6 +166,8 @@ export interface RunTableSource {
   datasetId: string;
   /** Its location; null before the control plane has created it. */
   location: string | null;
+  /** The current snapshot the control plane last recorded for it, when known (`iceberg/table.ts::loadTable`). */
+  currentSnapshotId?: string | null;
 }
 
 /**
@@ -486,7 +488,7 @@ export async function validateStatement(input: { sources: RunTableSource[]; sql:
   const statement = assertReadOnlyStatement(input.sql);
   const views = await Promise.all(
     input.sources.map(async (table) => {
-      const catalog = await loadCatalog(table.materializationId, table.location, { table: table.name });
+      const catalog = await loadCatalog(table.materializationId, table.location, { table: table.name, knownSnapshotId: table.currentSnapshotId });
       return {
         domain: table.domain,
         namespace: table.dataset,

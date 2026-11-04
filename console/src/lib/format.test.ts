@@ -4,7 +4,7 @@ import { test } from 'node:test';
 // Before any date is made: the zone is read when the first one is formatted.
 process.env.TZ = 'America/Los_Angeles';
 
-const { displayCell, formatInstant, formatMoment, isInstantType } = await import('./format.ts');
+const { displayCell, formatInstant, formatMoment, formatNumberCell, isInstantType } = await import('./format.ts');
 
 test('a moment says its day only when it is not today, and its year only when not this one', () => {
   const now = new Date('2026-11-01T22:00:00Z');
@@ -31,4 +31,19 @@ test('only zoned timestamps are treated as instants', () => {
   assert.equal(displayCell('2026-10-04T23:59:58.604Z', 'VARCHAR'), '2026-10-04T23:59:58.604Z');
   assert.equal(displayCell(42, 'BIGINT'), '42');
   assert.equal(displayCell({ a: 1 }, 'STRUCT(a INTEGER)'), '{"a":1}');
+});
+
+test('a number in a cell keeps every digit, grouped in the reader’s locale', () => {
+  const parts = new Intl.NumberFormat().formatToParts(1234.5);
+  const group = parts.find((part) => part.type === 'group')?.value ?? ',';
+  const decimal = parts.find((part) => part.type === 'decimal')?.value ?? '.';
+  assert.equal(formatNumberCell(45291), `45${group}291`);
+  assert.equal(formatNumberCell(186), '186');
+  assert.equal(formatNumberCell(-1234.5), `-1${group}234${decimal}5`);
+  // A decimal arrives as text with its scale, and an integer past 2^53 as its digits: neither is rounded.
+  assert.equal(formatNumberCell('184.60'), `184${decimal}60`);
+  assert.equal(formatNumberCell('3729562493443214175'), ['3', '729', '562', '493', '443', '214', '175'].join(group));
+  assert.equal(formatNumberCell(0.30000000000000004), `0${decimal}30000000000000004`);
+  assert.equal(formatNumberCell(1e21), '1e+21');
+  assert.equal(formatNumberCell(Number.NaN), 'NaN');
 });

@@ -78,8 +78,8 @@ export function RolesSection(): ReactNode {
                       <Badge tone="accent">Custom</Badge>
                     )}
                   </span>
-                  <span className="text-right text-[13px] text-[var(--color-ink-muted)]">
-                    {role.groups.length} {role.groups.length === 1 ? 'group' : 'groups'}
+                  <span className="numeric text-right text-[13px] text-[var(--color-ink-muted)]">
+                    {role.groups.length > 0 ? `${role.groups.length} ${role.groups.length === 1 ? 'group' : 'groups'}` : null}
                   </span>
                 </Link>
               </li>

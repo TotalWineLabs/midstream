@@ -4,8 +4,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { ColumnLabelText } from '@/features/data/ColumnLabelText';
 import { ProtectedMark } from '@/features/protection/ProtectionSummary';
 import { labelFor, type ColumnLabel } from '@/features/data/columns';
+import { groupsDigits, isNumberColumn } from '@/features/data/numberColumns';
 import { cn } from '@/lib/cn';
-import { displayCell, isInstantType, localZone } from '@/lib/format';
+import { displayCell, formatNumberCell, isInstantType, localZone } from '@/lib/format';
 import type { QueryColumn } from '@shared/types';
 
 const ROW_HEIGHT = 32;
@@ -18,6 +19,11 @@ const GUTTER_WIDTH = 52;
 const WATERLINE_HEIGHT = 26;
 /** A live row's ground: Current, faintly, over the surface — opaque, so frozen cells still cover what scrolls under them. */
 const LIVE_GROUND = 'bg-[color-mix(in_srgb,var(--color-current)_7%,var(--color-surface))]';
+
+/** What a present value reads as in its column. */
+function cellText(value: unknown, column: QueryColumn): string {
+  return groupsDigits(column) ? formatNumberCell(value) : displayCell(value, column.type);
+}
 
 export interface DataGridProps {
   columns: QueryColumn[];
@@ -159,7 +165,7 @@ export function DataGrid({
   const widths = useMemo(
     () =>
       columns.map((column) => {
-        const sample = rows.slice(0, 40).map((row) => displayCell(row[column.name], column.type).length);
+        const sample = rows.slice(0, 40).map((row) => cellText(row[column.name], column).length);
         // The header is 11px and cells are 12px, and the header also reserves room for the sort
         // arrow and an instant's zone — so the two are measured separately rather than with one
         // fudge factor.
@@ -288,6 +294,7 @@ export function DataGrid({
                   style={pinned ? { left: gutter } : undefined}
                   className={cn(
                     'flex h-9 items-center gap-1 overflow-hidden px-3 text-left',
+                    isNumberColumn(column) && 'justify-end',
                     'text-[11px] font-medium tracking-wide whitespace-nowrap',
                     active ? 'text-[var(--color-ink)]' : 'text-[var(--color-ink-muted)]',
                     onSortChange && 'transition-colors hover:text-[var(--color-ink)]',
@@ -371,7 +378,7 @@ export function DataGrid({
                         const empty = value === null || value === undefined;
                         const masked = column.protection !== undefined;
                         // A withheld field is not stored at all: its absence is the mask, not a null.
-                        const text = empty ? (column.protection?.mask === 'redact' ? 'withheld' : 'null') : displayCell(value, column.type);
+                        const text = empty ? (column.protection?.mask === 'redact' ? 'withheld' : 'null') : cellText(value, column);
                         const local = !empty && typeof value === 'string' && isInstantType(column.type);
                         const pinned = isPinned(columnIndex);
                         const cell = (
@@ -394,6 +401,7 @@ export function DataGrid({
                             style={pinned ? { left: gutter } : undefined}
                             className={
                               'flex items-center overflow-hidden px-3 whitespace-nowrap' +
+                              (isNumberColumn(column) ? ' justify-end' : '') +
                               (masked
                                 ? ` veil${empty ? ' italic' : ''}`
                                 : empty
