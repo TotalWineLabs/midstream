@@ -479,3 +479,28 @@ derived values; one set above them can still outgrow the pod when statements run
 | **The console image is Debian** (`node:24-bookworm-slim`), not Alpine: DuckDB's musl build has no jemalloc, and the console's memory grew with every statement. An image layered on it, or a hardened base in its place, must stay glibc-based (console 13 §13.1) | anyone building or scanning the console image |
 | **A run the console lost** — it restarted while the run worked — fails as soon as the console answers again, or when **Stop** is pressed: *The console lost this run, most likely because it restarted. Run it again.* (console 11 §11.8) | console users |
 | A toast's title wraps in full instead of running under **Undo**; the river's gate has no glow behind it | console users |
+
+## 16.21 What 1.3.2 changed: definitions bundles
+
+1.3.2 delivers each Kaspr app's components in a definitions bundle. The control plane, the
+maintenance and tail apps and every runtime carry `kaspr.io/definitions-delivery: bundle`, and
+kaspr-operator 0.20.0 or later then keeps an app's components in one immutable ConfigMap per shard,
+mounted once, instead of a ConfigMap and a mount per component: the control plane goes from 95
+ConfigMaps and 124 mounts to 2 and 31 (02 §2.10d). The lake, the APIs, what the control plane and
+the runtimes do, and the chart's values are as in 1.3.1; the console has four fixes. **A 1.3.1
+installation upgrades in place**: `helm upgrade` with the same values (02). Each app rolls once, as
+with any release, and with kaspr-operator 0.20.0 or later that rollout moves its definitions into a
+bundle; earlier operators ignore the annotation, and every app keeps a ConfigMap per component.
+Going back to 1.3.1 rolls each app again, and that rollout returns it to the operator's default
+delivery, a ConfigMap per component.
+
+| Change | Who must care |
+|---|---|
+| **Definitions bundles**: every Kaspr app of the deployment is annotated `kaspr.io/definitions-delivery: bundle`; with kaspr-operator 0.20.0 or later its components live in `<app>-app-definitions-<digest>` ConfigMaps, labelled `kaspr.io/component: definitions` and owned by the app, mounted as `kaspr-definitions-<shard>`. The KasprApp's status says nothing about delivery: check the StatefulSet's volumes (02 §2.10d) | cluster operators; anyone inspecting an app's ConfigMaps |
+| The runbook's definitions rows: ConfigMaps a StatefulSet no longer mounts wait for its rollout to complete; `DefinitionsTooLarge` keeps the pods on the definitions they have (12) | cluster operators |
+| **A table read the control plane knows to be behind is read again**: a cached read up to `CONSOLE_CATALOG_MAX_STALE_MS` old is still served while it refreshes, unless the control plane has recorded a snapshot it does not hold; the overview's *Rows committed* no longer trails the Tables panel during a backlog (console 03, 06, 07) | console users |
+| **A burst still being read is a backlog**: a lag under the floor reads *Caught up* only once the workers have read all of it but what arrives in two minutes; catch-up progress counts from the burst's peak (console 10 §10.6, 11 §11.6) | console users |
+| A result's number columns are right-aligned, a measure's digits grouped in the reader's locale, an identifier's or a year's left as they came; a click copies the value (console 10 §10.8, 11) | console users |
+| The Groups and Roles pages show nothing, not `0`, for a group without members or a role no group holds (console 11 §11.8e, §11.8f) | console users |
+| New guides: [Azure Blob Storage](../azure-storage-setup.md) for a lake on Azure, and [Microsoft Entra ID sign-in](../entra-id-sso-setup.md) for one domain or several | deployers on Azure; administrators setting up Entra ID |
+| The README says what Midstream is, in screenshots and short lists | evaluators |

@@ -1120,6 +1120,24 @@ class MaintenanceTriggerTests(unittest.TestCase):
                 self.assertEqual(MaterializationWorkEvent.from_dict(event).step, step)
 
 
+class DefinitionsDeliveryTests(unittest.TestCase):
+    """Every Kaspr app of the deployment gets its components in a definitions bundle (handbook 02 §2.10d).
+
+    That is one immutable ConfigMap per shard and one mount each, instead of a ConfigMap and a mount per
+    component: the control plane alone has more than seventy webviews. The runtimes get the annotation
+    from the template the control plane renders them with (`RuntimeTemplateTests`).
+    """
+
+    def test_every_app_delivers_its_components_in_a_bundle(self) -> None:
+        for values in DOMAIN_VALUES_FILES:
+            apps = [document for document in render(values) if document.get("kind") == "KasprApp"]
+            self.assertTrue(apps, f"{values.name}: no KasprApp")
+            for app in apps:
+                with self.subTest(values=values.name, app=app["metadata"]["name"]):
+                    annotations = app["metadata"].get("annotations") or {}
+                    self.assertEqual(annotations.get("kaspr.io/definitions-delivery"), "bundle")
+
+
 def _millicores(quantity: object) -> int:
     """A CPU quantity as Kubernetes reads it (`2`, `0.5`, `"1500m"`), in millicores."""
     text = str(quantity)
