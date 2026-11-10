@@ -371,6 +371,7 @@ features/
     RowProperties.tsx                       One row's every field, hidden ones included: a column beside the grid, a sheet on a phone
     autoRun.ts                              No React: whether a changed view runs by itself, or says its size and waits for Run (tested)
     columns.ts                              Column grouping, default visibility, labels, older names
+    numberColumns.ts                        Which columns are numbers, and which of those group their digits (tested)
     viewState.ts                            Read/write the view in the query string
   datasets/
     DatasetsPage.tsx                        Every dataset, locked ones included: tables, owners, your access in a word (AccessWord)

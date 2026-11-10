@@ -20,11 +20,11 @@ import {
   defaultVisibleColumns,
   gridOrder,
   groupOf,
-  isListType,
   labelFor,
   resolveColumnName,
   type ColumnGroupId,
 } from './columns';
+import { isListType } from './numberColumns';
 import { ALL_TIME, describeInstants, rangeLabel, resolveRange, sameRange, type TimeRangeSpec } from './timeRange';
 import { runsByItself, waitsForRun } from './autoRun';
 import { refOf, runBelongs, sourceKey, statementTables, type WorkbenchSource } from './scope';

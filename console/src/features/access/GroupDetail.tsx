@@ -62,7 +62,9 @@ export function GroupDetail({ groupId }: { groupId: string }): ReactNode {
               ? 'Everyone who has not signed in. Signed-in people keep what guests can do.'
               : detail.membership === 'authenticated'
                 ? 'Everyone who signs in belongs to this group, automatically.'
-                : `${memberLabel(detail)} ${detail.member_count === 1 ? 'member' : 'members'}`}
+                : detail.member_count
+                  ? `${memberLabel(detail)} ${detail.member_count === 1 ? 'member' : 'members'}`
+                  : 'No members yet'}
           </p>
         </div>
       </div>

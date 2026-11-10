@@ -79,7 +79,7 @@ Reading the pointer is the only way to learn there is newer data, so freshness i
 | Asked by | Pointer read no older than |
 |---|---|
 | a run (`fresh`) | `CONSOLE_SNAPSHOT_CACHE_MS` (2 s): a run includes what was committed moments before Run was pressed |
-| the Data tab's summary and estimates | `CONSOLE_TABLE_METADATA_FRESH_MS` (5 s); up to `CONSOLE_CATALOG_MAX_STALE_MS` (5 min) is answered at once and refreshed in the background |
+| the Data tab's summary and estimates, a materialization's overview | `CONSOLE_TABLE_METADATA_FRESH_MS` (5 s); up to `CONSOLE_CATALOG_MAX_STALE_MS` (5 min) is answered at once and refreshed in the background — unless the control plane's record of the table names a snapshot the read does not hold, which is read again first, so counts never trail the totals beside them |
 
 Records newer than the pointer's snapshot are not in the table yet; with the live tail on, a run
 reads them from the tail app beside the snapshot, so a Live view is seconds behind the topic rather

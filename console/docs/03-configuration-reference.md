@@ -164,7 +164,7 @@ old `schema-history/` directory can be deleted. See
 | `CONSOLE_CACHED_MODE_MAX_BYTES` | int | `2147483648` (2 GiB) | The same, in bytes |
 | `CONSOLE_SNAPSHOT_CACHE_MS` | int | `2000` | How old a table's pointer may be for a run: Run includes what was committed moments before it was pressed (06 §6.2) |
 | `CONSOLE_TABLE_METADATA_FRESH_MS` | int | `5000` | How old a pointer the Data tab's summary and estimates accept as current |
-| `CONSOLE_CATALOG_MAX_STALE_MS` | int | `300000` (5 min) | How old a pointer may be served at once while a fresh one is read in the background. Runs always ask for a fresh one |
+| `CONSOLE_CATALOG_MAX_STALE_MS` | int | `300000` (5 min) | How old a pointer may be served at once while a fresh one is read in the background, unless the control plane has recorded a snapshot it does not hold. Runs always ask for a fresh one |
 | `CONSOLE_RUN_CONCURRENCY` | int | `4` | Runs scanning at once; more wait their turn. Runs the manifests answer alone never wait |
 | `CONSOLE_STATEMENT_CONCURRENCY` | int | `2` | Of those, statements scanning at once (at most `CONSOLE_RUN_CONCURRENCY`); a third waits, and browse runs are never held up by them. Each statement is a DuckDB instance of its own, and DuckDB's memory is shared between this many and the console's own instance, so fewer gives each more |
 | `CONSOLE_RUN_CONCURRENCY_PER_PERSON` | int | `2` | Of those, one person's runs scanning at once, so one person's explorations cannot take every scan; their others wait, and say so. `0`: no limit but `CONSOLE_RUN_CONCURRENCY` (07 §07.5) |

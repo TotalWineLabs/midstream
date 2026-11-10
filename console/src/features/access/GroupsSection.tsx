@@ -9,6 +9,7 @@ import { Button, EmptyState, Field, Input, Panel, Skeleton, Textarea } from '@/c
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import { useApi, useDomainPath } from '@/lib/domains';
+import { formatExact } from '@/lib/format';
 import type { CpGroup } from '@shared/types';
 
 const GRID = 'grid grid-cols-[minmax(0,2fr)_120px_minmax(0,1.6fr)_120px] items-center gap-4';
@@ -73,10 +74,11 @@ export function GroupsSection(): ReactNode {
   );
 }
 
-export function memberLabel(group: Pick<CpGroup, 'membership' | 'member_count'>): string {
+/** Who is in a group, as its row says it: nothing for a group nobody has been added to yet, never a zero count. */
+export function memberLabel(group: Pick<CpGroup, 'membership' | 'member_count'>): string | null {
   if (group.membership === 'guests') return 'Not signed in';
-  if (group.membership === 'authenticated') return `Everyone (${group.member_count ?? 0})`;
-  return String(group.member_count ?? 0);
+  if (group.membership === 'authenticated') return group.member_count ? `Everyone (${formatExact(group.member_count)})` : 'Everyone';
+  return group.member_count ? formatExact(group.member_count) : null;
 }
 
 function GroupRow({ group }: { group: CpGroup }): ReactNode {

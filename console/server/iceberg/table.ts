@@ -6,7 +6,8 @@
  * `snapshotCacheMs` — so it includes whatever was committed moments before Run was pressed. The
  * summary and estimates the Data tab polls are served from a read up to `tableMetadataFreshMs`
  * old, and a stale one, up to `catalogMaxStaleMs`, is returned at once while a fresh read happens
- * in the background. Metadata files never change once written, so each one is parsed once.
+ * in the background, unless the control plane has recorded a snapshot that read does not hold.
+ * Metadata files never change once written, so each one is parsed once.
  */
 
 import { config } from '../config.ts';
@@ -36,8 +37,15 @@ const tables = new Map<string, Entry>();
 const metadataFiles = new Map<string, Promise<TableMetadata>>();
 const METADATA_CACHE_LIMIT = 256;
 
-/** The table at `location`, or null when it has no pointer. */
-export async function loadTable(location: string, options: { fresh?: boolean } = {}): Promise<LoadedTable | null> {
+/**
+ * The table at `location`, or null when it has no pointer.
+ *
+ * `knownSnapshotId` is the current snapshot the control plane last recorded for the table. A stale
+ * read of another snapshot is then known to be behind, and is read again before it is answered
+ * rather than served while it refreshes: a page showing the control plane's totals beside this
+ * read's would otherwise disagree with itself for as long as the read is old.
+ */
+export async function loadTable(location: string, options: { fresh?: boolean; knownSnapshotId?: string | null } = {}): Promise<LoadedTable | null> {
   let entry = tables.get(location);
   if (!entry) {
     entry = { table: null, readAt: Number.NEGATIVE_INFINITY, refreshing: null };
@@ -51,7 +59,8 @@ export async function loadTable(location: string, options: { fresh?: boolean } =
     return refresh(location, entry);
   }
   if (read && age <= config.tableMetadataFreshMs) return entry.table;
-  if (read && age <= config.catalogMaxStaleMs) {
+  const behind = options.knownSnapshotId != null && (entry.table?.metadata.currentSnapshotId ?? null) !== options.knownSnapshotId;
+  if (read && age <= config.catalogMaxStaleMs && !behind) {
     void refresh(location, entry).catch((cause) => logger.warn({ err: cause, location }, 'table refresh failed'));
     return entry.table;
   }

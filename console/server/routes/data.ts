@@ -151,14 +151,15 @@ async function tablesOf(domain: Domain, id: string): Promise<RunTableSource[]> {
 
 async function materializationTables(domain: Domain, id: string): Promise<{ materialization: CpMaterialization; tables: RunTableSource[] }> {
   const detail = await domain.live.getDetail(id);
-  const locations = new Map(detail.tables.map((table) => [table.name, table.location]));
+  const records = new Map(detail.tables.map((table) => [table.name, table]));
   const tables = readableTables(detail.materialization).map((table) => ({
     domain: domain.id,
     materializationId: id,
     name: table.name,
     dataset: table.dataset,
     datasetId: table.dataset_id,
-    location: locations.get(table.name) ?? null,
+    location: records.get(table.name)?.location ?? null,
+    currentSnapshotId: records.get(table.name)?.current_snapshot_id ?? null,
   }));
   return { materialization: detail.materialization, tables };
 }
@@ -408,7 +409,7 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
     const id = materializationId(request);
     const query = parseBody(summarySchema, request.query ?? {});
     const table = pickTable(await tablesOf(domainOf(request), id), query.table);
-    return summarize(await loadCatalog(id, table.location, { snapshotId: query.asof ?? null, table: table.name }));
+    return summarize(await loadCatalog(id, table.location, { snapshotId: query.asof ?? null, table: table.name, knownSnapshotId: table.currentSnapshotId }));
   });
 
   /** What each time range would read of a table, before anything is read. Drives the time picker's figures. */
@@ -417,7 +418,7 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
     const body = parseBody(estimateSchema, request.body);
     const table = pickTable(await tablesOf(domainOf(request), id), body.table);
     requireOnTables(request, 'data.query', [table]);
-    const catalog = await loadCatalog(id, table.location, { snapshotId: body.asOf ?? null, table: table.name });
+    const catalog = await loadCatalog(id, table.location, { snapshotId: body.asOf ?? null, table: table.name, knownSnapshotId: table.currentSnapshotId });
     return { asOf: new Date(catalog.loadedAt).toISOString(), estimates: body.ranges.map((range) => estimateRange(catalog, range)) };
   });
 
@@ -479,7 +480,7 @@ export async function registerDataRoutes(app: FastifyInstance): Promise<void> {
       const status = outcome.reason === 'forbidden' && outcome.status !== null ? outcome.status : 503;
       throw new ConsoleError('tail_unavailable', outcome.message, status, { reason: outcome.reason });
     }
-    const catalog = await loadCatalog(id, table.location, { table: table.name });
+    const catalog = await loadCatalog(id, table.location, { table: table.name, knownSnapshotId: table.currentSnapshotId });
     const { rows, columns } = await readPeek(outcome.bytes, catalog, query.rows);
     return {
       rows,
@@ -551,7 +552,7 @@ export async function registerRunRoutes(app: FastifyInstance): Promise<void> {
     const body = parseBody(consoleEstimateSchema, request.body);
     const tables = await resolveTables(request, body.tables, 'tables', { tails: false });
     requireOnTables(request, 'data.query', tables);
-    const catalogs = await Promise.all(tables.map((table) => loadCatalog(table.materializationId, table.location, { table: table.name })));
+    const catalogs = await Promise.all(tables.map((table) => loadCatalog(table.materializationId, table.location, { table: table.name, knownSnapshotId: table.currentSnapshotId })));
     return {
       asOf: new Date(Math.min(...catalogs.map((catalog) => catalog.loadedAt))).toISOString(),
       estimates: body.ranges.map((range) => sumEstimates(range, catalogs.map((catalog) => estimateRange(catalog, range)))),

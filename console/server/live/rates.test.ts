@@ -17,9 +17,9 @@ const dataDir = await mkdtemp(join(tmpdir(), 'console-rates-'));
 process.env.CONSOLE_DATA_DIR = dataDir;
 
 const { RateTracker, windowRate, windowSlope } = await import('./rates.ts');
-const { HISTORY_SPACING_MS, appendLag, appendSample, countArrivals } = await import('./store.ts');
+const { HISTORY_SPACING_MS, appendLag, appendSample, countArrivals, countUnread } = await import('./store.ts');
 
-import type { CpMemberProgress, CpRuntimeProgress, LagSample, ThroughputSample } from '../../shared/types.ts';
+import type { CpDetail, CpMemberProgress, CpRuntimeProgress, LagSample, ThroughputSample } from '../../shared/types.ts';
 
 after(async () => {
   await rm(dataDir, { recursive: true, force: true });
@@ -236,5 +236,44 @@ describe('countArrivals', () => {
 
   it('has nothing to count without end offsets', () => {
     assert.equal(countArrivals(undefined, { total_lag: 5 }), null);
+  });
+});
+
+describe('countUnread', () => {
+  /** Orders on two partitions, refunds on one, and what the workers last said they handled. */
+  const detail = (handled: Record<string, Record<string, number>>, lag: Record<string, Record<string, number>>): CpDetail =>
+    ({
+      materialization: {
+        tables: [
+          { name: 'orders', source_topic: 'shop.orders', dataset: 'shop', dataset_id: 'ds-1' },
+          { name: 'refunds', source_topic: 'shop.refunds', dataset: 'shop', dataset_id: 'ds-1' },
+        ],
+      },
+      status: {
+        runtime_progress: { latest_offsets: handled },
+        consumer_lag: {
+          topics: {
+            'shop.orders': { end_offsets: { '0': 1_000, '1': 2_000 }, partition_lag: lag['shop.orders'] },
+            'shop.refunds': { end_offsets: { '0': 50 }, partition_lag: lag['shop.refunds'] },
+          },
+        },
+      },
+    }) as unknown as CpDetail;
+
+  it('counts what lies past the offsets the workers handled', () => {
+    // A worker that handled offset 989 has read 990 records of 1,000: 10 are unread.
+    const unread = countUnread(detail({ orders: { '0': 989, '1': 1_999 }, refunds: { '0': 49 } }, { 'shop.orders': { '0': 400, '1': 700 }, 'shop.refunds': { '0': 30 } }));
+    assert.equal(unread, 10);
+  });
+
+  it('never counts more than the lag, and all of it where no worker has reported', () => {
+    // A heartbeat older than the last commit says less than the commit does; refunds is not read yet.
+    const unread = countUnread(detail({ orders: { '0': 100, '1': 1_999 } }, { 'shop.orders': { '0': 400, '1': 0 }, 'shop.refunds': { '0': 30 } }));
+    assert.equal(unread, 400 + 0 + 30);
+  });
+
+  it('has nothing to count without end offsets', () => {
+    const bare = { materialization: { tables: [] }, status: {} } as unknown as CpDetail;
+    assert.equal(countUnread(bare), null);
   });
 });

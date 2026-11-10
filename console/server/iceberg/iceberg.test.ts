@@ -13,6 +13,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
+import { config } from '../config.ts';
 import { setObjectReader } from './io.ts';
 import { currentSchema, partitionGranularity, readMetadata } from './metadata.ts';
 import { readPointer } from './pointer.ts';
@@ -185,5 +186,27 @@ describe('table freshness', () => {
     } finally {
       setObjectReader(fixtureReader(want.location));
     }
+  });
+
+  it('serves a stale read of the snapshot the control plane recorded while it refreshes', async (t) => {
+    resetTables();
+    t.mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
+    const first = await loadTable(want.location);
+    t.mock.timers.tick(config.tableMetadataFreshMs + 1_000);
+    const served = await loadTable(want.location, { knownSnapshotId: String(want.current_snapshot_id) });
+    assert.equal(served, first);
+  });
+
+  it('reads again before answering when the control plane recorded a newer snapshot', async (t) => {
+    // The materialization page shows the control plane's totals beside this read's: a stale read
+    // served while it refreshes would disagree with them for as long as it is old.
+    resetTables();
+    t.mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
+    const first = await loadTable(want.location);
+    t.mock.timers.tick(config.tableMetadataFreshMs + 1_000);
+    const reread = await loadTable(want.location, { knownSnapshotId: '1' });
+    assert.notEqual(reread, first);
+    assert.ok(reread && first && reread.readAt > first.readAt);
+    assert.equal(reread?.metadataLocation, want.metadata_location);
   });
 });

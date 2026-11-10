@@ -51,12 +51,13 @@ export interface Catalog {
  * The files of one of a materialization's tables, at its current snapshot or at `snapshotId`.
  *
  * `fresh` asks for a table read no older than `snapshotCacheMs`, for a run that should include
- * whatever was committed moments before Run was pressed (`iceberg/table.ts`).
+ * whatever was committed moments before Run was pressed (`iceberg/table.ts`). `knownSnapshotId`, the
+ * current snapshot the control plane recorded, keeps a read it knows to be behind from being served.
  */
 export async function loadCatalog(
   materializationId: string,
   location: string | null,
-  options: { fresh?: boolean; snapshotId?: string | null; table?: string | null } = {},
+  options: { fresh?: boolean; knownSnapshotId?: string | null; snapshotId?: string | null; table?: string | null } = {},
 ): Promise<Catalog> {
   assertQueryable();
   const name = options.table ?? null;
@@ -64,7 +65,7 @@ export async function loadCatalog(
   let table: Awaited<ReturnType<typeof loadTable>>;
   let snapshot: SnapshotCatalog;
   try {
-    table = await loadTable(location, { fresh: options.fresh });
+    table = await loadTable(location, { fresh: options.fresh, knownSnapshotId: options.knownSnapshotId });
     if (!table) return emptyCatalog(materializationId, name, location, 'the table has not been created yet');
     snapshot = await snapshotCatalog(table.metadata, options.snapshotId ?? table.metadata.currentSnapshotId);
   } catch (cause) {

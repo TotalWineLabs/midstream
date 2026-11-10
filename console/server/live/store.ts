@@ -385,7 +385,7 @@ export class LiveStore {
     tracker.observe(progress, detail.status.last_heartbeat, now);
     const rates = tracker.current(now);
     this.rates.set(id, rates);
-    this.recordLag(id, detail.status.consumer_lag);
+    this.recordLag(id, detail);
 
     // A runtime that has never reported progress has nothing to chart.
     if (!progress) return;
@@ -409,7 +409,8 @@ export class LiveStore {
   }
 
   /** One point per lag measurement, kept by when the control plane measured it rather than when it was polled. */
-  private recordLag(id: string, consumerLag: CpConsumerLag | undefined): void {
+  private recordLag(id: string, detail: CpDetail): void {
+    const consumerLag = detail.status.consumer_lag;
     if (!consumerLag?.measured_at || typeof consumerLag.total_lag !== 'number') return;
     const t = Date.parse(consumerLag.measured_at);
     if (!Number.isFinite(t)) return;
@@ -418,7 +419,13 @@ export class LiveStore {
     if (last && t <= last.t) return;
     const ends = countArrivals(this.lastEnds.get(id), consumerLag);
     if (ends) this.lastEnds.set(id, ends);
-    this.lagHistory.set(id, appendLag(history, ends ? { t, lag: consumerLag.total_lag, arrived: ends.arrived } : { t, lag: consumerLag.total_lag }));
+    const unread = countUnread(detail);
+    this.lagHistory.set(id, appendLag(history, {
+      t,
+      lag: consumerLag.total_lag,
+      ...(ends ? { arrived: ends.arrived } : {}),
+      ...(unread !== null ? { unread } : {}),
+    }));
   }
 
   private recordFleetSample(now: number): void {
@@ -539,6 +546,31 @@ export function countArrivals(previous: TopicEnds | undefined, consumerLag: CpCo
     if (before !== undefined && end > before) arrived += end - before;
   }
   return { ends, arrived };
+}
+
+/**
+ * Records on a materialization's source topics its workers had not read when its lag was measured:
+ * each partition's end offset past the highest offset a worker last reported handling, never more
+ * than the partition's lag, and all of its lag where no worker has reported it yet. A caught-up
+ * runtime has read all but what arrived since its last heartbeat; one working through a backlog has
+ * not (`shared/lagTrend.ts::READ_FLOOR_MS`). Null when no topic reports its end offsets.
+ */
+export function countUnread(detail: CpDetail): number | null {
+  const handled = detail.status.runtime_progress?.latest_offsets ?? {};
+  const topics = detail.status.consumer_lag?.topics ?? {};
+  let unread: number | null = null;
+  for (const table of detail.materialization.tables) {
+    const topic = topics[table.source_topic];
+    if (!topic?.end_offsets || !topic.partition_lag) continue;
+    const offsets = handled[table.name] ?? {};
+    for (const [partition, end] of Object.entries(topic.end_offsets)) {
+      const lag = topic.partition_lag[partition];
+      if (lag === undefined) continue;
+      const read = offsets[partition];
+      unread = (unread ?? 0) + (read === undefined ? lag : Math.min(lag, Math.max(0, end - read - 1)));
+    }
+  }
+  return unread;
 }
 
 /**

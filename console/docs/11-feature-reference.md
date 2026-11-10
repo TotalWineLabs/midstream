@@ -468,7 +468,7 @@ to a batch per partition plus a commit interval, and its lag falls in steps as c
 | Part | Content |
 |------|---------|
 | Headline | The latest measured lag, records behind |
-| Trend | **Caught up** at the floor — a lag no larger than what arrived on the source topics in the last 630 s (the batch ceiling and a commit interval), counted from the topics' end offsets at each measurement — however it wobbles as batches commit. Above it, **Catching up** with the drain rate and the time left at that pace (`−5,914/s · about 4h 38m to go`), **Falling behind** with the growth rate, or **Holding steady**: the least-squares slope of the last ten minutes of measurements, where under half a record a second, a single record, or 0.1% of the lag is no trend. **Not measured lately** once ten minutes pass without a measurement (`shared/lagTrend.ts`) |
+| Trend | **Caught up** at the floor — a lag no larger than what arrived on the source topics in the last 630 s (the batch ceiling and a commit interval), counted from the topics' end offsets at each measurement, with all of it read but what arrives in two minutes at that pace (at least 1,000 records), counted from the offsets the workers last said they handled — however it wobbles as batches commit. A burst that arrived within the floor but is still being read is above it. Above it, **Catching up** with the drain rate and the time left at that pace (`−5,914/s · about 4h 38m to go`), **Falling behind** with the growth rate, or **Holding steady**: the least-squares slope of the last ten minutes of measurements, or of those since the backlog began when it began inside them, where under half a record a second, a single record, or 0.1% of the lag is no trend. **Not measured lately** once ten minutes pass without a measurement (`shared/lagTrend.ts`) |
 | Chart | One point per measurement over **15m / 1h / 6h**, on an axis fitted to the values, so a large backlog falling slowly is a slope rather than a flat line at the top of a zero-based chart |
 | Partitions | `N of M partitions behind`, and **Show M partitions** for each partition's lag with a bar against the largest; with several topics each is named `<topic> P<n>`, and each topic's own lag is in the Tables panel |
 | Footer | When it was last measured and how often measurements arrive |
@@ -717,7 +717,8 @@ Rows stream in as a run counts: the first page appears as soon as the newest fil
 long before the total is final. While a filter has matched nothing yet the grid says **No matching
 rows yet** rather than showing placeholder rows. The footer offers first, previous, a page box
 (`Page 2 of 31,201`, with `+` while counting), next and last, and rows per page (50–1,000); the
-exact count is the status line's, at the top.
+exact count is the status line's, at the top. Number columns are right-aligned, a measure's digits
+grouped and an identifier's or a year's left as they came (10 §10.8); a click copies the value.
 
 Any page is one direct read of one file's rows, so page 2 and page 40,000 cost the same, and the
 next page is read ahead — on the server and in the browser — so turning pages does not wait. The
@@ -1093,8 +1094,8 @@ working*). A group's **Add people** offers invitations too, marked *Invited*, an
 
 ## 11.8e Groups (`/settings/groups[/:groupId]`)
 
-The list (`groups.view`): name, members, roles, created on; built-in groups first, marked with a
-lock. **New group** (`groups.manage`): name, description, roles.
+The list (`groups.view`): name, members (nothing for a group nobody has been added to; the group's
+page then says *No members yet*), roles, created on; built-in groups first, marked with a lock. **New group** (`groups.manage`): name, description, roles.
 
 A group's page: **Settings** (name, description — fixed for built-in groups), **Roles** (which
 roles it grants; the Admin group always keeps Administrator), **Access** (the permissions those
@@ -1105,7 +1106,8 @@ and, for anything that grants access, holding that access yourself.
 
 ## 11.8f Roles (`/settings/roles[/:roleId]`)
 
-The list (`roles.view`): role, type (*Built in* / *Custom*), description, the groups holding it.
+The list (`roles.view`): role, type (*Built in* / *Custom*), description, the groups holding it
+(nothing when none does).
 **Create role** (`roles.manage`).
 
 The editor: **Role details** (name, description), **Permissions** by category with a filter by

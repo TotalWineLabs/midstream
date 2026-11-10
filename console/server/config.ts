@@ -255,7 +255,8 @@ const tunableDeployment = {
    * older than `snapshotCacheMs`, so it includes what was committed moments before Run was pressed;
    * the summary and estimates an open Data tab polls are served from a read up to
    * `tableMetadataFreshMs` old; and an older read, up to `catalogMaxStaleMs`, is served at once
-   * while a fresh one happens in the background. A run pins the snapshot it started with, so these
+   * while a fresh one happens in the background, unless the control plane has recorded a newer
+   * snapshot than it holds. A run pins the snapshot it started with, so these
    * only decide how quickly new commits reach the *next* run.
    */
   snapshotCacheMs: int('CONSOLE_SNAPSHOT_CACHE_MS', 2_000),

@@ -38,7 +38,8 @@ table yet, nothing committed). It reads the **current** snapshot unless a run as
 | `committedAt` | the snapshot that added the file | ordering, "newer data available" |
 
 Freshness is the pointer's (06 §6.2): a run reads a pointer no older than 2 s, the summary and
-estimates one up to 5 s old, or up to 5 minutes while a fresh read happens in the background.
+estimates one up to 5 s old, or up to 5 minutes while a fresh read happens in the background — never
+one older than the snapshot the control plane last recorded.
 Everything behind the pointer is immutable, so caching it is always correct.
 
 After each read of the current snapshot the catalog **warms footers** in the background for the
